@@ -178,12 +178,12 @@ SET NOCOUNT ON
 				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]  WITH(NOLOCK)    
 				where WorkFlowID=@WID and  RoleID =@RoleID
 
-			if(@Userlevel is null )       
+			if(@Userlevel is null)       
 				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
 				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
 				where g.UserID=@UserID and WorkFlowID=@WID
 
-			if(@Userlevel is null )  
+			if(@Userlevel is null)  
 				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
 				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
 				where g.RoleID =@RoleID and WorkFlowID=@WID
@@ -210,7 +210,14 @@ SET NOCOUNT ON
 			ELSE
 				set @canEdit=0
 		END
-     
+			print '@Userlevel'
+		print @Userlevel
+		print '@Level'
+		print @Level
+		print '@StatusID'
+		print @StatusID
+		print '@WID'
+		print @WID
 		if(@StatusID=1001 or @StatusID=1002)  
 		begin    
 			if(@Userlevel is not null and  @Level is not null and @Userlevel>@level)  
@@ -243,9 +250,13 @@ SET NOCOUNT ON
 					END	
 				END	
 			end   
+			else if(@Userlevel is not null and  @Level is not null and @Level=@Userlevel and @StatusID=1001)  
+			begin
+				set @canApprove=1  
+			end
 			else  
 				set @canApprove= 0   
-		end  
+		end  		
 		else  
 			set @canApprove= 0   
 

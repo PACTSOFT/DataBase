@@ -27,6 +27,7 @@ CREATE PROCEDURE [dbo].[spRPT_GLOnlyDimension]
 	@SELECTQUERYALIAS [nvarchar](max),
 	@IsCAD [bit] = 0,
 	@FCWithExchRate [float] = 0,
+	@UpPostedDocsListOP [nvarchar](200),
 	@LangID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -36,7 +37,7 @@ SET NOCOUNT ON;
 
 	DECLARE @SQL NVARCHAR(MAX),@INV_SELECT NVARCHAR(MAX),@PDCSQL NVARCHAR(MAX),@Temp NVARCHAR(100),@AccountName NVARCHAR(200),@AccountCode NVARCHAR(200),@AccountType INT
 	DECLARE	@From NVARCHAR(20),@To NVARCHAR(20),@AmtColumn NVARCHAR(32),@CurrWHERE1 NVARCHAR(30),@CurrWHERE2 NVARCHAR(30)
-	DECLARE @DimColumn NVARCHAR(50),@DimColAlias NVARCHAR(50),@DimJoin NVARCHAR(100),@DetailSQL NVARCHAR(50),@InvDetailSQL NVARCHAR(50),@UnAppSQL NVARCHAR(MAX)
+	DECLARE @DimColumn NVARCHAR(50),@DimColAlias NVARCHAR(50),@DimJoin NVARCHAR(100),@DetailSQL NVARCHAR(50),@InvDetailSQL NVARCHAR(50),@UnAppSQL NVARCHAR(MAX),@UnAppSQLOP NVARCHAR(MAX)
 	declare @PartJoin1 nvarchar(100),@PartJoin2 nvarchar(100),@AccName nvarchar(30)
 	DECLARE @ParticularCr NVARCHAR(500),@ParticularDr NVARCHAR(500),@ParticularCrAcc NVARCHAR(900),@ParticularCrAccJV NVARCHAR(1050),@ParticularDrAcc NVARCHAR(900),@ParticularDrAccJV NVARCHAR(1050)
 	
@@ -63,6 +64,11 @@ SET NOCOUNT ON;
 		set @UnAppSQL=' AND (D.StatusID=369 or D.StatusID=429)'
 	else
 		set @UnAppSQL=' AND D.StatusID IN (369,429,'+@UpPostedDocsList+')'
+	
+	if @UpPostedDocsListOP=''
+		set @UnAppSQLOP=' AND (D.StatusID=369 or D.StatusID=429)'
+	else
+		set @UnAppSQLOP=' AND D.StatusID IN (369,429,'+@UpPostedDocsListOP+')'	
 		
 	IF @CurrencyID>0
 	BEGIN
@@ -101,22 +107,22 @@ SET NOCOUNT ON;
 	SET @SQL='SELECT '+@DimColumn+',D.'+@AmtColumn+' Debit,0 Credit
 	FROM ACC_DocDetails D with(nolock) INNER JOIN ACC_Accounts A with(nolock) ON A.AccountID=D.DebitAccount'+@AccountTypes+'
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@LocationWHERE+'		
-	WHERE D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1+'
+	WHERE D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1+'
 	UNION ALL
 	SELECT '+@DimColumn+',0 Debit, D.'+@AmtColumn+' Credit
 	FROM ACC_DocDetails D with(nolock) INNER JOIN ACC_Accounts A with(nolock) ON A.AccountID=D.CreditAccount'+@AccountTypes+'
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@LocationWHERE+'
-	WHERE D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1+'
+	WHERE D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1+'
 	UNION ALL
 	SELECT '+@DimColumn+', D.'+@AmtColumn+' Debit,0 Credit
 	FROM ACC_DocDetails D with(nolock) INNER JOIN ACC_Accounts A with(nolock) ON A.AccountID=D.DebitAccount'+@AccountTypes+'
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@LocationWHERE+'		
-	WHERE D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1+'
+	WHERE D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1+'
 	UNION ALL
 	SELECT '+@DimColumn+',0 Debit, D.'+@AmtColumn+' Credit
 	FROM ACC_DocDetails D with(nolock) INNER JOIN ACC_Accounts A with(nolock) ON A.AccountID=D.CreditAccount'+@AccountTypes+'
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@LocationWHERE+'
-	WHERE D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1
+	WHERE D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1
 	
 	SET @SQL='SELECT '+@DimColAlias+',ISNULL(SUM(Debit)-SUM(Credit),0) BF
 	FROM ('+@SQL+') AS T '+@DimJoin+'

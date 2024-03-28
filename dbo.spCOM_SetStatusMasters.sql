@@ -19,7 +19,7 @@ BEGIN TRANSACTION
 BEGIN TRY      
 SET NOCOUNT ON;     
 	--Declaration Section    
-	DECLARE @temp nvarchar(100),@GUID  NVARCHAR(50),@Name nvarchar(100),@Level int,@maxLevel INT,@tempLevel int,
+	DECLARE @temp nvarchar(100),@GUID  NVARCHAR(50),@Name nvarchar(100),@level int,@maxLevel INT,@tempLevel int,
 	@WID INT,@oldStatusID int,@STATUSID INT,@SQL nvarchar(max),@CStatusID INT, @Assigned INT=0
 
 	--SP Required Parameters Check    
@@ -34,6 +34,8 @@ SET NOCOUNT ON;
 		BEGIN
 			select  @WID=WFID,@tempLevel=WFLevel,@GUID=[guid],@oldStatusID=Statusid 
 	    	FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=@NODEID and WFID>0
+			print '@tempLevel'
+			print @tempLevel
 		END
    ELSE if(@CostCenterID=3)
 		BEGIN
@@ -41,7 +43,7 @@ SET NOCOUNT ON;
 	    	FROM INV_Product WITH(NOLOCK) WHERE ProductID=@NODEID and WFID>0
 		END
 
-		ELSE if(@CostCenterID>=50001 and @CostCenterID<=50008)
+	ELSE if(@CostCenterID>=50001 and @CostCenterID<=50008)
 		BEGIN
 		 	declare @sqlSelect nvarchar(max)
 			declare @TableName1 varchar(1000)
@@ -85,7 +87,11 @@ SET NOCOUNT ON;
 		where g.RoleID =@RoleID and WorkFlowID=@WID and LevelID>@tempLevel
 		order by LevelID desc
 			
+		
 	select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK) where WorkFlowID=@WID
+	
+
+
 	if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
 	begin	
 		IF(@level=1)
@@ -112,6 +118,7 @@ SET NOCOUNT ON;
 			END
 
 		ELSE if(@CostCenterID>=50001 and @CostCenterID <=50008)
+		--ELSE if((@CostCenterID>=50001 and @CostCenterID<=50054) or  @CostCenterID=50170)
 			BEGIN
 
 				select @StatusID=1002
@@ -127,7 +134,21 @@ SET NOCOUNT ON;
 	else
 		set @StatusID=1003
 
+		print '@oldStatusID'
+		print @oldStatusID
+		
+		print '@StatusID'
+		print @StatusID
 
+		print '@@CStatusID'
+		print @CStatusID
+		
+
+		print '@@tempLevel'
+		print @tempLevel
+		
+		print '@@Level'
+		print @Level
 
 		
 	if @oldStatusID!=@StatusID OR @Level!=@tempLevel
@@ -146,7 +167,7 @@ SET NOCOUNT ON;
 			VALUES    
 			  (@COSTCENTERID    
 			  ,@NODEID 
-			  ,@STATUSID    
+			  ,ISNULL(@CStatusID,@StatusID)     
 			  ,CONVERT(FLOAT,GETDATE())
 			  ,@REMARKS
 			  ,@UserID
@@ -201,6 +222,7 @@ SET NOCOUNT ON;
 	END
 COMMIT TRANSACTION  
 SET NOCOUNT OFF;    
+--else if ((@CostCenterID>=50001 and @CostCenterID<=50054) or  @CostCenterID=50170)
 IF(@CStatusID IS NOT NULL  AND @CostCenterID IN(2,3) OR  (@CostCenterID>=50001 and @CostCenterID<=50008))
 BEGIN
 	select @temp=isnull(ResourceData,'') from COM_Status S WITH(NOLOCK)

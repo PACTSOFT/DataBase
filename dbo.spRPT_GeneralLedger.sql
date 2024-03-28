@@ -37,6 +37,7 @@ CREATE PROCEDURE [dbo].[spRPT_GeneralLedger]
 	@FROMQUERY [nvarchar](max),
 	@SELECTQUERYALIAS [nvarchar](max),
 	@FCWithExchRate [float] = 0,
+	@UpPostedDocsListOP [nvarchar](200),
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -47,10 +48,10 @@ SET NOCOUNT ON;
 --19 Postdated Receipts
 	DECLARE @SQL NVARCHAR(MAX),@FinalSQL NVARCHAR(MAX),@INV_SELECT NVARCHAR(MAX),@PDCSQL NVARCHAR(MAX),@Temp NVARCHAR(MAX),@AccountName NVARCHAR(200),@AccountCode NVARCHAR(200),@AccountType INT,@RoundSQL nvarchar(max)
 	DECLARE	@From NVARCHAR(20),@To NVARCHAR(20),@YearStart NVARCHAR(20),@AmtColumn NVARCHAR(32),@CurrWHERE1 NVARCHAR(30),@CurrWHERE2 NVARCHAR(30),@JVParticularCr nvarchar(200),@JVParticularDr nvarchar(200)
-	DECLARE @SQL1 NVARCHAR(MAX),@SQL2 NVARCHAR(MAX),@DetailSQL NVARCHAR(50),@InvDetailDr NVARCHAR(50),@InvDetailCr NVARCHAR(50),@UnAppSQL NVARCHAR(MAX),@TagColumn NVARCHAR(50),@TagDBColumn NVARCHAR(50),@OpDateFilter NVARCHAR(100),@ACCDateFilter NVARCHAR(100),@INVDateFilter NVARCHAR(100)
+	DECLARE @SQL1 NVARCHAR(MAX),@SQL2 NVARCHAR(MAX),@DetailSQL NVARCHAR(50),@InvDetailDr NVARCHAR(50),@InvDetailCr NVARCHAR(50),@UnAppSQL NVARCHAR(MAX),@UnAppSQLOP NVARCHAR(MAX),@TagColumn NVARCHAR(50),@TagDBColumn NVARCHAR(50),@OpDateFilter NVARCHAR(100),@ACCDateFilter NVARCHAR(100),@INVDateFilter NVARCHAR(100)
 	DECLARE @ParticularCr NVARCHAR(500),@ParticularDr NVARCHAR(500),@ParticularCrAcc NVARCHAR(900),@ParticularCrAccJV NVARCHAR(1050),@ParticularDrAcc NVARCHAR(900),@ParticularDrAccJV NVARCHAR(1050),@UNION NVARCHAR(20),@IntermediatePDC NVARCHAR(max)
-	DECLARE @LocalAmountDB nvarchar(100),@LocalAmount nvarchar(100),@LocalAmtJoin nvarchar(100),@TblAccName varchar(max),@CntrlAccWhere varchar(max),@SortAccountID varchar(10),@INV_FROMQUERY nvarchar(max),@ReportByPDCConvDate bit,@LineWisePDC nvarchar(max),@PDCStatWh nvarchar(max)
-	declare @AmtCol NVARCHAR(10),@Pdcwhr nvarchar(MAX)
+	DECLARE @LocalAmountDB nvarchar(100),@LocalAmount nvarchar(100),@LocalAmtJoin nvarchar(100),@TblAccName varchar(max),@CntrlAccWhere varchar(max),@SortAccountID varchar(10),@INV_FROMQUERY nvarchar(max),@ReportByPDCConvDate bit,@LineWisePDC nvarchar(max),@PDCStatWh nvarchar(max),@PDCStatWhOP nvarchar(max)
+	declare @AmtCol NVARCHAR(10)
 	create table #TblAcc(AccountID INT primary key,IsExpense bit default(1))
 	SET @TagDBColumn=''
 	SET @LocalAmountDB=''
@@ -59,7 +60,6 @@ SET NOCOUNT ON;
 	SET @SQL1=''
 	SET @CurrWHERE1=''
 	SET @LineWisePDC=''
-	SET @Pdcwhr=''
 	
 	if exists (select Value from adm_globalpreferences with(nolock) where name ='ReportByPDCConvDate' and Value='True')
 		set @ReportByPDCConvDate=1
@@ -108,7 +108,12 @@ SET NOCOUNT ON;
 		set @UnAppSQL=' AND (D.StatusID=369 or D.StatusID=429)'
 	else
 		set @UnAppSQL=' AND D.StatusID IN (369,429,'+@UpPostedDocsList+')'
-
+	
+	if @UpPostedDocsListOP=''
+		set @UnAppSQLOP=' AND (D.StatusID=369 or D.StatusID=429)'
+	else
+		set @UnAppSQLOP=' AND D.StatusID IN (369,429,'+@UpPostedDocsListOP+')'
+		
 	IF @LocationWHERE<>'' OR @TagID>0
 	BEGIN
 		SET @SQL1=' INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@LocationWHERE--D.InvDocDetailsID IS NULL AND 
@@ -169,15 +174,15 @@ SET NOCOUNT ON;
 	begin
 		if @DateFilter='MaturityDate'
 			set @DateFilter='ChequeMaturityDate'
-		set @OpDateFilter=' AND (isnull(D.'+@DateFilter+',D.DocDate)<'+@From+' OR D.DocumentType=16)'
-		set @ACCDateFilter=' AND isnull(D.'+@DateFilter+',D.DocDate) between '+@From+' AND '+@To
-		set @INVDateFilter=' AND isnull(AD.'+@DateFilter+',AD.DocDate) between '+@From+' AND '+@To
+		set @OpDateFilter=' AND (isnull(D.'+@DateFilter+',D.DocDate)<@From OR D.DocumentType=16)'
+		set @ACCDateFilter=' AND isnull(D.'+@DateFilter+',D.DocDate) between @From AND @To'
+		set @INVDateFilter=' AND isnull(AD.'+@DateFilter+',AD.DocDate) between @From AND @To'
 	end
 	else if @DateFilter=''
 	begin
-		set @OpDateFilter=' AND (D.DocDate<'+@From+' OR D.DocumentType=16)'
-		set @ACCDateFilter=' AND D.DocDate>='+@From+' AND D.DocDate<='+@To
-		set @INVDateFilter=' AND AD.DocDate>='+@From+' AND AD.DocDate<='+@To
+		set @OpDateFilter=' AND (D.DocDate<@From OR D.DocumentType=16)'
+		set @ACCDateFilter=' AND D.DocDate>=@From AND D.DocDate<=@To'
+		set @INVDateFilter=' AND AD.DocDate>=@From AND AD.DocDate<=@To'
 	end
 	
 	set @IntermediatePDC=''
@@ -189,7 +194,7 @@ SET NOCOUNT ON;
 		if len(@IntermediatePDC)!=''
 		begin
 			set @IntermediatePDC=substring(@IntermediatePDC,1,len(@IntermediatePDC)-1)
-			set @IntermediatePDC=' and (D.CostCenterID not in ('+@IntermediatePDC+') or D.ConvertedDate is null or D.ConvertedDate<='+@To+')'
+			set @IntermediatePDC=' and (D.CostCenterID not in ('+@IntermediatePDC+') or D.ConvertedDate is null or D.ConvertedDate<=@To)'
 		end
 	end
 	
@@ -201,9 +206,15 @@ SET NOCOUNT ON;
 		IF @IncludeTerminatedPDC=1
 			SET @PDCStatWh=@PDCStatWh+' OR D.StatusID=452'
 		if @ReportByPDCConvDate=1
-			SET @PDCStatWh=@PDCStatWh+' or ((D.StatusID=369 or D.StatusID=429) and D.ConvertedDate>'+@To+')'
+			SET @PDCStatWh=@PDCStatWh+' or ((D.StatusID=369 or D.StatusID=429) and D.ConvertedDate>@To)'
 		if (@ReportType=3 AND @UpPostedDocsList<>'')
+		BEGIN
+			SET @PDCStatWhOP=@PDCStatWh+' OR D.StatusID IN ('+@UpPostedDocsListOP+')'
 			SET @PDCStatWh=@PDCStatWh+' OR D.StatusID IN ('+@UpPostedDocsList+')'
+		END
+		ELSE
+			SET @PDCStatWhOP=@PDCStatWh
+		SET @PDCStatWhOP=@PDCStatWhOP+')'	
 		SET @PDCStatWh=@PDCStatWh+')'
 		
 		set @LineWisePDC=''
@@ -238,41 +249,35 @@ SET NOCOUNT ON;
 		BEGIN
 			SET @SQL='SELECT '+(case when @IsCtrlAcc=0 then 'D.DebitAccount' else 'AL.ParentID' end)+' AccountID, D.'+@AmtColumn+' Debit,0 Credit'+@TagDBColumn+@LocalAmountDB+@RoundSQL+'
 			FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount'+@SQL1+@LocalAmtJoin+'		
-			WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19'+@OpDateFilter+@UnAppSQL+@WHEREQUERY+@CurrWHERE1+@IntermediatePDC+'
+			WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19'+@OpDateFilter+@UnAppSQLOP+@WHEREQUERY+@CurrWHERE1+@IntermediatePDC+'
 			UNION ALL
 			SELECT '+(case when @IsCtrlAcc=0 then 'D.CreditAccount' else 'AL.ParentID' end)+',0 Debit, D.'+@AmtColumn+' Credit'+@TagDBColumn+replace(@LocalAmountDB,',',',-')+@RoundSQL+'
 			FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount '+@SQL1+@LocalAmtJoin+'
-			WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19'+@OpDateFilter+@UnAppSQL+@WHEREQUERY+@CurrWHERE1+@IntermediatePDC
+			WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19'+@OpDateFilter+@UnAppSQLOP+@WHEREQUERY+@CurrWHERE1+@IntermediatePDC
 			IF LEN(@SQL1)>0
 			BEGIN
 				SET @SQL=@SQL+' UNION ALL
 			SELECT '+(case when @IsCtrlAcc=0 then 'D.DebitAccount' else 'AL.ParentID' end)+' AccountID, D.'+@AmtColumn+' Debit,0 Credit'+@TagDBColumn+@LocalAmountDB+@RoundSQL+'
 			FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount '+@SQL2+@LocalAmtJoin+'		
-			WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19'+@OpDateFilter+@UnAppSQL+@WHEREQUERY+@CurrWHERE1+'
+			WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19'+@OpDateFilter+@UnAppSQLOP+@WHEREQUERY+@CurrWHERE1+'
 			UNION ALL
 			SELECT '+(case when @IsCtrlAcc=0 then 'D.CreditAccount' else 'AL.ParentID' end)+',0 Debit, D.'+@AmtColumn+' Credit'+@TagDBColumn+replace(@LocalAmountDB,',',',-')+@RoundSQL+'
 			FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount '+@SQL2+@LocalAmtJoin+'
-			WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19'+@OpDateFilter+@UnAppSQL+@WHEREQUERY+@CurrWHERE1
+			WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19'+@OpDateFilter+@UnAppSQLOP+@WHEREQUERY+@CurrWHERE1
 			END
 			
 			IF @PDCatOPB=1
 			BEGIN
-				SET @Pdcwhr=''
-				IF(isnull(@PDCStatWh,'')<>'')
-					SET @Pdcwhr=' AND '+@PDCStatWh
-				ELSE
-					SET @Pdcwhr=''
-					
 				SET @SQL=@SQL+'
-				 UNION ALL
-				SELECT '+(case when @IsCtrlAcc=0 then 'D.DebitAccount' else 'AL.ParentID' end)+' AccountID, D.'+@AmtColumn+' Debit,0 Credit'+@TagDBColumn+@LocalAmountDB+@RoundSQL+'
-				FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount'
-				+@SQL1+@LocalAmtJoin+'
-				WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+@Pdcwhr+' AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'<'+@From+' '+@LocationWHERE+@WHEREQUERY+@CurrWHERE1+@LineWisePDC+'
-				UNION ALL
-				SELECT '+(case when @IsCtrlAcc=0 then 'D.CreditAccount' else 'AL.ParentID' end)+',0 Debit, D.'+@AmtColumn+' Credit'+@TagDBColumn+replace(@LocalAmountDB,',',',-')+@RoundSQL+'
-				FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount'+@SQL1+@LocalAmtJoin+'
-				WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+@Pdcwhr+' AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'<'+@From+' '+@LocationWHERE+@WHEREQUERY+@CurrWHERE1+@LineWisePDC
+UNION ALL
+SELECT '+(case when @IsCtrlAcc=0 then 'D.DebitAccount' else 'AL.ParentID' end)+' AccountID, D.'+@AmtColumn+' Debit,0 Credit'+@TagDBColumn+@LocalAmountDB+@RoundSQL+'
+FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount'
++@SQL1+@LocalAmtJoin+'
+WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+(CASE WHEN isnull(@PDCStatWhOP,'')<>'' THEN ' AND '+@PDCStatWhOP ELSE '' END)+' AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'<@From '+@LocationWHERE+@WHEREQUERY+@CurrWHERE1+@LineWisePDC+'
+UNION ALL
+SELECT '+(case when @IsCtrlAcc=0 then 'D.CreditAccount' else 'AL.ParentID' end)+',0 Debit, D.'+@AmtColumn+' Credit'+@TagDBColumn+replace(@LocalAmountDB,',',',-')+@RoundSQL+'
+FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount'+@SQL1+@LocalAmtJoin+'
+WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+(CASE WHEN isnull(@PDCStatWhOP,'')<>'' THEN ' AND '+@PDCStatWhOP ELSE '' END)+' AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'<@From '+@LocationWHERE+@WHEREQUERY+@CurrWHERE1+@LineWisePDC
 			END
 		END
 		
@@ -285,40 +290,34 @@ SET NOCOUNT ON;
 
 			SET @SQL=@SQL+' SELECT D.DebitAccount AccountID, D.'+@AmtColumn+' Debit,0 Credit'+@TagDBColumn+@LocalAmountDB+@RoundSQL+'
 			FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount '+@SQL1+@LocalAmtJoin+'		
-			WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19 AND (D.DocDate>='+@YearStart+' and (D.DocDate<'+@From+' OR (D.DocumentType=16 and D.DocDate<='+@To+')))'+@UnAppSQL+@WHEREQUERY+@CurrWHERE1+@IntermediatePDC+'
+			WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19 AND (D.DocDate>='+@YearStart+' and (D.DocDate<@From OR (D.DocumentType=16 and D.DocDate<=@To)))'+@UnAppSQLOP+@WHEREQUERY+@CurrWHERE1+@IntermediatePDC+'
 			UNION ALL
 			SELECT D.CreditAccount,0 Debit, D.'+@AmtColumn+' Credit'+@TagDBColumn+replace(@LocalAmountDB,',',',-')+@RoundSQL+'
 			FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount '+@SQL1+@LocalAmtJoin+'
-			WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19 AND (D.DocDate>='+@YearStart+' and (D.DocDate<'+@From+' OR (D.DocumentType=16 and D.DocDate<='+@To+')))'+@UnAppSQL+@WHEREQUERY+@CurrWHERE1+@IntermediatePDC
+			WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19 AND (D.DocDate>='+@YearStart+' and (D.DocDate<@From OR (D.DocumentType=16 and D.DocDate<=@To)))'+@UnAppSQLOP+@WHEREQUERY+@CurrWHERE1+@IntermediatePDC
 			IF LEN(@SQL1)>0
 			BEGIN
 				SET @SQL=@SQL+' UNION ALL SELECT D.DebitAccount AccountID, D.'+@AmtColumn+' Debit,0 Credit'+@TagDBColumn+@LocalAmountDB+@RoundSQL+'
 			FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount '+@SQL2+@LocalAmtJoin+'		
-			WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19 AND (D.DocDate>='+@YearStart+' and (D.DocDate<'+@From+' OR (D.DocumentType=16 and D.DocDate<='+@To+')))'+@UnAppSQL+@WHEREQUERY+@CurrWHERE1+'
+			WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19 AND (D.DocDate>='+@YearStart+' and (D.DocDate<@From OR (D.DocumentType=16 and D.DocDate<=@To)))'+@UnAppSQLOP+@WHEREQUERY+@CurrWHERE1+'
 			UNION ALL
 			SELECT D.CreditAccount,0 Debit, D.'+@AmtColumn+' Credit'+@TagDBColumn+replace(@LocalAmountDB,',',',-')+@RoundSQL+'
 			FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount '+@SQL2+@LocalAmtJoin+'
-			WHERE AL.IsExpense=1 AND D.DocumentType<>14 AND D.DocumentType<>19 AND (D.DocDate>='+@YearStart+' and (D.DocDate<'+@From+' OR (D.DocumentType=16 and D.DocDate<='+@To+')))'+@UnAppSQL+@WHEREQUERY+@CurrWHERE1
+			WHERE AL.IsExpense=1 AND D.DocumentType<>14 AND D.DocumentType<>19 AND (D.DocDate>='+@YearStart+' and (D.DocDate<@From OR (D.DocumentType=16 and D.DocDate<=@To)))'+@UnAppSQLOP+@WHEREQUERY+@CurrWHERE1
 			END
 			
 			IF @PDCatOPB=1
 			BEGIN
-				SET @Pdcwhr=''
-				IF(isnull(@PDCStatWh,'')<>'')
-					SET @Pdcwhr=' AND '+@PDCStatWh
-				ELSE
-					SET @Pdcwhr=''
-					
 				SET @SQL=@SQL+'
-				 UNION ALL
-				SELECT D.DebitAccount AccountID, D.'+@AmtColumn+' Debit,0 Credit'+@TagDBColumn+@LocalAmountDB+@RoundSQL+'
-				FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount'
-				+@SQL1+@LocalAmtJoin+'
-				WHERE AL.IsExpense=1  '+@Pdcwhr+' AND (D.DocumentType=14 OR D.DocumentType=19) AND (D.'+@PDCFilterOn+'>='+@YearStart+' and D.'+@PDCFilterOn+'<'+@From+') '+@LocationWHERE+@WHEREQUERY+@CurrWHERE1+@LineWisePDC+'
-				UNION ALL
-				SELECT D.CreditAccount,0 Debit, D.'+@AmtColumn+' Credit'+@TagDBColumn+replace(@LocalAmountDB,',',',-')+@RoundSQL+'
-				FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount'+@SQL1+@LocalAmtJoin+'
-				WHERE AL.IsExpense=1  '+@Pdcwhr+' AND (D.DocumentType=14 OR D.DocumentType=19) AND (D.'+@PDCFilterOn+'>='+@YearStart+' and D.'+@PDCFilterOn+'<'+@From+') '+@LocationWHERE+@WHEREQUERY+@CurrWHERE1+@LineWisePDC
+UNION ALL
+SELECT D.DebitAccount AccountID, D.'+@AmtColumn+' Debit,0 Credit'+@TagDBColumn+@LocalAmountDB+@RoundSQL+'
+FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount'
++@SQL1+@LocalAmtJoin+'
+WHERE AL.IsExpense=1  '+(CASE WHEN isnull(@PDCStatWhOP,'')<>'' THEN ' AND '+@PDCStatWhOP ELSE '' END)+' AND (D.DocumentType=14 OR D.DocumentType=19) AND (D.'+@PDCFilterOn+'>='+@YearStart+' and D.'+@PDCFilterOn+'<@From) '+@LocationWHERE+@WHEREQUERY+@CurrWHERE1+@LineWisePDC+'
+UNION ALL
+SELECT D.CreditAccount,0 Debit, D.'+@AmtColumn+' Credit'+@TagDBColumn+replace(@LocalAmountDB,',',',-')+@RoundSQL+'
+FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount'+@SQL1+@LocalAmtJoin+'
+WHERE AL.IsExpense=1  '+(CASE WHEN isnull(@PDCStatWhOP,'')<>'' THEN ' AND '+@PDCStatWhOP ELSE '' END)+' AND (D.DocumentType=14 OR D.DocumentType=19) AND (D.'+@PDCFilterOn+'>='+@YearStart+' and D.'+@PDCFilterOn+'<@From) '+@LocationWHERE+@WHEREQUERY+@CurrWHERE1+@LineWisePDC
 			END
 		END
 
@@ -341,7 +340,7 @@ SET NOCOUNT ON;
 			GROUP BY A.AccountName,A.AccountID,A.AccountTypeID'+@TagColumn
 		end
 	end
-	
+	SET @SQL='DECLARE @FROM FLOAT='+@FROM+',@To FLOAT='+@To+' '+@SQL
 	print @SQL
 	EXEC sp_executesql @SQL
 	
@@ -514,11 +513,11 @@ inner join (SELECT D.AccDocDetailsID,D.VoucherNo,D.CreditAccount DrAccountID
 	FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=DebitAccount
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-	WHERE D.StatusID=369 AND D.BankAccountID>0 AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'<='+@To+' '+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
+	WHERE D.StatusID=369 AND D.BankAccountID>0 AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'<=@To '+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
 +') T on D.RefNodeID=t.AccDocDetailsID and D.RefCCID=400 --and D.DebitAccount=t.DrAccountID
 LEFT JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=DebitAccount
 INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-WHERE D.DocumentType<>16 AND D.DocumentType<>14 AND D.DocumentType<>19 AND D.DocDate>='+@From+' AND D.DocDate<='+@To+' '+@LocationWHERE+@UnAppSQL+@CurrWHERE1
+WHERE D.DocumentType<>16 AND D.DocumentType<>14 AND D.DocumentType<>19 AND D.DocDate>=@From AND D.DocDate<=@To '+@LocationWHERE+@UnAppSQL+@CurrWHERE1
 	SET @SQL=@SQL+' '+@UNION+' '+@Temp
 	--print(@Temp)	
 	--exec(@Temp)
@@ -531,11 +530,11 @@ inner join (SELECT D.AccDocDetailsID,D.VoucherNo,D.CreditAccount CrAccountID
 	FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=CreditAccount
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-	WHERE D.StatusID=369 AND D.BankAccountID>0 AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'<='+@To+' '+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
+	WHERE D.StatusID=369 AND D.BankAccountID>0 AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'<=@To '+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
 +') T on D.RefNodeID=t.AccDocDetailsID and D.RefCCID=400 --and D.creditaccount=t.CrAccountID
 LEFT JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=CreditAccount
 INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-WHERE D.DocumentType<>16 AND D.DocumentType<>14 AND D.DocumentType<>19 AND D.DocDate>='+@From+' AND D.DocDate<='+@To+' '+@LocationWHERE+@UnAppSQL+@CurrWHERE1
+WHERE D.DocumentType<>16 AND D.DocumentType<>14 AND D.DocumentType<>19 AND D.DocDate>=@From AND D.DocDate<=@To '+@LocationWHERE+@UnAppSQL+@CurrWHERE1
 	SET @SQL=@SQL+' '+@UNION+' '+@Temp
 	--print(@Temp)
 	--exec(@Temp)
@@ -550,14 +549,14 @@ BEGIN
 	FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=DebitAccount
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-	WHERE '+@PDCStatWh+' AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'>='+@From+' AND D.'+@PDCFilterOn+'<='+@To+' '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+@LineWisePDC+'
+	WHERE '+@PDCStatWh+' AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'>=@From AND D.'+@PDCFilterOn+'<=@To '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+@LineWisePDC+'
 	UNION ALL
 	SELECT '+@DetailSQL+'A1.AccountName,CreditAccount,CONVERT(DATETIME,D.'+@PDCSortOn+') DocDate'+@SortDateBy+',D.VoucherNo,D.BillNo,CONVERT(DATETIME, D.BillDate) BillDate,
 	'+@ParticularDrAcc+',NULL DebitAmount,D.'+@AmtColumn+' CreditAmount,0.0 Balance,D.ChequeNumber,CONVERT(DATETIME,D.ChequeDate) ChequeDate,CONVERT(DATETIME,D.ChequeMaturityDate) ChequeMaturityDate,D.DocumentType VType,D.StatusID StatusID'+@TagDBColumn+@SELECTQUERY_CR+'
 	FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=CreditAccount
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-	WHERE '+@PDCStatWh+' AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'>='+@From+' AND D.'+@PDCFilterOn+'<='+@To+' '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+@LineWisePDC
+	WHERE '+@PDCStatWh+' AND (D.DocumentType=14 OR D.DocumentType=19) AND D.'+@PDCFilterOn+'>=@From AND D.'+@PDCFilterOn+'<=@To '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+@LineWisePDC
 	
 	
 	if @ShowIntPDCBank=1
@@ -569,14 +568,14 @@ UNION ALL
 	FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.BankAccountID
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=BankAccountID
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-	WHERE '+@PDCStatWh+' AND D.DocumentType=19 AND isnull(D.'+@PDCSortOn+',D.DocDate)<='+@To+' '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+'
+	WHERE '+@PDCStatWh+' AND D.DocumentType=19 AND isnull(D.'+@PDCSortOn+',D.DocDate)<=@To '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+'
 	UNION ALL
 	SELECT '+@DetailSQL+'A1.AccountName,BankAccountID,CONVERT(DATETIME,D.'+@PDCSortOn+') DocDate'+@SortDateBy+',D.VoucherNo,D.BillNo,CONVERT(DATETIME, D.BillDate) BillDate,
 	'+@ParticularDrAcc+',NULL DebitAmount,D.'+@AmtColumn+' CreditAmount,0.0 Balance,D.ChequeNumber,CONVERT(DATETIME,D.ChequeDate) ChequeDate,CONVERT(DATETIME,D.ChequeMaturityDate) ChequeMaturityDate,D.DocumentType VType,-1 StatusID'+@TagDBColumn+@SELECTQUERY_CR+'
 	FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.BankAccountID
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=BankAccountID
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-	WHERE '+@PDCStatWh+' AND D.DocumentType=14 AND isnull(D.'+@PDCSortOn+',D.DocDate)<='+@To+' '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
+	WHERE '+@PDCStatWh+' AND D.DocumentType=14 AND isnull(D.'+@PDCSortOn+',D.DocDate)<=@To '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
 		/*SET @PDCSQL=@PDCSQL+'
 UNION ALL
 	SELECT '+@DetailSQL+'A1.AccountName,DebitAccount AccountID,CONVERT(DATETIME,D.'+@PDCSortOn+') DocDate'+@SortDateBy+', D.VoucherNo,D.BillNo, CONVERT(DATETIME, D.BillDate) BillDate,
@@ -584,14 +583,14 @@ UNION ALL
 	FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=DebitAccount
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-	WHERE D.StatusID=448 AND isnull(D.ChequeMaturityDate,D.DocDate)<='+@To+' '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+'
+	WHERE D.StatusID=448 AND isnull(D.ChequeMaturityDate,D.DocDate)<=@To '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+'
 	UNION ALL
 	SELECT '+@DetailSQL+'A1.AccountName,CreditAccount,CONVERT(DATETIME,D.'+@PDCSortOn+') DocDate'+@SortDateBy+',D.VoucherNo,D.BillNo,CONVERT(DATETIME, D.BillDate) BillDate,
 	'+@ParticularDrAcc+',NULL DebitAmount,D.'+@AmtColumn+' CreditAmount,0.0 Balance,D.ChequeNumber,CONVERT(DATETIME,D.ChequeDate) ChequeDate,CONVERT(DATETIME,D.ChequeMaturityDate) ChequeMaturityDate,D.DocumentType VType,-2 StatusID'+@TagDBColumn+@SELECTQUERY_CR+'
 	FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=CreditAccount
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-	WHERE D.StatusID=448 AND isnull(D.ChequeMaturityDate,D.DocDate)<='+@To+' '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
+	WHERE D.StatusID=448 AND isnull(D.ChequeMaturityDate,D.DocDate)<=@To '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
 	end*/
 	
 	if @NonAccDocs!=''
@@ -602,18 +601,18 @@ UNION ALL
 	FROM INV_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=DebitAccount
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@FROMQUERY+'
-	WHERE D.CostCenterID in ('+@NonAccDocs+') AND isnull(D.DueDate,D.DocDate)<='+@To+' '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+'
+	WHERE D.CostCenterID in ('+@NonAccDocs+') AND isnull(D.DueDate,D.DocDate)<=@To '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1+'
 	UNION ALL
 	SELECT '+@DetailSQL+'A1.AccountName,CreditAccount,CONVERT(DATETIME,isnull(D.DueDate,D.DocDate)) DocDate'+@SortDateBy+',D.VoucherNo,D.BillNo,CONVERT(DATETIME, D.BillDate) BillDate,
 	'+@ParticularDrAcc+',NULL DebitAmount,D.Gross CreditAmount,0.0 Balance,null ChequeNumber,null  ChequeDate,CONVERT(DATETIME,D.DueDate) ChequeMaturityDate,14 VType,-2 StatusID'+@TagDBColumn+@SELECTQUERY_CR+'
 	FROM INV_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount
 	INNER JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=CreditAccount
 	INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@FROMQUERY+'
-	WHERE D.CostCenterID in ('+@NonAccDocs+') AND isnull(D.DueDate,D.DocDate)<='+@To+' '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
+	WHERE D.CostCenterID in ('+@NonAccDocs+') AND isnull(D.DueDate,D.DocDate)<=@To '+@CntrlAccWhere+@WHEREQUERY+@LocationWHERE+@CurrWHERE1
 	end
 	
 
---AND D.'+@PDCFilterOn+'>='+@From+' 	
+--AND D.'+@PDCFilterOn+'>=@From 	
 END
 
 --select @SQL
@@ -637,11 +636,23 @@ if @RoundOff!=''
 else
 	set @RoundSQL=',SUM(DebitAmount) Debit,SUM(CreditAmount) Credit,ISNULL(SUM(DebitAmount),0)-ISNULL(SUM(CreditAmount),0) DiffDrCr'
 
+	IF @JVDetail=0
+	BEGIN
+		SET @ParticularCr='A2.AccountName'
+		SET @ParticularDr='INNER JOIN ACC_Accounts A2 with(nolock) ON A2.AccountID=T.ParticularID'
+	END	
+	ELSE
+	BEGIN
+		SET @ParticularCr='T.Particular'
+		SET @ParticularDr=''
+	END
+	
+	
 --For Details Report Add AccDocDetailsID In GROUP BY CLAUSE	
 IF @IsDetailInv=1 OR @IsDetailAcc>0
 BEGIN
-	SET @SQL='SELECT AccountName,AccountID, DocDate'+@SortDateBy+', VoucherNo,DocSeqNo, BillNo, BillDate,MAX(ChequeNumber) ChequeNumber,MAX(ChequeDate) ChequeDate,MAX(ChequeMaturityDate) ChequeMaturityDate,CASE WHEN AccountName=MAX(Particular) THEN MIN(Particular) ELSE MAX(Particular) END Particular,MAX(ParticularID) ParticularID'+@RoundSQL+',0.0 Balance,MAX(StatusID) StatusID'+@TagColumn+@LocalAmount+@SELECTQUERYALIAS+'
-	FROM ('+@SQL+') AS T Group By AccountName,AccountID,DocDate'
+	SET @SQL='SELECT T.AccountName,T.AccountID, DocDate'+@SortDateBy+', VoucherNo,DocSeqNo, BillNo, BillDate,MAX(ChequeNumber) ChequeNumber,MAX(ChequeDate) ChequeDate,MAX(ChequeMaturityDate) ChequeMaturityDate,CASE WHEN T.AccountName=MAX('+@ParticularCr+') THEN MIN('+@ParticularCr+') ELSE MAX('+@ParticularCr+') END Particular,MAX(ParticularID) ParticularID'+@RoundSQL+',0.0 Balance,MAX(T.StatusID) StatusID'+@TagColumn+@LocalAmount+@SELECTQUERYALIAS+'
+	FROM ('+@SQL+') AS T '+@ParticularDr+' Group By T.AccountName,T.AccountID,DocDate'
 	IF @IsDetailAcc=2
 		SET @SQL=@SQL+',DocSeqNo,AccDocDetailsID,ParticularID'
 	ELSE
@@ -649,6 +660,7 @@ BEGIN
 	SET @SQL=@SQL+',VoucherNo,BillNo,BillDate'+@TagColumn+@SELECTQUERYALIAS
 	SET @SQL=@SQL+' order by '+@SortAccountID+'DocDate'+@SortOrder+',VoucherNo,DocSeqNo,AccDocDetailsID'
 	
+	SET @SQL='DECLARE @FROM FLOAT='+@FROM+',@To FLOAT='+@To+' '+@SQL
 	--PRINT (substring(@SQL,1,4000))
 	--PRINT (substring(@SQL,4001,4000))
 	--PRINT (substring(@SQL,8001,4000))
@@ -657,9 +669,10 @@ BEGIN
 
 	IF @IncludePDC=1 AND @PDCSeperate=1
 	BEGIN	
-		SET @SQL='SELECT AccountName,AccountID,DocDate'+@SortDateBy+', VoucherNo,DocSeqNo, BillNo, BillDate,MAX(ChequeNumber) ChequeNumber,MAX(ChequeDate) ChequeDate,MAX(ChequeMaturityDate) ChequeMaturityDate,CASE WHEN AccountName=MAX(Particular) THEN MIN(Particular) ELSE MAX(Particular) END Particular,MAX(ParticularID) ParticularID'+@RoundSQL+',0.0 Balance,VType,MAX(StatusID) StatusID '+@TagColumn+@LocalAmount+@SELECTQUERYALIAS+'
-	FROM ( '+@PDCSQL+') AS T Group By AccountName,AccountID,DocDate,DocSeqNo,AccDocDetailsID,VoucherNo,BillNo,BillDate,VType'+@TagColumn+@SELECTQUERYALIAS	
+		SET @SQL='SELECT T.AccountName,T.AccountID,DocDate'+@SortDateBy+', VoucherNo,DocSeqNo, BillNo, BillDate,MAX(ChequeNumber) ChequeNumber,MAX(ChequeDate) ChequeDate,MAX(ChequeMaturityDate) ChequeMaturityDate,CASE WHEN T.AccountName=MAX('+@ParticularCr+') THEN MIN('+@ParticularCr+') ELSE MAX('+@ParticularCr+') END Particular,MAX(ParticularID) ParticularID'+@RoundSQL+',0.0 Balance,VType,MAX(T.StatusID) StatusID '+@TagColumn+@LocalAmount+@SELECTQUERYALIAS+'
+	FROM ( '+@PDCSQL+') AS T '+@ParticularDr+' Group By T.AccountName,T.AccountID,DocDate,DocSeqNo,AccDocDetailsID,VoucherNo,BillNo,BillDate,VType'+@TagColumn+@SELECTQUERYALIAS	
 		SET @SQL=@SQL+' order by '+@SortAccountID+'DocDate'+@SortOrder+',VoucherNo,DocSeqNo,AccDocDetailsID,VType'
+		SET @SQL='DECLARE @FROM FLOAT='+@FROM+',@To FLOAT='+@To+' '+@SQL
 	--PRINT( @SQL)
 		EXEC sp_executesql @SQL
 	END
@@ -678,8 +691,9 @@ from('
 		set @SELECTQUERYALIAS=''
 	end
 	
-	SET @FinalSQL=@FinalSQL+'SELECT AccountName,AccountID'+@DocDate+@SortDateBy+', VoucherNo, MAX(BillNo) BillNo, MAX(BillDate) BillDate,MAX(ChequeNumber) ChequeNumber,MAX(ChequeDate) ChequeDate,MAX(ChequeMaturityDate) ChequeMaturityDate,CASE WHEN AccountName=MAX(Particular) THEN MIN(Particular) ELSE MAX(Particular) END Particular,MAX(ParticularID) ParticularID'+@RoundSQL+',0.0 Balance,MAX(StatusID) StatusID'+@TagColumn+@LocalAmount+@SELECTQUERYALIAS+'
-	FROM ( '+@SQL+') AS T Group By AccountName,AccountID,DocDate,VoucherNo'+@TagColumn
+	SET @FinalSQL=@FinalSQL+'SELECT T.AccountName,T.AccountID'+@DocDate+@SortDateBy+', VoucherNo, MAX(BillNo) BillNo, MAX(BillDate) BillDate,MAX(ChequeNumber) ChequeNumber,MAX(ChequeDate) ChequeDate,MAX(ChequeMaturityDate) ChequeMaturityDate,CASE WHEN T.AccountName=MAX('+@ParticularCr+') THEN MIN('+@ParticularCr+') ELSE MAX('+@ParticularCr+') END Particular	
+	,MAX(ParticularID) ParticularID'+@RoundSQL+',0.0 Balance,MAX(T.StatusID) StatusID'+@TagColumn+@LocalAmount+@SELECTQUERYALIAS+'
+	FROM ( '+@SQL+') AS T '+@ParticularDr+' Group By T.AccountName,T.AccountID,DocDate,VoucherNo'+@TagColumn
 	
 	if @ClubTrBy>0
 	begin
@@ -690,6 +704,7 @@ from('
 	begin
 		SET @FinalSQL=@FinalSQL+' order by '+@SortAccountID+'DocDate'+@SortOrder+',VoucherNo'
 	end
+	SET @FinalSQL='DECLARE @FROM FLOAT='+@FROM+',@To FLOAT='+@To+' '+@FinalSQL
 	print(substring(@FinalSQL,1,4000))
 	print(substring(@FinalSQL,4001,4000))
 	print(substring(@FinalSQL,8001,4000))
@@ -709,8 +724,8 @@ from('
 from('
 		end
 		
-		SET @FinalSQL=@FinalSQL+'SELECT AccountName,AccountID'+@DocDate+@SortDateBy+', VoucherNo, MAX(BillNo) BillNo, MAX(BillDate) BillDate,MAX(ChequeNumber) ChequeNumber,MAX(ChequeDate) ChequeDate,MAX(ChequeMaturityDate) ChequeMaturityDate,CASE WHEN AccountName=MAX(Particular) THEN MIN(Particular) ELSE MAX(Particular) END Particular,MAX(ParticularID) ParticularID'+@RoundSQL+',0.0 Balance,VType,MAX(StatusID) StatusID '+@TagColumn+@LocalAmount+@SELECTQUERYALIAS+'
-	FROM ( '+@PDCSQL+') AS T Group By AccountName,AccountID,DocDate,VoucherNo,VType'+@TagColumn	
+		SET @FinalSQL=@FinalSQL+'SELECT T.AccountName,T.AccountID'+@DocDate+@SortDateBy+', VoucherNo, MAX(BillNo) BillNo, MAX(BillDate) BillDate,MAX(ChequeNumber) ChequeNumber,MAX(ChequeDate) ChequeDate,MAX(ChequeMaturityDate) ChequeMaturityDate,CASE WHEN T.AccountName=MAX('+@ParticularCr+') THEN MIN('+@ParticularCr+') ELSE MAX('+@ParticularCr+') END Particular,MAX(ParticularID) ParticularID'+@RoundSQL+',0.0 Balance,VType,MAX(T.StatusID) StatusID '+@TagColumn+@LocalAmount+@SELECTQUERYALIAS+'
+	FROM ( '+@PDCSQL+') AS T '+@ParticularDr+' Group By T.AccountName,T.AccountID,DocDate,VoucherNo,VType'+@TagColumn	
 		SET @FinalSQL=@FinalSQL
 		if @ClubTrBy>0
 		begin
@@ -721,9 +736,8 @@ from('
 		begin
 			SET @FinalSQL=@FinalSQL+' order by '+@SortAccountID+'DocDate'+@SortOrder+',VoucherNo,VType'
 		end
-		--print 'pdc'
-		print @PDCSQL
-		--print 't'
+		--print @PDCSQL
+		SET @FinalSQL='DECLARE @FROM FLOAT='+@FROM+',@To FLOAT='+@To+' '+@FinalSQL
 	--		print(substring(@FinalSQL,1,4000))
 	--		print(substring(@FinalSQL,4001,4000))
 	--		print(substring(@FinalSQL,8001,4000))

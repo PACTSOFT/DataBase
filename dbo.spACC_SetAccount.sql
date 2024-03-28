@@ -231,9 +231,43 @@ SET NOCOUNT ON;
   END  
 
   SET @Dt=convert(float,getdate())--Setting Current Date  
+  declare @CStatusID int
+  SELECT @CStatusID=StatusID
+		FROM ACC_Accounts WITH(NOLOCK) where AccountID=@AccountID
+
+  	if(@WID>0 and @AccountID>0)	 
+	  begin
+		set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+		where WorkFlowID=@WID and  UserID =@UserID)
+
+		if(@level is null )
+			set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
+			where WorkFlowID=@WID and  RoleID =@RoleID)
+
+		if(@level is null ) 
+			set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
+
+		if(@level is null )
+			set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
+			where RoleID =@RoleID))
+
+		select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
+		select @level,@maxLevel
+		if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
+		begin 
+		 	set @StatusID=1001 
+		end	
+		else if(@level is not null and  @maxLevel is not null and @level<@maxLevel and @CStatusID in (1003))--rejected status time
+		begin	
+		 	set @StatusID=1001 
+		end	
+		 
+		 
+	end
   
-  
-  
+  	
   IF @AccountID=0--------START INSERT RECORD-----------  
   BEGIN--CREATE ACCOUNT--  
     --To Set Left,Right And Depth of Record  
@@ -256,7 +290,7 @@ SET NOCOUNT ON;
 				where RoleID =@RoleID))
 
 			select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
-			
+		
 			if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
 			begin			
 				set @StatusID=1001
@@ -472,6 +506,7 @@ if(@WID>0)
    
     --INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[CompanyGUID],[Guid],[CreatedBy],[CreatedDate])
     -- VALUES(2,@AccountID, @CompanyGUID,newid(),  @UserName, @Dt)      
+ 
   
     UPDATE [ACC_Accounts]  
        SET [AccountCode] = @AccountCode  
@@ -507,6 +542,7 @@ if(@WID>0)
   	  PDCDiscountAccount=@PDCDiscountAccount,InterestRate=@INTERESTRATE,CommissionRate=@COMMISSIONRATE
   	  ,CheckDiscountLimit=@CHECKDISCOUNTLIMIT,GLClubTranBy=@GLClubTranBy,CodePrefix=@CodePrefix,CodeNumber=@CodeNumber    	  
   	  ,DistCost=@DistCost
+	  ,WFLevel=isnull(@level,0)
      WHERE AccountID=@AccountID        
        
    END  

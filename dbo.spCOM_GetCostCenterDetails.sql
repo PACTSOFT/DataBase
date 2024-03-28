@@ -218,13 +218,18 @@ SET NOCOUNT ON;
 		order by FromDate,ToDate
 
 		----16,17 -- GETTING WORKFLOWS
-		declare @TableName1 varchar(200)
+		 if(@CostCenterID>50000 AND @CostCenterID<=50008)
+		 BEGIN
+		 declare @TableName1 varchar(200)
 		select @TableName1 = TableName from ADM_Features  WITH(NOLOCK) where FeatureID=@CostCenterID
 		Declare @WID INT,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@Type int,@escDays int,@CreatedDate datetime
 		declare @sqlSelect nvarchar(max)		
 		
 		--SELECT @StatusID=StatusID,@WID=WFID,@Level=WFLevel,@CreatedDate=CONVERT(datetime,createdDate)
 		--FROM COM_Division WITH(NOLOCK) where  NodeId=@NodeID
+
+		
+
 		set @sqlSelect=' SELECT @StatusID=StatusID,@WID=WFID,@Level=WFLevel,@CreatedDate=CONVERT(datetime,createdDate)
 		FROM  '+@TableName1+' WITH(NOLOCK) where  NodeId='+ convert(nvarchar,@NodeID) +' '
 			print (@sqlSelect)
@@ -330,12 +335,23 @@ SET NOCOUNT ON;
 		end
 
 	ELSE
+
 		BEGIN
 		  
 			select 1 WF where 1!=1
 			select 1 WFL where 1!=1
 			 select 0 canEdit,0 canApprove
 		END
+		 END
+		 ELSE
+		 BEGIN
+			 select 1 WF where 1!=1
+			 select 1 WFL where 1!=1
+			 select 0 canEdit,0 canApprove
+		 END
+
+
+		
 		--DECLARE @WID INT
 		--SELECT @WID= WorkflowID From COM_CCWorkFlow WITH(NOLOCK) where CostCenterID=@CostCenterID and NodeID=@NodeID
 		--IF(@WID is not null and @WID>0)
