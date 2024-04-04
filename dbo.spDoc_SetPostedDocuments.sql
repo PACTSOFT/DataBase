@@ -1106,6 +1106,12 @@ SET NOCOUNT ON;
 			FROM [COM_DocNumData]  WITH(NOLOCK)
 			WHERE  AccDocDetailsID='+convert(nvarchar,@Acc)		
 			exec(@sql)
+			
+			if not (@Dupl is not null and @Dupl>0) and (@Action=0 and @IsReplace=0)
+			BEGIN
+				EXEC spCOM_SetNotifEvent 429,@CCID,@DocID,@CompanyGUID,@UserName,@UserID,@RoleID
+			END	
+			
 		END
 			if(@penalty>0 and @Action=0)
 			BEGIN
