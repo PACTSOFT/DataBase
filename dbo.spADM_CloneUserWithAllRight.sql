@@ -7,9 +7,8 @@ CREATE PROCEDURE [dbo].[spADM_CloneUserWithAllRight]
 	@NewUserName [nvarchar](50),
 	@EditUserID [int],
 	@EditUserName [nvarchar](50),
-	@RoleID [int],
 	@LangID [int] = 1,
-	@LoginUserName [nvarchar](50),
+	@LoginUserName [nvarchar](100),
 	@LoginUserID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -19,7 +18,7 @@ BEGIN TRY
   
   --Favorites Copy
   INSERT INTO ADM_Assign(CostCenterID,NodeID,GroupID,RoleID,UserID,CreatedBy,CreatedDate)
-  SELECT CostCenterID,nodeid,0,@RoleID,@NewUserID,@LoginUserName,convert(float,Getdate()) 
+  SELECT CostCenterID,nodeid,0,RoleID,@NewUserID,@LoginUserName,convert(float,Getdate()) 
   from ADM_Assign with(nolock) where userid=@EditUserID
 
   --Dasboard Copy
@@ -47,16 +46,22 @@ BEGIN TRY
 	  select ParentCostCenterID,ParentNodeID,CostCenterID,NodeID,GUID,@LoginUserName,convert(float,Getdate())
 	  from COM_CostCenterCostCenterMap with(nolock) where ParentCostCenterID=7 and ParentNodeID= @EditUserID
   --property
-	--INSERT INTO [ADM_PropertyUserRoleMap]([PropertyID],UserID,RoleID,LocationID,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate])
-	--select [PropertyID],@NewUserID,RoleID,LocationID,[CompanyGUID],[GUID],@LoginUserName,convert(float,Getdate()) from [ADM_PropertyUserRoleMap] with(nolock)
-	--where userid=@EditUserID
-
 	if exists(select name from sys.tables where name ='ADM_PropertyUserRoleMap')
 	BEGIN
 		if exists(select column_name from information_schema.columns where table_name='ADM_PropertyUserRoleMap' and column_name='LocationID')  
 			BEGIN
-			INSERT INTO [ADM_PropertyUserRoleMap]([PropertyID],UserID,RoleID,LocationID,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate])
-				select [PropertyID],@NewUserID,RoleID,LocationID,[CompanyGUID],[GUID],@LoginUserName,convert(float,Getdate()) from [ADM_PropertyUserRoleMap] with(nolock)
+			 declare @sql nvarchar(max)
+			set @sql ='INSERT INTO [ADM_PropertyUserRoleMap]([PropertyID],UserID,RoleID,LocationID,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate])
+				select [PropertyID],'+Convert(nvarchar,@NewUserID)+' ,RoleID,LocationID,[CompanyGUID],[GUID],'''+Convert(nvarchar, @LoginUserName)+''',Convert(float,Getdate())
+				from [ADM_PropertyUserRoleMap] with(nolock)
+				where userid='+Convert(nvarchar,@EditUserID)+' '
+				print @sql
+				exec (@sql)
+			End
+			if not exists(select column_name from information_schema.columns where table_name='ADM_PropertyUserRoleMap' and column_name='LocationID')  
+			BEGIN
+			INSERT INTO [ADM_PropertyUserRoleMap]([PropertyID],UserID,RoleID,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate])
+				select [PropertyID],@NewUserID,RoleID,[CompanyGUID],[GUID],@LoginUserName,convert(float,Getdate()) from [ADM_PropertyUserRoleMap] with(nolock)
 				where userid=@EditUserID
 			End
 	End

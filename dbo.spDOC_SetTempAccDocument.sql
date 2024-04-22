@@ -41,7 +41,7 @@ SET NOCOUNT ON;
 	DECLARE @TRANSXML XML,@NUMXML XML,@CCXML XML,@TEXTXML XML,@EXTRAXML XML,@DiscXML NVARCHAR(max),@TEMPxml NVARCHAR(max),@AccountsXML xml,@batchID INT,@ActXML xml  
 	DECLARE @VoucherNo NVARCHAR(500),@Length int,@temp varchar(100),@t int,@DOCSEQNO INT,@VersionNo INT,@ReturnXML  xml,@Denominationxml xml  
 	DECLARE @return_value int ,@BankAccountID INT,@IsRevision BIT,@AppRejDate datetime,@Remarks nvarchar(max),@ChWID INT,@IsLockedPosting BIT			    
-	DECLARE @amt float,@accid INT,@IsNewReference bit,@RefDocNo nvarchar(200), @RefDocSeqNo int,@RefDocDate FLOAT,@RefDueDate FLOAT    
+	DECLARE @amt float,@accid INT,@IsNewReference bit,@RefDocNo nvarchar(200), @RefDocSeqNo int,@RefDocDate FLOAT,@RefDueDate FLOAT,@ManaProp BIT
 	declare @Series INT,@ConCCID INT,@prefixccid INT,@PrefValue NVARCHAR(500),@oldStatus int, @Chequeno nvarchar(100),@vno nvarchar(100)
 	declare @level int,@maxLevel int,@StatusID INT,@DocOrder int,@IsPcode bit,@oldseqno int,@oldVoucherNo nvarchar(200),@DELETEDOCID INT,@TEmpWid INT,@tempLevel INT
 	declare  @Dimesion INT,@DimesionNodeID INT,@cctablename nvarchar(50),@DUPLICATECODE  NVARCHAR(MAX),@IsLineWisePDC bit,@PDCDocument int,@DocCC nvarchar(max),@CCreplCols nvarchar(max)
@@ -193,6 +193,11 @@ SET NOCOUNT ON;
 			set @Dimesion=0    
 		end catch 		
 	END
+	
+	set @ManaProp=0
+	if exists(select value from com_costcenterpreferences WITH(NOLOCK)
+	WHere costcenterid=92 and name ='EnableManagProp' and value='true')
+		set @ManaProp=1
 	
 			
   if(@DocNumber is null or @DocNumber='')
@@ -1758,7 +1763,12 @@ SET NOCOUNT ON;
 				@LangID=@LangID
 				
 		END
-		
+	
+	if (@StatusID=369 and @documenttype in(17,18,22) and @ManaProp=1)
+	BEGIN
+		set @tempCode='spRen_CommisionPosting'
+		exec @tempCode @AccDocDetailsID,@CostCenterID,@DocID,@UserID,@LangID
+	END		
     
     if((@IsLineWisePDC=1 or @isCrossDim=1) and @PDCDocument>1)
 	begin
@@ -2777,7 +2787,7 @@ SET NOCOUNT ON;
      , '''+convert(nvarchar(max),@Dt)+''''+@CCreplCols+'
      from @ReturnXML.nodes(''/ReturnXML/XML/Row'') as Data(X)    
      join [COM_DocCCData] d WITH(NOLOCK)  on d.AccDocDetailsID='+convert(nvarchar(max),@AccDocDetailsID )
-     print @DUPLICATECODE
+    
      EXEC sp_executesql @DUPLICATECODE,N'@ReturnXML XML',@ReturnXML
 	END
 	
@@ -3328,13 +3338,6 @@ END
 			
 			exec(@DUPLICATECODE)
 	END
-	
-	if (@StatusID=369 and @documenttype in(17,18,22) and exists(select value from com_costcenterpreferences WITH(NOLOCK)
-		WHere costcenterid=92 and name ='EnableManagProp' and value='true'))
-	BEGIN
-		set @tempCode='spRen_CommisionPosting'
-		exec @tempCode @CostCenterID,@DocID,@UserID,@LangID
-	END		
 	
 	
 	--validate Data External function

@@ -2575,12 +2575,13 @@ SET NOCOUNT ON;
 			if(@Action=1)
 			BEGIN
 				set @sql='spRen_CommisionPosting'
-				exec @sql @CostCenterID,@DocID,@UserID,@LangID
+				exec @sql @Acc,@CostCenterID,@DocID,@UserID,@LangID
 			END	
 			ELSE if(@Action in(0,2))
 			BEGIN
 				set @docid=0
-				select @ccid=costcenterid,@docid=docid from inv_docdetails WITH(NOLOCK) where refccid=400 and refnodeid=@Acc
+				select @ccid=costcenterid,@docid=docid from inv_docdetails WITH(NOLOCK) 
+				where refccid=400 and refnodeid=@Acc and statusid<>376
 				if(@docid>0)
 				BEGIN	
 					if(@Action =0)
@@ -2616,7 +2617,8 @@ SET NOCOUNT ON;
 				END 
 				
 				set @docid=0
-				select @ccid=costcenterid,@docid=docid from inv_docdetails WITH(NOLOCK) where refccid=400 and refnodeid=@Acc
+				select @ccid=costcenterid,@docid=docid from inv_docdetails WITH(NOLOCK) 
+				where refccid=400 and refnodeid=@Acc and statusid<>376
 				if(@docid>0)
 				BEGIN				    
 						EXEC	@retValue = [dbo].[spDOC_SuspendInvDocument]

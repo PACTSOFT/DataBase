@@ -9,6 +9,7 @@ CREATE PROCEDURE [dbo].[spDoc_GetArApDetails]
 	@linkedids [nvarchar](max),
 	@DocumentType [int],
 	@CostCenterID [int],
+	@DimWhere [nvarchar](max),
 	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -79,10 +80,19 @@ SET NOCOUNT ON
 		BEGIN
 			SET @SQL+=' Left Join INV_DocDetails id WITH(NOLOCK) on id.VoucherNo=a.Docno 
 						Left Join COM_DocNumData nd WITH(NOLOCK) on nd.InvDocDetailsID=id.InvDocDetailsID '
+				if(@DimWhere<>'')
+						SET @SQL+=' Left Join COM_DocCCData cd WITH(NOLOCK) on cd.InvDocDetailsID=id.InvDocDetailsID '
 		END
-
-		SET @SQL+=' where a.AccountID is not null and a.AccountID='+convert(nvarchar,@AccountID)+' and a.RefDocNO='''' '
+		else if(@DimWhere<>'')
+		BEGIN
+			SET @SQL+='  Left Join INV_DocDetails id WITH(NOLOCK) on id.VoucherNo=a.Docno
+					Left Join COM_DocCCData cd WITH(NOLOCK) on cd.InvDocDetailsID=id.InvDocDetailsID '				
+			
+		END
 		
+		
+		SET @SQL+=' where a.AccountID is not null and a.AccountID='+convert(nvarchar,@AccountID)+' and a.RefDocNO='''' '
+		SET @SQL+=@DimWhere	
 		IF(LEN(@sDPNumCols)>0)
 			SET @SQL+=' AND id.StatusID=369 '
 

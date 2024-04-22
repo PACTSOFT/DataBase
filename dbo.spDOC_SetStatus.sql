@@ -28,7 +28,8 @@ SET NOCOUNT ON;
 	--Declaration Section    
 	DECLARE @Dt FLOAT,@temp nvarchar(100),@VoucherNo nvarchar(200),@XML xml,@tempwid INT,@I int,@cnt int,@GUID  NVARCHAR(50),@DocumentType INT
 	Declare @Level int,@maxLevel INT,@IsLineWisePDC bit,@PDCDocument int,@tempstat INT,@tempLevel int,@INVID INT,@oldStatus int, @tempCode nvarchar(max)
-
+	declare @tab table(ident int identity(1,1),id INT,Remark NVARCHAR(MAX),wid int)
+	
 	--SP Required Parameters Check    
 	IF @STATUSID<0 OR @COSTCENTERID<0 OR @DOCID<0
 	BEGIN    
@@ -157,8 +158,7 @@ SET NOCOUNT ON;
     BEGIN
 		if(@InvDocidS<>'')
 		BEGIN
-			set @XML=@InvDocidS
-			declare @tab table(ident int identity(1,1),id INT,Remark NVARCHAR(MAX),wid int)
+			set @XML=@InvDocidS			
 			insert into @tab
 			select X.value('@ID','INT'),X.value('@Remarks','NVARCHAR(MAX)') ,isnull(X.value('@WID','INT'),0)        			
 			FROM @XML.nodes('/XML/Row') as Data(X)    
@@ -386,8 +386,20 @@ SET NOCOUNT ON;
 		if (@StatusID=369 and @documenttype in(17,18,22) and exists(select value from com_costcenterpreferences WITH(NOLOCK)
 		WHere costcenterid=92 and name ='EnableManagProp' and value='true'))
 		BEGIN
-			set @tempCode='spRen_CommisionPosting'
-			exec @tempCode @CostCenterID,@DocID,@UserID,@LangID
+			insert into @tab		
+			select AccDocDetailsID,'',0 from ACC_DocDetails a WITH(NOLOCK)
+			WHERE a.CostCenterID=@CostCenterID AND DOCID=@DOCID
+			
+			select @I=0,@cnt=COUNT(*) from @tab			
+			while(@I<@cnt)
+			BEGIN
+				set @I=@I+1
+				
+				select @INVID=id from @tab where ident=@I
+				set @tempCode='spRen_CommisionPosting'
+				
+				exec @tempCode @INVID,@CostCenterID,@DocID,@UserID,@LangID				
+			END	
 		END	
 		
 		if (select count(PrefValue) from COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and PrefName in('AutoChequeonPost','AutoChequeNo') and PrefValue='true')=2

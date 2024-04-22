@@ -1483,7 +1483,7 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 			
 			set @Sql='SELECT ParticularNodeID,convert(datetime,FromDate) FromDate,convert(datetime,ToDate) ToDate,P.Name Period
 			,ActAmount Amount,CP.Rate,CP.Discount,CP.Amount AfterDiscount,ActAmount,Distribute,U.Name Unit,CP.Narration,LP.Sqft
-			,Fld1 ,Fld2 ,Fld3 ,Fld4 ,Fld5 ,Fld6 ,Fld7 ,Fld8 ,Fld9 ,Fld10
+			,Fld1 ,Fld2 ,Fld3 ,Fld4 ,Fld5 ,Fld6 ,Fld7 ,Fld8 ,Fld9 ,Fld10,CP.ProposedRent,CP.ProposedDisc,CP.ProposedAmount,CP.BaseRent,CP.PrevRent
 			FROM REN_ContractParticularsDetail CP with(nolock)
 			JOIN '+@TblName1+' L WITH(NOLOCK) ON L.'+@PK+'=CP.ContractID AND L.Costcenterid=CP.Costcenterid
 			JOIN '+@TblName3+' LP WITH(NOLOCK) ON L.'+@PK+'=LP.'+@PK+' AND LP.Sno=1

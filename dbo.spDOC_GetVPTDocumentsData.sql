@@ -221,9 +221,29 @@ SET NOCOUNT ON;
 
 		IF(@PreviousRevision=1)
 			SET @SQL=@SQL+',TT.* '
+
+
+		IF(@docType=220)
+		BEGIN
+			declare @BidOpenVendorsEmail1 NVARCHAR(MAX),@BidOpenVendorsPhone1 NVARCHAR(MAX),@S1 NVARCHAR(MAX)
+			SELECT @S1 =' SELECT @BidOpenVendorsEmail1=STUFF( (Select '',''+ a.EMail1 
+							From COM_Address a WITH(NOLOCK) 
+							JOIN COM_BiddingDocs b WITH(NOLOCK) on a.FeatureID=2  AND b.VendorID=a.FeaturePK
+							WHERE a.EMail1 IS NOT NULL AND a.EMail1<>'''' AND a.AddressTypeID=1 AND b.BODocID='++CONVERT(NVARCHAR,@DocumentSeqNo)+'  FOR XML PATH('''') ),1,1,'''')
+							
+							,@BidOpenVendorsPhone1=STUFF( (Select '',''+ a.Phone1 
+							From COM_Address a WITH(NOLOCK) 
+							JOIN COM_BiddingDocs b WITH(NOLOCK) on a.FeatureID=2  AND b.VendorID=a.FeaturePK
+							WHERE a.Phone1 IS NOT NULL AND a.Phone1<>'''' AND a.AddressTypeID=1 AND b.BODocID='++CONVERT(NVARCHAR,@DocumentSeqNo)+'  FOR XML PATH('''') ),1,1,'''')
+							 '
 			
+			EXEC sp_executesql @S1,N'@BidOpenVendorsEmail1 nvarchar(MAX) output,@BidOpenVendorsPhone1 nvarchar(MAX) output',@BidOpenVendorsEmail1 output,@BidOpenVendorsPhone1 output
+			SET @SQL=@SQL+','''+ISNULL(@BidOpenVendorsEmail1,'')+''' as BidOpenVendorsEmail1,'''+ISNULL(@BidOpenVendorsPhone1,'')+''' as BidOpenVendorsPhone1 '
+		END
+		
+
 		SET @SQL=@SQL+' FROM INV_DocDetails'+@History+' D WITH(NOLOCK) LEFT JOIN
-		INV_DocDetails'+@History+' LD WITH(NOLOCK) ON LD.InvDocDetailsID=D.LinkedInvDocDetailsID '
+		INV_DocDetails'+@History+' LD WITH(NOLOCK) ON LD.InvDocDetailsID=D.LinkedInvDocDetailsID '  
 
 		IF(@PreviousRevision=1)
 			SET @SQL=@SQL+' LEFT JOIN #TAB TT ON TT.InvDocDetailsID=D.InvDocDetailsID '
@@ -674,6 +694,9 @@ D.LinkedAccDocDetailsID
 	WHERE C.CostCenterID=@DocumentID and (C.SysColumnName like 'dcAlpha%' and C.UserColumnType='Numeric') -- or C.UserColumnType='Date'
 	ORDER BY IsAlpha,SectionSeqNumber
 
+	--select *  from COM_Files with(nolock)
+	--where FeatureID=@DocumentID AND FeaturePK=@DocumentSeqNo and AllowinPrint=1
+
 	--CHECK AUDIT TRIAL ALLOWED AND INSERTING AUDIT TRIAL DATA
 	DECLARE @AuditTrial BIT
 	SET @AuditTrial=0
@@ -688,6 +711,9 @@ D.LinkedAccDocDetailsID
 			INSERT INTO ACC_DocDetails_History_ATUser(DocType,DocID,VoucherNo,ActionType,ActionTypeID,UserID,CreatedBy,CreatedDate)
 			VALUES(@DocumentID,@DocumentSeqNo,@VoucherNo,'Print',2,@UserID,@UserName,CONVERT(FLOAT,GETDATE()))
 	END
+
+	
+
 
  SET NOCOUNT OFF;
 RETURN 1
@@ -706,6 +732,5 @@ BEGIN CATCH
  SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
-
 
 GO

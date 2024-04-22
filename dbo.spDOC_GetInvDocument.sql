@@ -888,7 +888,9 @@ SET NOCOUNT ON
 		ELSE
 			SELECT 1 WHERE 1<>1
 		
-			
+		select CostCenterID, DocumentType, DocumentTypeID, PrefName, PrefValue , PrefDefalutValue 
+		from COM_DocumentPreferences with (nolock) where CostCenterID=40220 and PrefName = 'BidQuotationDocument'
+		
 		--CHECK AUDIT TRIAL ALLOWED AND INSERTING AUDIT TRIAL DATA    
 		IF exists (SELECT Value  FROM @docPref  
 		WHERE Name='AuditTrial' and Value='true')

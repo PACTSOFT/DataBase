@@ -992,7 +992,13 @@ SET NOCOUNT ON;
 		
 		delete a from COM_PosPayModes a WITH(NOLOCK) where a.DOCID=@DocID
 		
-	
+	IF(@DocumentType=220) -- Bid Open
+	BEGIN
+		SET @SQL='DELETE FROM COM_BiddingDocs WHERE BODocID='+CONVERT(NVARCHAR,@DocID)
+		EXEC(@SQL)
+	END
+
+
 COMMIT TRANSACTION         
 --ROLLBACK TRANSACTION         
 SET NOCOUNT OFF;  

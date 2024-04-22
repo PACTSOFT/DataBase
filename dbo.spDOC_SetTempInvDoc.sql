@@ -74,8 +74,8 @@ SET NOCOUNT ON;
 	WHERE CostCenterID=@CostCenterID and PrefName IN ('DocumentLinkDimension','AllowDuplicate','ApprOnComparitiveAnalysis','AutoCode','BillwisePosting','Lock Data Between','EnableAssetSerialNo','UseasGiftVoucher'
 	,'UseAsDownPmt','DocwiseSNo','PrepaymentDoc','Paypercent','ValueType','onsystemdate','Billlanding','SameserialNo','Enabletolerance','DontSaveCompleteLinked','DisableQtyCheck','AllowMultipleLinking','VendorBasedBillNo','BillNoDocs','Hide_Billno','DuplicateProductClubBins','LockCostCenterNodes','LockCostCenters','DocQtyAdjustment'
 	,'PostRevisOnSysDate','RevisPrefix','ConsBatch','VatAdvanceDoc','PostAsset','DimTransferSrc','IsBudgetDocument','UseQtyAdjustment','UpdateDueDate','UpdateLinkQty','UpdateLinkValue','UpdateJustReference','ExecReq','LinkForward','AuditTrial','EnableRevision','Autopostdocument','CrossDimDocument','CrossDimField','OverrideLock','Checkallproducts','ShortageDOC','ExcessDOC'
-	,'ResRMDOc','ReleaseRMDOc','ResRMINVID','ReserveRM','EnablePromotions','BOEInv','UseAsOrder','BinvInv','OnPosted','samebatchtoall','DocDateasPostedDate','GenerateSeq','EnableUniqueDocument','backTrackDocs','BackTrack','AssignVendors','DoNotEmailOrSMSUn-ApprovedDocuments','DumpStockCodes','DonotupdateInventory','DonotupdateAccounts','TempInfo','DonotAllowtoLinkPostdatedDocuments')
-	
+	,'ResRMDOc','ReleaseRMDOc','UseasOpeningDownPayment','CreditSupplierDownPayment','ResRMINVID','ReserveRM','EnablePromotions','BOEInv','UseAsOrder','BinvInv','OnPosted','samebatchtoall','DocDateasPostedDate','GenerateSeq','EnableUniqueDocument','backTrackDocs','BackTrack','AssignVendors','DoNotEmailOrSMSUn-ApprovedDocuments','DumpStockCodes','DonotupdateInventory','DonotupdateAccounts','TempInfo','DonotAllowtoLinkPostdatedDocuments')
+			
 	set @batchCol=''
 	if exists(select Value from @TblPref where IsGlobal=0 and Name='samebatchtoall' and Value='true')
 	BEGIN
@@ -6855,6 +6855,33 @@ END
 	delete P from COM_PosPayModes P WITH(NOLOCK) where p.DOCID=@DocID
 	delete p from COM_DocDenominations P WITH(NOLOCK) where p.DOCID=@DocID
   END
+
+  if exists(select * from @TblPref 
+  where Name ='UseasOpeningDownPayment' and Value ='true' and IsGlobal=0)
+  BEGIN
+		set @hideBillNo=0
+		if exists(select * from @TblPref 
+		where Name ='CreditSupplierDownPayment' and Value ='true')
+			set @hideBillNo=1
+      
+		exec @return_value=[dbo].[spDoc_OpeningDownPayment] 
+		 @VoucherNo =@VoucherNo,
+		 @CostCenterID =@CostCenterID,
+		 @DocID =@DocID,
+		 @InvDocDetID=@InvDocDetailsID,
+		 @crAcc =@ACCOUNT2,
+		 @DrAcc=@ACCOUNT1,
+		 @DocDate =@DocDate,
+		 @PostCredit=@hideBillNo,
+		 @LocationID =@LocationID,
+		 @DivisionID =@DivisionID,
+		 @CompanyGUID =@CompanyGUID,
+		 @UserName =@UserName,
+		 @RoleID =@RoleID,
+		 @UserID =@UserID,  
+		 @LangID =@LangID  
+  END
+  
   if(@ActivityXML<>'')
   begin
 		
@@ -9158,6 +9185,13 @@ END
 		END
 	END
 
+
+	IF(@DocumentType=220) -- Bid Open
+	BEGIN
+		set @SQL=' EXEC spCOM_PostBiddingDocs '+CONVERT(NVARCHAR,@CostCenterID)+','+CONVERT(NVARCHAR,@DocID)
+		EXEC(@SQL)
+	END
+
 COMMIT TRANSACTION  
 --ROLLBACK TRANSACTION 
      
@@ -9442,4 +9476,6 @@ BEGIN CATCH
  RETURN -999         
     
 END CATCH
+
+
 GO

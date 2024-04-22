@@ -112,6 +112,12 @@ SET NOCOUNT ON;
 		END
 	END
 	
+	IF ((dbo.fnCOM_HasAccess(@RoleID,92,2)=1 OR dbo.fnCOM_HasAccess(@RoleID,92,3)=1) AND (dbo.fnCOM_HasAccess(@RoleID,93,2)=1 OR dbo.fnCOM_HasAccess(@RoleID,93,3)=1))
+	BEGIN
+		SET @SQL=@SQL+' UNION  
+		SELECT 92,''Particulars Import''  , 0 SortOrd'
+	END
+	
 	--IF (dbo.fnCOM_HasAccess(@RoleID,115,2)=1 OR dbo.fnCOM_HasAccess(@RoleID,115,3)=1)
 	--BEGIN
 		SET @SQL=@SQL+' UNION 
