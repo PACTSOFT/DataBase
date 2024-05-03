@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetDashBoard]
 	@Type [int],
-	@DashBoardID [int],
+	@DashBoardID [bigint],
 	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
@@ -63,7 +63,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
-
-
+END CATCH  
 GO

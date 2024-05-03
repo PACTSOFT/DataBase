@@ -18,12 +18,12 @@ IF(@StatusID!=369)
 	RETURN 1
 
 declare @SQL nvarchar(max),@Cols NVARCHAR(MAX),@UpCols NVARCHAR(MAX),@HUpd NVARCHAR(MAX)
-Create table #tb(dcCCNID51 INT,dcAlpha1 DateTime)
+Create table #tb(dcCCNID51 bigint,dcAlpha1 DateTime)
 
 set @SQL='' SET @Cols='' SET @HUpd=''
 set @UpCols=''
 select	@SQL=@SQL+' '+SYSCOLUMNNAME+',',
-		@Cols=@Cols+' '+SYSCOLUMNNAME+' INT,',
+		@Cols=@Cols+' '+SYSCOLUMNNAME+' BIGINT,',
 		@UpCols=@UpCols+''+replace(SYSCOLUMNNAME,'dcCCNID','CCNID')+'=case when T.'+SYSCOLUMNNAME+'!=1 then T.'+SYSCOLUMNNAME+' else '+replace(SYSCOLUMNNAME,'dcCCNID','CCNID')+' end'+',',
 		@HUpd=@HUpd+' 
 	IF EXISTS (	SELECT HistoryID 
@@ -74,7 +74,7 @@ if len(@Cols)>0
 begin
 	SET @Cols=' ALTER TABLE #tb ADD'+SUBSTRING(@Cols,1,LEN(@Cols)-1)
 	--PRINT @Cols  
-	EXEC sp_executesql @Cols
+	EXEC(@Cols)
 end
 
 if len(@SQL)>0
@@ -86,7 +86,7 @@ begin
 				WHERE a.CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+' AND a.DocID='+CONVERT(NVARCHAR,@DocID)+' and a.StatusID=369 '
 	--print(@SQL)
 	INSERT INTO #tb
-	EXEC sp_executesql @SQL
+	exec(@SQL)
 	--select * from #tb
 	
 	set @SQL='update dcc
@@ -94,10 +94,10 @@ begin
 	from com_ccccdata dcc
 	join #tb T on dcc.CostCenterID=50051 and T.dcCCNID51=dcc.NodeID'
 	--print(@SQL)
-	EXEC sp_executesql @SQL
+	exec(@SQL)
 
 	--print (@HUpd)
-	EXEC sp_executesql @HUpd
+	exec(@HUpd)
 end
 DROP TABLE #tb
 

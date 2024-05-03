@@ -242,7 +242,12 @@ SET NOCOUNT ON;
 				SET @PRIMARYKEY  = 'ContactID'
 				SET @SelectedColumn='FirstName'
 			END
-			
+			ELSE IF(@CostCenterID=122) 
+			BEGIN
+				SET @tablejoin='svc_serviceticketfollowup'
+				SET @PRIMARYKEY  = 'serviceticketfollowupID'
+				SET @SelectedColumn='ServiceTicketID'
+			END
 			ELSE IF(@CostCenterID=94) 
 			BEGIN
 				SET @tablejoin='REN_Tenant'
@@ -363,7 +368,12 @@ SET NOCOUNT ON;
 				SET @PRIMARYKEY  = 'ContactID'
 				SET @SelectedColumn='FirstName'
 			END
-			
+			ELSE IF(@CostCenterID=122) 
+			BEGIN
+				SET @tablejoin='svc_serviceticketfollowup'
+				SET @PRIMARYKEY  = 'serviceticketfollowupID'
+				SET @SelectedColumn='ServiceTicketID'
+			END
 			ELSE IF(@CostCenterID=94) 
 			BEGIN
 				SET @tablejoin='REN_Tenant'
@@ -396,5 +406,5 @@ SET NOCOUNT ON;
 COMMIT TRANSACTION    
 --ROLLBACK TRANSACTION  
  SET NOCOUNT OFF;     
-RETURN 1
+RETURN 1    
 GO

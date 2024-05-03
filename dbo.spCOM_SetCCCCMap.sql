@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetCCCCMap]
-	@PARENTFEATUREID [int],
-	@PNodeID [int],
+	@PARENTFEATUREID [bigint],
+	@PNodeID [bigint],
 	@DATA [xml],
 	@UserName [nvarchar](50),
 	@LangID [int] = 1
@@ -29,7 +29,7 @@ AS
 	--unique check
 	IF @PARENTFEATUREID=3
 	BEGIN
-		DECLARE @AssignUniqueDimension NVARCHAR(MAX),@AssignUniqueXML XML,@I INT, @COUNT INT,@FeatureID INT,
+		DECLARE @AssignUniqueDimension NVARCHAR(MAX),@AssignUniqueXML XML,@I INT, @COUNT INT,@FeatureID BIGINT,
 		@Unique INT,@Level INT,@SQL NVARCHAR(MAX),@VAR NVARCHAR(MAX),@RESULT INT ,@NodeFilter NVARCHAR(MAX)
 		
 		SELECT @AssignUniqueDimension=Value FROM COM_CostCenterPreferences WITH(NOLOCK) 
@@ -37,20 +37,20 @@ AS
 		
 		SET @AssignUniqueXML=@AssignUniqueDimension
 		
-		DECLARE @TAB TABLE([ID] INT IDENTITY(1,1),[FeatureID] INT,[Unique] INT, [Level] INT)
+		DECLARE @TAB TABLE([ID] INT IDENTITY(1,1),[FeatureID] BIGINT,[Unique] INT, [Level] INT)
 		INSERT INTO @TAB
-		SELECT A.value('@FeatureID','INT'),A.value('@Unique','INT'),A.value('@Level','INT')
+		SELECT A.value('@FeatureID','BIGINT'),A.value('@Unique','INT'),A.value('@Level','INT')
 		from @AssignUniqueXML.nodes('/XML/Row') as DATA(A)  
 		
-		DECLARE @TABASSIGN TABLE([ID] INT IDENTITY(1,1),CostCenterId INT,NodeID INT)
+		DECLARE @TABASSIGN TABLE([ID] INT IDENTITY(1,1),CostCenterId BIGINT,NodeID INT)
 		INSERT INTO @TABASSIGN
-		SELECT A.value('@CCID','INT'),A.value('@ID','INT')
+		SELECT A.value('@CCID','BIGINT'),A.value('@ID','BIGINT')
 		from @DATA.nodes('/ASSIGNMAPXML/ASSIGN/R') as DATA(A)  
 		INSERT INTO @TABASSIGN
-		SELECT A.value('@CCID','INT'),A.value('@ID','INT')
+		SELECT A.value('@CCID','BIGINT'),A.value('@ID','BIGINT')
 		from @DATA.nodes('/ASSIGNMAPXML/MAP/R') as DATA(A)
 		INSERT INTO @TABASSIGN  
-		SELECT A.value('@CostCenterId','INT'),A.value('@NodeID','INT')
+		SELECT A.value('@CostCenterId','BIGINT'),A.value('@NodeID','BIGINT')
 		from @DATA.nodes('/XML/Row') as DATA(A)
 		
 		SELECT @I=1,@COUNT=COUNT(*) FROM @TAB
@@ -108,11 +108,11 @@ AS
 		end
 		
 		INSERT INTO  COM_CostCenterCostCenterMap (ParentCostCenterID,ParentNodeID,CostCenterID,NodeID,GUID,CreatedBy,CreatedDate)
-		SELECT @PARENTFEATUREID,@PNodeID,A.value('@CCID','INT'),A.value('@ID','INT'),NEWID(),@UserName,
+		SELECT @PARENTFEATUREID,@PNodeID,A.value('@CCID','BIGINT'),A.value('@ID','BIGINT'),NEWID(),@UserName,
 		 @Dt from @DATA.nodes('/ASSIGNMAPXML/ASSIGN/R') as DATA(A)  
 		 
 		INSERT INTO  COM_CostCenterCostCenterMap (CostCenterID,NodeID,ParentCostCenterID,ParentNodeID,GUID,CreatedBy,CreatedDate)
-		SELECT @PARENTFEATUREID,@PNodeID,A.value('@CCID','INT'),A.value('@ID','INT'),NEWID(),@UserName,
+		SELECT @PARENTFEATUREID,@PNodeID,A.value('@CCID','BIGINT'),A.value('@ID','BIGINT'),NEWID(),@UserName,
 		 @Dt from @DATA.nodes('/ASSIGNMAPXML/MAP/R') as DATA(A)   
 	END
 	ELSE
@@ -123,7 +123,7 @@ AS
 		if @IsImport is not null and @IsImport=1
 		begin
 			DELETE FROM COM_CostCenterCostCenterMap WHERE ParentCostCenterID=@PARENTFEATUREID AND ParentNodeID=@PNodeID 
-			and CostCenterID IN (SELECT distinct A.value('@CostCenterId','INT') from @DATA.nodes('/XML/Row')  as DATA(A) )
+			and CostCenterID IN (SELECT distinct A.value('@CostCenterId','BIGINT') from @DATA.nodes('/XML/Row')  as DATA(A) )
 		end
 		else
 		begin
@@ -132,7 +132,7 @@ AS
 		
 		INSERT INTO  COM_CostCenterCostCenterMap (ParentCostCenterID,ParentNodeID,CostCenterID,
 		NodeID,GUID,CreatedBy,CreatedDate)
-		SELECT @PARENTFEATUREID,@PNodeID,A.value('@CostCenterId','INT'),A.value('@NodeID','INT'),NEWID(),@UserName,
+		SELECT @PARENTFEATUREID,@PNodeID,A.value('@CostCenterId','BIGINT'),A.value('@NodeID','BIGINT'),NEWID(),@UserName,
 		 @Dt from @DATA.nodes('/XML/Row') as DATA(A)  
 	END
 		
@@ -148,14 +148,12 @@ AS
 			select distinct @Vno=@Vno+','+l.Name from ACC_DocDetails d with(nolock) 
 			join com_docccdata cc with(nolock) on d.AccDocDetailsID=cc.AccDocDetailsID
 			join com_location l with(nolock) on l.NodeID=cc.dcCCNID2
-			where (debitaccount =@PNodeID or CreditAccount=@PNodeID) 
-			and cc.dcCCNID2 not in (select l.NodeID from COM_CostCenterCostCenterMap M with(nolock) 
+			where (debitaccount =@PNodeID or CreditAccount=@PNodeID) and cc.dcCCNID2 not in 
+			(select l.NodeID from COM_CostCenterCostCenterMap M with(nolock) 
 				join COM_Location g with(nolock) on g.NodeID=M.NodeID
 				join COM_Location l with(nolock) on l.lft between g.lft and g.rgt
 				where M.ParentCostCenterID=2 and M.ParentNodeID=@PNodeID and M.CostCenterID=50002)
-			and d.CostCenterID not in (select CostCenterID from com_documentpreferences with(nolock) 
-					where prefname='Donotuselocation' and prefvalue='true')
-			
+
 			if len(@Vno)=0
 			begin
 				select distinct @Vno=@Vno+','+l.Name from INV_DocDetails d with(nolock) 
@@ -166,8 +164,6 @@ AS
 					join COM_Location g with(nolock) on g.NodeID=M.NodeID
 					join COM_Location l with(nolock) on l.lft between g.lft and g.rgt
 					where M.ParentCostCenterID=2 and M.ParentNodeID=@PNodeID and M.CostCenterID=50002)
-				and d.CostCenterID not in (select CostCenterID from com_documentpreferences with(nolock) 
-						where prefname='Donotuselocation' and prefvalue='true')
 			end
 
 			if(len(@Vno)>1)

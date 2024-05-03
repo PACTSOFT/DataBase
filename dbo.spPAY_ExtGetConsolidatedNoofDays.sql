@@ -8,8 +8,8 @@ CREATE PROCEDURE [dbo].[spPAY_ExtGetConsolidatedNoofDays]
 	@EmployeeID [int] = 0,
 	@LeaveType [int] = 0,
 	@Session [varchar](20) = null,
-	@UserID [int] = 1,
-	@LangID [int] = 1,
+	@UserID [bigint] = 1,
+	@LangID [bigint] = 1,
 	@NoOfDaysOP [decimal](9, 2) OUTPUT,
 	@AtATimeOP [int] OUTPUT,
 	@MaxLeavesOP [int] OUTPUT

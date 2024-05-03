@@ -8,7 +8,7 @@ CREATE PROCEDURE [dbo].[spADM_SyncData]
 	@MaxID [int],
 	@ModDate [float],
 	@CopyCall [int],
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -16,7 +16,7 @@ BEGIN TRANSACTION
 BEGIN TRY
 SET NOCOUNT ON
 	
-	declare @Tbl as table(ID INT)
+	declare @Tbl as table(ID bigint)
 	declare @SQL nvarchar(max)
 	
 	if @Type=100 --CostCenterDef
@@ -68,8 +68,7 @@ SET NOCOUNT ON
 			select 'ADM_DocViewUserRoleMap' TableName,1 HasIdentity,0 IgnoreFirstColumn union all---
 			select 'ADM_DocumentReportDef' TableName,1 HasIdentity,0 IgnoreFirstColumn union all---
 			select 'ADM_DocumentReports' TableName,1 HasIdentity,0 IgnoreFirstColumn union all---
-			select 'ADM_DocReportUserroleMap' TableName,1 HasIdentity,0 IgnoreFirstColumn union all ---
-			select 'ADM_DocFunctions' TableName,1 HasIdentity,0 IgnoreFirstColumn					
+			select 'ADM_DocReportUserroleMap' TableName,1 HasIdentity,0 IgnoreFirstColumn---
 			
 			select E.* from ADM_DocumentTypes  E with(nolock) 
 			--inner join @Tbl T ON E.DocumentTypeID=T.ID
@@ -85,9 +84,6 @@ SET NOCOUNT ON
 			select E.* from ADM_DocumentReportDef E with(nolock)
 			select E.* from ADM_DocumentReports E with(nolock)
 			select E.* from ADM_DocReportUserroleMap E with(nolock)
-			select E.* from ADM_DocFunctions E with(nolock)
-
-
 		end
 		else if @CCID=6
 		begin
@@ -258,7 +254,7 @@ SET NOCOUNT ON
 			if @CopyCall=1
 				select * from ADM_GlobalPreferences with(nolock) where Name not in ('GSTVersion','VATVersion')
 			else
-				select * from ADM_GlobalPreferences with(nolock) where Name not in ('UseGlobalPrefForFileUploadPath','File Upload Path','ftpuserid','ftppassword','isSftp','ftpport','IsOffline','OnlineDataBase','OfflineGUID','GSTVersion','VATVersion')
+				select * from ADM_GlobalPreferences with(nolock) where Name not in ('UseGlobalPrefForFileUploadPath','File Upload Path','ftpuserid','ftppassword','IsOffline','OnlineDataBase','OfflineGUID','GSTVersion','VATVersion')
 				
 			select * from COM_CostCenterPreferences with(nolock)
 			select * from ADM_FinancialYears with(nolock)
@@ -331,7 +327,7 @@ SET NOCOUNT ON
 		end
 		else if @CCID=21
 		begin
-			select 'COM_DocumentPreferences' TableName,1 HasIdentity,0 IgnoreFirstColumn --,1 InsertAllColumns
+			select 'COM_DocumentPreferences' TableName,1 HasIdentity,0 IgnoreFirstColumn--,1 InsertAllColumns
 			select top 1000 * from COM_DocumentPreferences with(nolock) where DocumentPrefID>@MaxID order by DocumentPrefID
 		end
 		else if @CCID=22
@@ -435,7 +431,7 @@ SET NOCOUNT ON
 		select @SQL='select top '+convert(nvarchar,ChunkSize)+' * from '+TableName+' with(nolock) where '+PrimaryKey+'<=@MaxID and ModifiedDate>@ModDate order by ModifiedDate'
 		from ADM_SynSettings with(nolock) where ID=@CCID
 		print(@SQL)
-		EXEC sp_executesql @SQL,N'@MaxID INT,@ModDate float',@MaxID,@ModDate
+		EXEC sp_executesql @SQL,N'@MaxID bigint,@ModDate float',@MaxID,@ModDate
 		--,@ModDate float ,@ModDate
 		
 		--select top 1000 * from ADM_CostCenterDef with(nolock) where ModifiedDate>@ModDate and CostCenterColID<=@MaxID order by ModifiedDate
@@ -449,7 +445,7 @@ SET NOCOUNT ON
 		select @SQL='select top '+convert(nvarchar,ChunkSize)+' * from '+TableName+' with(nolock) where '+PrimaryKey+'>@MaxID order by '+PrimaryKey
 		from ADM_SynSettings with(nolock) where ID=@CCID
 		print(@SQL)
-		EXEC sp_executesql @SQL,N'@MaxID INT',@MaxID
+		EXEC sp_executesql @SQL,N'@MaxID bigint',@MaxID
 	end
 	else if @Type=104
 	begin
@@ -558,8 +554,8 @@ SET NOCOUNT ON
 		join INV_CostCenterSchemes b on a.SchemeID=b.SchemeID and b.CostCenterID=2 and b.NodeID=@AccountID
 		join INV_Product c on a.ProductID=c.ProductID
 		
-		declare @rptid INT, @tempsql nvarchar(500)
-		select @rptid=CONVERT(INT,value) from ADM_GlobalPreferences where Name='Report Template Dimension'
+		declare @rptid bigint, @tempsql nvarchar(500)
+		select @rptid=CONVERT(bigint,value) from ADM_GlobalPreferences where Name='Report Template Dimension'
 		if(@rptid>0)
 		begin
 			set @tempsql= 'select NodeID, Name, Code from '+(select tablename from ADM_Features  where FeatureID=@rptid)+'' 
@@ -662,20 +658,20 @@ SET NOCOUNT ON
 		WHERE CostCenterID=3
 		
 		--Getting Vendors info
-		SELECT V.* FROM INV_ProductVendors V WITH(NOLOCK) 
+		SELECT V.* FROM INV_ProductVendors V
 		inner join @Tbl T ON V.ProductID=T.ID
 		
-		SELECT B.* FROM inv_productbarcode B WITH(NOLOCK) 
+		SELECT B.* FROM inv_productbarcode B
 		inner join @Tbl T ON B.ProductID=T.ID and B.UNITID=0
 		
 		--product substitutes
-		SELECT E.* FROM INV_ProductSubstitutes E WITH(NOLOCK) 
+		SELECT E.* FROM INV_ProductSubstitutes E
 		inner join @Tbl T ON E.ProductID=T.ID
 		
-		SELECT E.* FROM INV_ProductBundles E WITH(NOLOCK) 
+		SELECT E.* FROM INV_ProductBundles E
 		inner join @Tbl T ON E.ParentProductID=T.ID
 		
-		SELECT E.* FROM COM_HistoryDetails E WITH(NOLOCK) 
+		SELECT E.* FROM COM_HistoryDetails E
 		inner join @Tbl T ON E.NodeID=T.ID
 		where E.CostCenterID=3
 		
@@ -685,7 +681,40 @@ SET NOCOUNT ON
 	    WHERE ProductID=@ProductID AND [ProductTypeID]=2	
 	    
 	    
+	    --SVC_ProductVehicle
 	    
+	    
+	    DECLARE @Table NVARCHAR(300),@CCBINDIMENSIION BIGINT
+		SELECT @CCBINDIMENSIION=ISNULL(VALUE,0) FROM [COM_CostCenterPreferences]  WHERE NAME='BinsDimension'
+		IF @CCBINDIMENSIION>0 
+		BEGIN
+			--To get costcenter table name  
+			SELECT @Table=TableName FROM ADM_Features WITH(NOLOCK) WHERE FeatureID=@CCBINDIMENSIION 
+			
+			SET @SQL='SELECT M.*,C.Name,l.name LocationText,d.name DivisionText'			
+			
+			set @NODEID=0
+			select @NODEID=[Value] from [ADM_GlobalPreferences]
+			where Name='DimensionwiseBins' and isnumeric([Value])=1
+			if(@NODEID>50000)
+			BEGIN
+				SELECT @TABLENAME=TableName FROM ADM_Features WITH(NOLOCK) WHERE FeatureID=@NODEID  
+				SET @SQL=@SQL+',t.name DimText FROM [INV_ProductBins] M 
+				LEFT JOIN '+@Table+' C ON C.NODEID=M.BinNODEID   
+				LEFT JOIN com_location l ON l.NODEID=M.location 
+				LEFT JOIN com_division d ON d.NODEID=M.division
+				LEFT JOIN '+@TABLENAME+' t ON t.NODEID=M.DimNodeID and M.DimCCID='+convert(nvarchar,@NODEID) 
+			END	
+			ELSE			
+				SET @SQL=@SQL+' FROM [INV_ProductBins] M 
+				LEFT JOIN '+@Table+' C ON C.NODEID=M.BinNODEID   
+				LEFT JOIN com_location l ON l.NODEID=M.location 
+				LEFT JOIN com_division d ON d.NODEID=M.division' 
+
+			SET @SQL=@SQL+' WHERE COSTCENTERID=3 AND M.NodeID='+convert(nvarchar,@ProductID) 
+			print @SQL
+			EXEC(@SQL)    
+		END
 */
 	end
 	else if @CCID=16 --Batch
@@ -708,7 +737,7 @@ SET NOCOUNT ON
 	end
 	else if @CCID>50000
 	begin
-		create table #TblIds(ID INT)
+		create table #TblIds(ID bigint)
 		declare @CCTable nvarchar(20)
 		select @CCTable=TableName from adm_features with(nolock) where FeatureID=@CCID
 
@@ -812,8 +841,8 @@ SET NOCOUNT ON
 	end
 	else if @CCID=40000
 	begin
-		declare @TblDocID as Table(ID INT,CostCenterID int,VoucherNo nvarchar(50))
-		declare @TblAudit as Table(ID INT,ModDate float)
+		declare @TblDocID as Table(ID bigint,CostCenterID int,VoucherNo nvarchar(50))
+		declare @TblAudit as Table(ID bigint,ModDate float)
 		if @Type=1
 		begin
 		
@@ -827,12 +856,12 @@ SET NOCOUNT ON
 			group by E.DocID,CostCenterID,VoucherNo*/
 			
 			insert into @Tbl
-			select E.InvDocDetailsID from INV_DocDetails E with(nolock) 
-			inner join COM_DocID D with(nolock) ON D.ID=E.DocID and D.OfflineStatus=0 and D.ID<0
+			select E.InvDocDetailsID from INV_DocDetails E-- with(nolock) 
+			inner join COM_DocID D ON D.ID=E.DocID and D.OfflineStatus=0 and D.ID<0
 			
 			insert into @TblDocID
-			select E.DocID,CostCenterID,VoucherNo from INV_DocDetails E with(nolock) 
-			inner join COM_DocID D with(nolock) ON D.ID=E.DocID and D.OfflineStatus=0 and D.ID<0
+			select E.DocID,CostCenterID,VoucherNo from INV_DocDetails E-- with(nolock) 
+			inner join COM_DocID D ON D.ID=E.DocID and D.OfflineStatus=0 and D.ID<0
 			group by E.DocID,CostCenterID,VoucherNo
 			
 		
@@ -880,13 +909,13 @@ SET NOCOUNT ON
 		begin
 		
 			insert into @Tbl
-			select E.AccDocDetailsID from ACC_DocDetails E with(nolock) 
-			inner join COM_DocID D with(nolock) ON D.ID=E.DocID and D.OfflineStatus=0 and D.ID<0
+			select E.AccDocDetailsID from ACC_DocDetails E-- with(nolock) 
+			inner join COM_DocID D ON D.ID=E.DocID and D.OfflineStatus=0 and D.ID<0
 			where InvDocDetailsID is null
 			
 			insert into @TblDocID
-			select E.DocID,CostCenterID,VoucherNo from ACC_DocDetails E with(nolock)
-			inner join COM_DocID D with(nolock) ON D.ID=E.DocID and D.OfflineStatus=0 and D.ID<0
+			select E.DocID,CostCenterID,VoucherNo from ACC_DocDetails E-- with(nolock)
+			inner join COM_DocID D ON D.ID=E.DocID and D.OfflineStatus=0 and D.ID<0
 			where InvDocDetailsID is null
 			group by E.DocID,CostCenterID,VoucherNo
 
@@ -1020,7 +1049,7 @@ SET NOCOUNT ON
 			
 			select E.* from INV_DocExtraDetails E with(nolock) inner join @Tbl T ON T.ID=E.InvDocDetailsID
 			
-			select E.* from COM_DocQtyAdjustments E with(nolock) inner join @TblDocID T ON T.ID=E.DocID
+			select E.* from COM_DocQtyAdjustments E with(nolock) inner join @Tbl T ON T.ID=E.InvDocDetailsID
 
 			
 			--AUDIT DATA
@@ -1128,5 +1157,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

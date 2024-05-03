@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetCostCenterList]
-	@CostCenterID [int],
-	@UserID [int],
+	@CostCenterID [bigint],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -16,14 +16,14 @@ SET NOCOUNT ON;
 	--Getting Features.
 	SELECT FEATUREID,Name,TableName FROM ADM_FEATURES WITH(NOLOCK) WHERE IsEnabled=1 AND ALLOWCUSTOMIZATION=1 AND 
 	(FEATUREID > 50000 OR FEATUREID IN (2,3,51,57,58,61,145,59,300,65,71,76,72,80,84,81,86,83,88,
-	1000,78,73,89,82,16,92,93,101,164,95,495,94,113,103,104,129,106))
+	1000,78,73,89,82,16,92,93,101,164,95,495,94,113,104,129,106))
 	union
 	SELECT FEATUREID,Name,TableName FROM ADM_FEATURES WITH(NOLOCK) WHERE FeatureID=12
 	order by Name
 	
 	SELECT ListViewID,ListViewTypeID,CostCenterID,ListViewName from ADM_ListView WITH(NOLOCK)
 	
-	Select Name ,FeatureId,TableName from adm_features WITH(NOLOCK) where IsEnabled=1 and ( featureid> 50000 or Featureid in (92,93,94))
+	Select Name ,FeatureId,TableName from adm_features WITH(NOLOCK) where IsEnabled=1 and featureid> 50000 
 	order by Name, featureid
 	 
 	
@@ -76,5 +76,6 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
+
 GO

@@ -18,7 +18,7 @@ BEGIN TRANSACTION
 BEGIN TRY        
 SET NOCOUNT ON;        
       
- DECLARE @TBLCNT INT  , @INCCNT INT ,@TOTCNT INT ,@DocType int,@stat int,@Contractstat int,@type int,@wfaction int  
+ DECLARE @TBLCNT INT  , @INCCNT INT ,@TOTCNT INT ,@DocType int,@stat int,@Contractstat int,@type int  
  DECLARE @DELDocPrefix NVARCHAR(50), @DELDocNumber NVARCHAR(500) ,@level int,@maxLevel int,@WID int,@renref bigint     
  DECLARE @return_value int  , @DocID BIGINT , @CCID BIGINT , @IsAccDoc BIT   
    
@@ -68,7 +68,7 @@ SET NOCOUNT ON;
 				where RefQuotation=@ContractID		  
 		END
 			
-		if(@Contractstat=467 and @COSTCENTERID=129)
+		if(@Contractstat=466 and @COSTCENTERID=129)
 		BEGIN
 			INSERT INTO @tblListDEL        
 			SELECT @ContractID,a.DOCID ,a.CostCenterID , 0,StatusID   FROM INV_DOCDETAILS a WITH(NOLOCK)
@@ -84,134 +84,23 @@ SET NOCOUNT ON;
 	END	
 	else
 	BEGIN
-		select @Contractstat=StatusID,@renref=RenewRefID,@WID=workflowid,@wfaction=WFAction from REN_Contract WITH(NOLOCK) where ContractID=@ContractID
+		select @Contractstat=StatusID,@renref=RenewRefID,@WID=workflowid from REN_Contract WITH(NOLOCK) where ContractID=@ContractID
 	
 		if(@Contractstat=465)
 		BEGIN
-			if(@WID>0 and @wfaction=1)
-			begin
-				set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-				where WorkFlowID=@WID and  UserID =@UserID)
+			INSERT INTO @tblListDEL        
+			SELECT @ContractID,a.DOCID ,a.CostCenterID , 0,StatusID   FROM INV_DOCDETAILS a WITH(NOLOCK)
+			join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
+			WHERE CONTRACTID = @ContractID  AND ISACCDOC = 0  and RefNodeID = @ContractID and b.Type<0   
 
-				if(@level is null )
-					set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
-					where WorkFlowID=@WID and  RoleID =@RoleID)
-
-				if(@level is null ) 
-					set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-					where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
-
-				if(@level is null )
-					set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
-					where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
-					where RoleID =@RoleID))
-
-				select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID
-				if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
-				begin							
-					update REN_Contract  
-					set WorkFlowLevel=@level
-					where ContractID=@ContractID or refContractID=@ContractID	
-				END
-				ELSE
-				BEGIN
-					INSERT INTO @tblListDEL        
-					SELECT @ContractID,a.DOCID ,a.CostCenterID , 0,StatusID   FROM INV_DOCDETAILS a WITH(NOLOCK)
-					join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-					WHERE CONTRACTID = @ContractID  AND ISACCDOC = 0  and RefNodeID = @ContractID and b.Type<0   
-
-					INSERT INTO @tblListDEL   
-					SELECT @ContractID,a.DOCID ,a.CostCenterID , 1,StatusID FROM ACC_DOCDETAILS a WITH(NOLOCK)
-					join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-					WHERE CONTRACTID = @ContractID AND ISACCDOC = 1  and RefNodeID = @ContractID  and b.Type<0
-					
-					update REN_Contract  
-					set StatusID=428
-					where ContractID=@ContractID or refContractID=@ContractID
-					set @Contractstat=428
-				END
-				
-				INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID   
-			  ,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)      
-				VALUES(@COSTCENTERID,@ContractID,@Contractstat,CONVERT(FLOAT,getdate()),@RejRemarks,@UserID
-				  ,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
-
-			END
-			ELSE
-			BEGIN
-				
-				INSERT INTO @tblListDEL        
-				SELECT @ContractID,a.DOCID ,a.CostCenterID , 0,StatusID   FROM INV_DOCDETAILS a WITH(NOLOCK)
-				join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-				WHERE CONTRACTID = @ContractID  AND ISACCDOC = 0  and RefNodeID = @ContractID and b.Type<0   
-
-				INSERT INTO @tblListDEL   
-				SELECT @ContractID,a.DOCID ,a.CostCenterID , 1,StatusID FROM ACC_DOCDETAILS a WITH(NOLOCK)
-				join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-				WHERE CONTRACTID = @ContractID AND ISACCDOC = 1  and RefNodeID = @ContractID  and b.Type<0
-				
-				update REN_Contract  
-				set StatusID=428,WorkFlowLevel=@level
-				where ContractID=@ContractID or refContractID=@ContractID
-			END			  
-		END
-		else if(@Contractstat in(478,481))
-		BEGIN
-			if(@WID>0 and @wfaction in(2,3,4))
-			begin
-				set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-				where WorkFlowID=@WID and  UserID =@UserID)
-
-				if(@level is null )
-					set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
-					where WorkFlowID=@WID and  RoleID =@RoleID)
-
-				if(@level is null ) 
-					set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-					where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
-
-				if(@level is null )
-					set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
-					where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
-					where RoleID =@RoleID))
-
-				select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID
-				if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
-				begin							
-					update REN_Contract  
-					set WorkFlowLevel=@level
-					where ContractID=@ContractID or refContractID=@ContractID
-				END
-				ELSE
-				BEGIN
-					INSERT INTO @tblListDEL        
-					SELECT @ContractID,a.DOCID ,a.CostCenterID , 0,StatusID   FROM INV_DOCDETAILS a WITH(NOLOCK)
-					join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-					WHERE CONTRACTID = @ContractID  AND ISACCDOC = 0  and RefNodeID = @ContractID and b.Type=101
-
-					INSERT INTO @tblListDEL   
-					SELECT @ContractID,a.DOCID ,a.CostCenterID , 1,StatusID FROM ACC_DOCDETAILS a WITH(NOLOCK)
-					join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-					WHERE CONTRACTID = @ContractID AND ISACCDOC = 1  and RefNodeID = @ContractID  and b.Type=101
-					
-					if(@wfaction=2)
-						set @Contractstat=480
-					else if(@wfaction=3)
-						set @Contractstat=450	
-					else
-						set @Contractstat=477
-							
-					update REN_Contract  
-					set StatusID=@Contractstat,WorkFlowLevel=@level
-					where ContractID=@ContractID or refContractID=@ContractID
-				END
-				
-				INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID   
-			  ,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)      
-				VALUES(@COSTCENTERID,@ContractID,@Contractstat,CONVERT(FLOAT,getdate()),@RejRemarks,@UserID
-				  ,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
-
-			END					  
+			INSERT INTO @tblListDEL   
+			SELECT @ContractID,a.DOCID ,a.CostCenterID , 1,StatusID FROM ACC_DOCDETAILS a WITH(NOLOCK)
+			join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
+			WHERE CONTRACTID = @ContractID AND ISACCDOC = 1  and RefNodeID = @ContractID  and b.Type<0
+			
+			update REN_Contract  
+			set StatusID=428
+			where ContractID=@ContractID		  
 		END
 		ELSE
 		BEGIN
@@ -252,7 +141,7 @@ SET NOCOUNT ON;
 				
 				update REN_Contract  
 				set StatusID=@Contractstat,WorkFlowLevel=@level
-				where ContractID=@ContractID or refContractID=@ContractID
+				where ContractID=@ContractID		  
 				
 			END
 			
@@ -271,7 +160,7 @@ SET NOCOUNT ON;
 		END
 	END
 	
-	if(@WID>0 and @Contractstat<>465)
+	if(@WID>0)
 	begin		
 		INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID   
 			  ,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)      
@@ -289,7 +178,7 @@ BEGIN
 
 	IF( @IsAccDoc  = 1)  
 	BEGIN  
-		select @DocType=DocumentType from ADM_DocumentTypes with(nolock) where CostCenterID=@CCID 
+		select @DocType=DocumentType from ADM_DocumentTypes where CostCenterID=@CCID 
 		if (@DocType in(14,19))
 		BEGIN
 			select @type=Type from REN_ContractDocMapping with(nolock) where contractid=@ContractID and IsAccDoc=1 and DocID=@DocID
@@ -330,10 +219,6 @@ BEGIN
      --SELECT  StatusID FROM INV_DOCDETAILS WHERE DocID = @DocID  AND REFCCID = 95 AND REFNODEID  = @ContractID   
 END  
    
-   	if exists(select Value from COM_CostCenterPreferences WITH(nolock)  
-		where CostCenterID=95 and  Name = 'ExternfunctonApprove'  and Value='true')	
-		EXEC [spEXT_RentalApprovals] @ContractID,@IsApprove,@CompanyGUID,@UserName,@RoleID,@UserID,@LangID
-
      
 COMMIT TRANSACTION      
 SET NOCOUNT OFF;        
@@ -361,5 +246,7 @@ BEGIN CATCH
 ROLLBACK TRANSACTION      
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH
+END CATCH      
+      
+      
 GO

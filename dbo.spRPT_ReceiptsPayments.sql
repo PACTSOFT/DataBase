@@ -24,7 +24,7 @@ SET NOCOUNT ON;
 	DECLARE @SQL NVARCHAR(MAX),@AccWhere NVARCHAR(50)
 	DECLARE	@From NVARCHAR(20),@To NVARCHAR(20),@MonthColumn NVARCHAR(40)
 	DECLARE @SQL1 NVARCHAR(MAX),@SQL2 NVARCHAR(MAX),@UnAppSQL NVARCHAR(MAX),@PDCWHERE NVARCHAR(MAX),@PDCWHERE2 NVARCHAR(MAX)
-	CREATE TABLE #TblAccounts(AccountID INT,AccountName NVARCHAR(200) collate database_default)
+	CREATE TABLE #TblAccounts(AccountID BIGINT,AccountName NVARCHAR(200))
 		
 	SET @From=CONVERT(FLOAT,@FromDate)
 	SET @To=CONVERT(FLOAT,@ToDate)
@@ -83,7 +83,7 @@ SET NOCOUNT ON;
 --	select * from #TblAccounts
 if @Vertical=1
 begin
-	CREATE TABLE #TblVTrans(AccountID INT,AccountName NVARCHAR(200) collate database_default,TrAccountID INT,TrAccount NVARCHAR(200) collate database_default,Depth INT,lft INT,Amount FLOAT,StatusID int,DocDate datetime)
+	CREATE TABLE #TblVTrans(AccountID BIGINT,AccountName NVARCHAR(200),TrAccountID BIGINT,TrAccount NVARCHAR(200),Depth INT,lft INT,Amount FLOAT,StatusID int,DocDate datetime)
 
 	SET @SQL='
 	select A1.AccountID,A1.AccountName,D.Amount
@@ -127,13 +127,13 @@ begin
 	SET @SQL='
 	select A.AccountID,A.AccountName,AO.AccountID TrAccountID,AO.AccountName TrAccount,AO.Depth,AO.lft,D.Amount,D.StatusID'+@MonthColumn+'
 	from ACC_DocDetails D with(nolock)'+@SQL1+'
-	INNER JOIN #TblAccounts A with(nolock) ON D.DebitAccount=A.AccountID
+	INNER JOIN #TblAccounts A ON D.DebitAccount=A.AccountID
 	INNER JOIN ACC_Accounts AO with(nolock) ON D.CreditAccount=AO.AccountID AND AO.AccountID>0
 	WHERE (((DocDate BETWEEN '+@From+' AND '+@To+')'+@PDCWHERE+')'+@PDCWHERE2+')
 	UNION ALL
 	select A.AccountID,A.AccountName,AO.AccountID TrAccountID,AO.AccountName TrAccount,AO.Depth,AO.lft,-D.Amount,D.StatusID'+@MonthColumn+'
 	from ACC_DocDetails D with(nolock)'+@SQL1+'
-	INNER JOIN #TblAccounts A with(nolock) ON D.CreditAccount=A.AccountID
+	INNER JOIN #TblAccounts A ON D.CreditAccount=A.AccountID
 	INNER JOIN ACC_Accounts AO with(nolock) ON D.DebitAccount=AO.AccountID AND AO.AccountID>0
 	WHERE (((DocDate BETWEEN '+@From+' AND '+@To+')'+@PDCWHERE+')'+@PDCWHERE2+')'
 	
@@ -142,13 +142,13 @@ begin
 		SET @SQL=@SQL+' UNION ALL 
 	select A.AccountID,A.AccountName,AO.AccountID TrAccountID,AO.AccountName TrAccount,AO.Depth,AO.lft,D.Amount,D.StatusID'+@MonthColumn+'
 	from ACC_DocDetails D with(nolock)'+@SQL2+'
-	INNER JOIN #TblAccounts A with(nolock) ON D.DebitAccount=A.AccountID
+	INNER JOIN #TblAccounts A ON D.DebitAccount=A.AccountID
 	INNER JOIN ACC_Accounts AO with(nolock) ON D.CreditAccount=AO.AccountID AND AO.AccountID>0
 	WHERE (DocDate BETWEEN '+@From+' AND '+@To+')'+@PDCWHERE+'
 	UNION ALL
 	select A.AccountID,A.AccountName,AO.AccountID TrAccountID,AO.AccountName TrAccount,AO.Depth,AO.lft,-D.Amount,D.StatusID'+@MonthColumn+'
 	from ACC_DocDetails D with(nolock)'+@SQL2+'
-	INNER JOIN #TblAccounts A with(nolock) ON D.CreditAccount=A.AccountID
+	INNER JOIN #TblAccounts A ON D.CreditAccount=A.AccountID
 	INNER JOIN ACC_Accounts AO with(nolock) ON D.DebitAccount=AO.AccountID AND AO.AccountID>0
 	WHERE (DocDate BETWEEN '+@From+' AND '+@To+')'+@PDCWHERE
 	END
@@ -166,12 +166,12 @@ begin
 	BEGIN
 		if @PDCSeperate=1
 			SELECT T.TrAccountID AccountID,StatusID,MAX(T.TrAccount) Account,SUM(Amount) Amount,convert(nvarchar,YEAR(DocDate))+'_'+convert(nvarchar,MONTH(DocDate)) YM
-			FROM #TblVTrans T with(nolock) LEFT JOIN #TblAccounts A with(nolock) ON A.AccountID=T.TrAccountID
+			FROM #TblVTrans T LEFT JOIN #TblAccounts A ON A.AccountID=T.TrAccountID
 			WHERE A.AccountID IS NULL
 			GROUP BY T.TrAccountID,StatusID,YEAR(DocDate),MONTH(DocDate)
 		else
 			SELECT T.TrAccountID AccountID,MAX(T.TrAccount) Account,SUM(Amount) Amount,convert(nvarchar,YEAR(DocDate))+'_'+convert(nvarchar,MONTH(DocDate)) YM
-			FROM #TblVTrans T with(nolock) LEFT JOIN #TblAccounts A with(nolock) ON A.AccountID=T.TrAccountID
+			FROM #TblVTrans T LEFT JOIN #TblAccounts A ON A.AccountID=T.TrAccountID
 			WHERE A.AccountID IS NULL
 			GROUP BY T.TrAccountID,YEAR(DocDate),MONTH(DocDate)
 	END
@@ -179,12 +179,12 @@ begin
 	BEGIN
 		if @PDCSeperate=1
 			SELECT T.TrAccountID AccountID,StatusID,MAX(T.TrAccount) Account,SUM(Amount) Amount
-			FROM #TblVTrans T with(nolock) LEFT JOIN #TblAccounts A with(nolock) ON A.AccountID=T.TrAccountID
+			FROM #TblVTrans T LEFT JOIN #TblAccounts A ON A.AccountID=T.TrAccountID
 			WHERE A.AccountID IS NULL
 			GROUP BY T.TrAccountID,StatusID
 		else
 			SELECT T.TrAccountID AccountID,MAX(T.TrAccount) Account,SUM(Amount) Amount
-			FROM #TblVTrans T with(nolock) LEFT JOIN #TblAccounts A with(nolock) ON A.AccountID=T.TrAccountID
+			FROM #TblVTrans T LEFT JOIN #TblAccounts A ON A.AccountID=T.TrAccountID
 			WHERE A.AccountID IS NULL
 			GROUP BY T.TrAccountID	
 	END
@@ -192,11 +192,11 @@ begin
 	--BANK TRANSACTION DATA
 	IF @ShowMonthWise=1
 		SELECT SUM(Amount) Amount,convert(nvarchar,YEAR(DocDate))+'_'+convert(nvarchar,MONTH(DocDate)) YM
-		FROM #TblVTrans T with(nolock)
+		FROM #TblVTrans T
 		GROUP BY YEAR(DocDate),MONTH(DocDate)
 	ELSE
 		SELECT SUM(Amount) Amount
-		FROM #TblVTrans T with(nolock)
+		FROM #TblVTrans T
 		GROUP BY T.AccountID
 		
 	DROP TABLE #TblAccounts
@@ -204,21 +204,8 @@ begin
 end
 else
 begin
-	CREATE TABLE #TblTrans(AccountID INT,AccountName NVARCHAR(200) collate database_default,TrAccountID INT,TrAccount NVARCHAR(200) collate database_default,Depth INT,lft INT,Amount FLOAT,DocDate datetime)
-	declare @LevelCols nvarchar(max),@LevelJoin nvarchar(max),@LevelGroup nvarchar(max)
+	CREATE TABLE #TblTrans(AccountID BIGINT,AccountName NVARCHAR(200),TrAccountID BIGINT,TrAccount NVARCHAR(200),Depth INT,lft INT,Amount FLOAT,DocDate datetime)
 
-	IF @ShowLevel=1
-	BEGIN
-		set @LevelGroup=',A.IsGroup'
-		set @LevelCols=',max(A.Depth) Depth,max(A.lft) lft,A.IsGroup'
-		set @LevelJoin=' join ACC_Accounts A with(nolock) ON A.AccountID=T.AccountID'
-	END
-	ELSE
-	BEGIN
-		set @LevelGroup=''
-		set @LevelCols=''
-		set @LevelJoin=''
-	END
 	--OPENING BALANCE
 	SET @SQL='
 	select A1.AccountID,A1.AccountName,D.Amount
@@ -243,9 +230,9 @@ begin
 	INNER JOIN ACC_Accounts A1 with(nolock) ON D.CreditAccount=A1.AccountID'+@GTPQuery+'
 	WHERE '+@AccWhere+' AND D.DocumentType<>14 AND D.DocumentType<>19 AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQL
 	END
-	SET @SQL='select T.AccountID,T.AccountName Rec_Name,sum(Amount) Amount'+@LevelCols+'
-	FROM ( '+@SQL+' ) AS T'+@LevelJoin+'
-	GROUP BY T.AccountID,T.AccountName'+@LevelGroup
+	SET @SQL='select AccountID,AccountName Rec_Name,sum(Amount) Amount
+	FROM ( '+@SQL+' ) AS T
+	GROUP BY AccountID,AccountName'
 	--Rec_Amount,Pay_Name,Pay_Amount
 	--print @SQL
 	EXEC(@SQL)
@@ -255,13 +242,13 @@ begin
 	SET @SQL='
 	select A.AccountID,A.AccountName,AO.AccountID TrAccountID,AO.AccountName TrAccount,AO.Depth,AO.lft,D.Amount'+@MonthColumn+'
 	from ACC_DocDetails D with(nolock)'+@SQL1+'
-	INNER JOIN #TblAccounts A with(nolock) ON D.DebitAccount=A.AccountID
+	INNER JOIN #TblAccounts A ON D.DebitAccount=A.AccountID
 	INNER JOIN ACC_Accounts AO with(nolock) ON D.CreditAccount=AO.AccountID AND AO.AccountID>0
 	WHERE (((DocDate BETWEEN '+@From+' AND '+@To+')'+@PDCWHERE+')'+@PDCWHERE2+')
 	UNION ALL
 	select A.AccountID,A.AccountName,AO.AccountID TrAccountID,AO.AccountName TrAccount,AO.Depth,AO.lft,-D.Amount'+@MonthColumn+'
 	from ACC_DocDetails D with(nolock)'+@SQL1+'
-	INNER JOIN #TblAccounts A with(nolock) ON D.CreditAccount=A.AccountID
+	INNER JOIN #TblAccounts A ON D.CreditAccount=A.AccountID
 	INNER JOIN ACC_Accounts AO with(nolock) ON D.DebitAccount=AO.AccountID AND AO.AccountID>0
 	WHERE (((DocDate BETWEEN '+@From+' AND '+@To+')'+@PDCWHERE+')'+@PDCWHERE2+')'
 	
@@ -270,13 +257,13 @@ begin
 		SET @SQL=@SQL+' UNION ALL 
 	select A.AccountID,A.AccountName,AO.AccountID TrAccountID,AO.AccountName TrAccount,AO.Depth,AO.lft,D.Amount'+@MonthColumn+'
 	from ACC_DocDetails D with(nolock)'+@SQL2+'
-	INNER JOIN #TblAccounts A with(nolock) ON D.DebitAccount=A.AccountID
+	INNER JOIN #TblAccounts A ON D.DebitAccount=A.AccountID
 	INNER JOIN ACC_Accounts AO with(nolock) ON D.CreditAccount=AO.AccountID AND AO.AccountID>0
 	WHERE (DocDate BETWEEN '+@From+' AND '+@To+')'+@PDCWHERE+'
 	UNION ALL
 	select A.AccountID,A.AccountName,AO.AccountID TrAccountID,AO.AccountName TrAccount,AO.Depth,AO.lft,-D.Amount'+@MonthColumn+'
 	from ACC_DocDetails D with(nolock)'+@SQL2+'
-	INNER JOIN #TblAccounts A with(nolock) ON D.CreditAccount=A.AccountID
+	INNER JOIN #TblAccounts A ON D.CreditAccount=A.AccountID
 	INNER JOIN ACC_Accounts AO with(nolock) ON D.DebitAccount=AO.AccountID AND AO.AccountID>0
 	WHERE (DocDate BETWEEN '+@From+' AND '+@To+')'+@PDCWHERE
 	END
@@ -284,7 +271,7 @@ begin
 	--FROM ( '+@SQL+' ) AS T
 	--GROUP BY AccountID,AccountName'
 	--Rec_Amount,Pay_Name,Pay_Amount
-	--print @SQL
+	print @SQL
 	INSERT INTO #TblTrans
 	EXEC(@SQL)
 
@@ -297,22 +284,22 @@ begin
 	--ACCOUNT TRANSACTION DATA
 	IF @ShowMonthWise=1		
 		SELECT T.TrAccountID AccountID,MAX(T.TrAccount) Account,SUM(Amount) Amount,convert(nvarchar,YEAR(DocDate))+'_'+convert(nvarchar,MONTH(DocDate)) YM
-		FROM #TblTrans T with(nolock) LEFT JOIN #TblAccounts A with(nolock) ON A.AccountID=T.TrAccountID
+		FROM #TblTrans T LEFT JOIN #TblAccounts A ON A.AccountID=T.TrAccountID
 		WHERE A.AccountID IS NULL
 		GROUP BY T.TrAccountID,YEAR(DocDate),MONTH(DocDate)
 	ELSE
 	BEGIN
 		IF @ShowLevel=1
 			SELECT T.TrAccountID AccountID,MAX(T.TrAccount) Account,SUM(Amount) Amount,MAX(T.Depth) Depth,MAX(T.lft) lft,0 IsGroup
-			FROM #TblTrans T with(nolock) LEFT JOIN #TblAccounts A with(nolock) ON A.AccountID=T.TrAccountID
+			FROM #TblTrans T LEFT JOIN #TblAccounts A ON A.AccountID=T.TrAccountID
 			WHERE A.AccountID IS NULL
 			GROUP BY T.TrAccountID
 			union all
-			select AccountID,AccountName,0,Depth,lft,IsGroup from acc_accounts with(nolock) where IsGroup=1
+			select AccountID,AccountName,0,Depth,lft,IsGroup from acc_accounts where IsGroup=1
 			ORDER BY lft
 		ELSE
 			SELECT T.TrAccountID AccountID,MAX(T.TrAccount) Account,SUM(Amount) Amount
-			FROM #TblTrans T  with(nolock) LEFT JOIN #TblAccounts A with(nolock) ON A.AccountID=T.TrAccountID
+			FROM #TblTrans T LEFT JOIN #TblAccounts A ON A.AccountID=T.TrAccountID
 			WHERE A.AccountID IS NULL
 			GROUP BY T.TrAccountID	
 	END
@@ -320,27 +307,18 @@ begin
 	--BANK TRANSACTION DATA
 	IF @ShowMonthWise=1
 		SELECT T.AccountID AccountID,MAX(T.AccountName) Rec_Name,SUM(Amount) Amount,convert(nvarchar,YEAR(DocDate))+'_'+convert(nvarchar,MONTH(DocDate)) YM
-		FROM #TblTrans T with(nolock)
+		FROM #TblTrans T
 		GROUP BY T.AccountID,YEAR(DocDate),MONTH(DocDate)
 	ELSE
-	BEGIN
-		IF @ShowLevel=1
-			SELECT T.AccountID AccountID,MAX(T.AccountName) Rec_Name,SUM(Amount) Amount,MAX(A.Depth) Depth,MAX(A.lft) lft,convert(bit,0) IsGroup
-			FROM #TblTrans T with(nolock)
-			join ACC_Accounts A with(nolock) on A.AccountID=T.AccountID
-			GROUP BY T.AccountID
-		else
-			SELECT T.AccountID AccountID,MAX(T.AccountName) Rec_Name,SUM(Amount) Amount
-			FROM #TblTrans T with(nolock)
-			GROUP BY T.AccountID
-	END
-
-	IF @ShowLevel=1
-		SELECT AccountID,AccountName Account,convert(float,0) Amount,Depth,lft,convert(bit,1) IsGroup 
-		FROM ACC_Accounts with(nolock) 
-		WHERE AccountID>1 and IsGroup=1 ORDER BY lft
-	ELSE
-		SELECT 1 'NOLevel' where 1!=1
+		SELECT T.AccountID AccountID,MAX(T.AccountName) Rec_Name,SUM(Amount) Amount
+		FROM #TblTrans T
+		GROUP BY T.AccountID
+		
+	
+	--IF @ShowLevel=1
+	--	SELECT AccountID,AccountName,Depth,lft,rgt FROM ACC_Accounts with(nolock) WHERE AccountID>1 and IsGroup=1 ORDER BY lft
+	--ELSE
+	--	SELECT 1
 	
 
 /*	--CLOSING BALANCE

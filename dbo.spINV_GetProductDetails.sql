@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spINV_GetProductDetails]
-	@ProductID [int] = 0,
+	@ProductID [bigint] = 0,
 	@UserID [int] = 1,
 	@LangID [int] = 1,
 	@RoleID [int] = 0
@@ -13,7 +13,7 @@ BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;  
 		--Declaration Section
-		DECLARE @HasAccess bit,@SQL nvarchar(max)
+		DECLARE @HasAccess bit
 
 		--SP Required Parameters Check
 		IF @ProductID =0
@@ -47,7 +47,7 @@ SET NOCOUNT ON;
 		if exists (select value from COM_costcenterpreferences with(nolock) where CostCenterID=3 and Name='EnableSubstituteType' and value='True')
 		begin
  			SELECT DISTINCT --S.SubstituteGroupID,S.SubstituteGroupName,
- 			S.SProductID,P.ProductName,P.ProductCode,S.SubstituteGroupID GroupID,L.Name [Type],ISNULL(S.SNo,0) SNo
+ 			S.SProductID,P.ProductName,P.ProductCode,S.SubstituteGroupID GroupID,L.Name [Type]
 			FROM INV_ProductSubstitutes S WITH(NOLOCK)   
 			INNER JOIN INV_Product P WITH(NOLOCK) on S.SProductID=P.ProductID
 			INNER JOIN COM_Lookup L WITH(NOLOCK) on S.SubstituteGroupID=L.NodeID
@@ -56,7 +56,7 @@ SET NOCOUNT ON;
 		else
 		begin
 			SELECT DISTINCT S.SubstituteGroupID,S.SubstituteGroupName,
- 			P.ProductName, P.ProductID,P.ProductCode,ISNULL(S.SNo,0) SNo
+ 			P.ProductName, P.ProductID,P.ProductCode
 			FROM INV_ProductSubstitutes S WITH(NOLOCK)   
 			INNER JOIN INV_Product P WITH(NOLOCK) on S.ProductID=P.ProductID
 			WHERE S.SubstituteGroupID  IN (SELECT SubstituteGroupID FROM INV_ProductSubstitutes WITH(NOLOCK) WHERE PRODUCTID in (@ProductID))
@@ -93,11 +93,30 @@ SET NOCOUNT ON;
 		where ProductID=@ProductID		
 		
 		-- GET CCCCC MAP DATA
-		EXEC [spCOM_GetCCCCMapDetails] 3,@ProductID,@LangID
+		 EXEC [spCOM_GetCCCCMapDetails] 3,@ProductID,@LangID
 		
 		-- Getting Vehicle Information
-		select 1 where 1<>1
-
+		SELECT DISTINCT PV.ProductVehicleID ProductVehicleID,PV.VEHICLEID vehicleid,(V.MAKE + '-' + V.MODEL + '-' + V.VARIANT) AS Vehicle,V.MAKE ,V.MODEL , V.StartYEAR , V.EndYEAR ,V.VARIANT, s.name as Segment, 
+		V.MakeID, V.ModelID,   V.VariantID, V.SegmentID
+		,Specification  Specification_key,case when Specification=1 then '-' else COM_CC50031.name end Specification, 
+		EuroBSType  EuroBSType_key,case when EuroBSType =1 then '-' else COM_CC50032.name end EuroBSType,
+		Transmission Transmission_key, case when Transmission =1 then '-' else COM_CC50033.name end Transmission,
+		CC CC_key,case when CC =1 then '-' else  COM_CC50034.name end CC,
+		WheelDrive WheelDrive_key,case when WheelDrive =1 then '-' else  COM_CC50035.name end WheelDrive,
+		SeatCapacity SeatCapacity_key,case when SeatCapacity =1 then '-' else COM_CC50036.name end SeatCapacity,
+		Fuel Fuel_key,case when Fuel=1 then '-' else COM_CC50014.name end Fuel
+		from SVC_ProductVehicle	pv WITH(NOLOCK) 
+		left join SVC_VEHICLE V WITH(NOLOCK)  ON PV.VEHICLEID=V.VEHICLEID 
+		left join com_cc50024 s WITH(NOLOCK) on s.nodeid=v.segmentid
+		LEFT JOIN COM_CC50031 WITH(NOLOCK) ON COM_CC50031.NODEID=V.Specification
+		LEFT JOIN COM_CC50032 WITH(NOLOCK) ON COM_CC50032.NODEID=V.EuroBSType
+		LEFT JOIN COM_CC50033 WITH(NOLOCK) ON COM_CC50033.NODEID=V.Transmission
+		LEFT JOIN COM_CC50034 WITH(NOLOCK) ON COM_CC50034.NODEID=V.CC
+		LEFT JOIN COM_CC50035 WITH(NOLOCK) ON COM_CC50035.NODEID=V.WheelDrive
+		LEFT JOIN COM_CC50036 WITH(NOLOCK) ON COM_CC50036.NODEID=V.SeatCapacity
+		LEFT JOIN COM_CC50014 WITH(NOLOCK) ON COM_CC50014.NODEID=V.Fuel
+		WHERE PV.PRODUCTID=@ProductID 		
+		
 		IF((SELECT ISNULL(COUNT(*),0) FROM [COM_UOM] WITH(NOLOCK) WHERE PRODUCTID=@ProductID)>0)			
 			SELECT U.*,B.Barcode,B.Barcode_Key FROM COM_UOM U WITH(NOLOCK) 
 			LEFT JOIN INV_PRODUCTBARCODE B WITH(NOLOCK) ON B.UNITID=U.UomID WHERE U.PRODUCTID=@ProductID AND U.ISPRODUCTWISE=1
@@ -114,8 +133,8 @@ SET NOCOUNT ON;
 		CREATE TABLE #TBLTEMP1 (CostCenterId INT,CostCenterName nvarchar(max),NodeID INT,[Value] NVARCHAR(300),Code nvarchar(300))
 		INSERT INTO #TBLTEMP
 		SELECT CostCenterID,NODEID  FROM COM_CostCenterCostCenterMap WITH(NOLOCK) WHERE ParentCostCenterID=3 AND ParentNodeID=@ProductID
-		DECLARE @COUNT INT,@I INT,@TABLENAME NVARCHAR(300), @CCID INT,@NODEID INT,@FEATURENAME NVARCHAR(300), @IsGroup bit
-		SELECT @I=1,@COUNT=COUNT(*) FROM #TBLTEMP WITH(NOLOCK)
+		DECLARE @COUNT INT,@I INT,@TABLENAME NVARCHAR(300), @CCID INT,@NODEID INT,@FEATURENAME NVARCHAR(300), @IsGroup bit,@SQL nvarchar(max)
+		SELECT @I=1,@COUNT=COUNT(*) FROM #TBLTEMP
 		WHILE @I<=@COUNT
 		BEGIN
 			SELECT @NODEID=NODEID,@CCID=CostCenterId FROM #TBLTEMP WITH(NOLOCK) WHERE ID=@I
@@ -157,7 +176,7 @@ SET NOCOUNT ON;
 			--To get costcenter table name  
 			SELECT @FEATURENAME=TableName FROM ADM_Features WITH(NOLOCK) WHERE FeatureID=@CCID 
 			
-			SET @SQL='declare @Binused table(BinNODEID INT,isUsed INT)
+			SET @SQL='declare @Binused table(BinNODEID bigint,isUsed bigint)
 			insert into @Binused
 			SELECT M.BinNODEID,count(b.BinID) 
 			FROM [INV_ProductBins] M WITH(NOLOCK)
@@ -207,117 +226,6 @@ SET NOCOUNT ON;
 		from [COM_CostCenterStatusMap] with(nolock)
 		where CostCenterID=3 and NodeID=@ProductID
 		order by FromDate,ToDate
-
-
-		
-
-		Declare @WID INT,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@Type int,@escDays int,@CreatedDate datetime
-		SELECT @StatusID=StatusID,@WID=WFID,@Level=WFLevel,@CreatedDate=CONVERT(datetime,createdDate)
-		FROM INV_Product WITH(NOLOCK) where  ProductID=@ProductID
-		 
-		
-		if(@WID is not null and @WID>0)  
-		BEGIN  
-			SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]   WITH(NOLOCK)   
-			where WorkFlowID=@WID and  UserID =@UserID
-
-			if(@Userlevel is null )  
-				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]  WITH(NOLOCK)    
-				where WorkFlowID=@WID and  RoleID =@RoleID
-
-			if(@Userlevel is null )       
-				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
-				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
-				where g.UserID=@UserID and WorkFlowID=@WID
-
-			if(@Userlevel is null )  
-				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
-				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
-				where g.RoleID =@RoleID and WorkFlowID=@WID
-			
-			if(@Userlevel is null )  	
-				SELECT @Type=[type] FROM [COM_WorkFlow] WITH(NOLOCK) where WorkFlowID=@WID
-		end 
-     
-		set @canEdit=1  
-       
-		if(@StatusID =1002)  
-		begin  
-			if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
-			begin  
-				set @canEdit=0   
-			end    
-		end
-		ELSE if(@StatusID=1003)
-		BEGIN
-		    if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
-			begin  
-				set @canEdit=1
-			end
-			ELSE
-				set @canEdit=0
-		END
-     
-		if(@StatusID=1001 or @StatusID=1002)  
-		begin    
-			if(@Userlevel is not null and  @Level is not null and @Userlevel>@level)  
-			begin
-				if(@Type=1 or @Level+1=@Userlevel)
-					set @canApprove=1   
-				ELSE
-				BEGIN
-					if exists(select EscDays FROM [COM_WorkFlow]
-					where workflowid=@WID and ApprovalMandatory=1 and LevelID<@Userlevel and LevelID>@Level)
-						set @canApprove=0
-					ELSE
-					BEGIN	
-						select @escDays=sum(escdays) from (select max(escdays) escdays from [COM_WorkFlow] WITH(NOLOCK) 
-						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
-						group by LevelID) as t
-						 
-						set @CreatedDate=dateadd("d",@escDays,@CreatedDate)
-						
-						select @escDays=sum(escdays) from (select max(eschours) escdays from [COM_WorkFlow] WITH(NOLOCK) 
-						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
-						group by LevelID) as t
-						
-						set @CreatedDate=dateadd("HH",@escDays,@CreatedDate)
-						
-						if (@CreatedDate<getdate())
-							set @canApprove=1   
-						ELSE
-							set @canApprove=0
-					END	
-				END	
-			end   
-			else  
-				set @canApprove= 0   
-		end  
-		else  
-			set @canApprove= 0   
-
-		IF @WID is not null and @WID>0
-		begin
-
-			
-			select @canEdit canEdit,@canApprove canApprove
-
-			SELECT CONVERT(DATETIME, A.CreatedDate) Date,A.WorkFlowLevel,
-			(SELECT TOP 1 LevelName FROM COM_WorkFlow L with(nolock) WHERE L.WorkFlowID=@WID AND L.LevelID=A.WorkFlowLevel) LevelName,
-			A.CreatedBy,A.StatusID,S.Status,A.Remarks,U.FirstName,U.LastName
-			FROM COM_Approvals A with(nolock),COM_Status S with(nolock),ADM_Users U with(nolock)
-			WHERE A.RowType=1 AND S.StatusID=A.StatusID AND CCID=3 AND CCNodeID=@ProductID AND A.USERID=U.USERID
-			ORDER BY A.CreatedDate
-			
-			select @WID WID,levelID,LevelName from COM_WorkFlow with(nolock) 
-			where WorkFlowID=@WID
-			group by levelID,LevelName
-
-		end
-
-
-
-
 
 COMMIT TRANSACTION
 SET NOCOUNT OFF;  

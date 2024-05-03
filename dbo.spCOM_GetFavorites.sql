@@ -30,25 +30,8 @@ SET NOCOUNT ON
 
 	IF @Call like 'GETLIST%'
 	BEGIN
-		--select ID,FavName from COM_Favourite F with(nolock) join ADM_Assign M with(nolock) on F.ID=M.NodeID
-		--where F.TypeID=1 and M.CostCenterID=69 and (M.UserID=@UserID or M.RoleID=@RoleID) group by ID,FavName order by FavName
-
-		IF(@UserID=1 OR @RoleID=1)
-		BEGIN
-			select ID,case isnull(s.ResourceData,'') when '' then FavName else s.ResourceData end FavName
-			 from COM_Favourite F with(nolock) 
-			LEFT JOIN COM_LanguageResources S  WITH(NOLOCK) ON S.ResourceName=F.FavName AND S.LanguageID=@LangID  
-			where F.TypeID=1 
-			group by ID,FavName,s.ResourceData order by FavName
-		END
-		ELSE
-		BEGIN
-			select ID,case isnull(s.ResourceData,'') when '' then FavName else s.ResourceData end FavName
-			 from COM_Favourite F with(nolock) join ADM_Assign M with(nolock) on F.ID=M.NodeID
-			LEFT JOIN COM_LanguageResources S  WITH(NOLOCK) ON S.ResourceName=F.FavName AND S.LanguageID=@LangID  
-			where F.TypeID=1 and M.CostCenterID=69 and (M.UserID=@UserID or M.RoleID=@RoleID)
-			group by ID,FavName,s.ResourceData order by FavName
-		END
+		select ID,FavName from COM_Favourite F with(nolock) join ADM_Assign M with(nolock) on F.ID=M.NodeID
+		where F.TypeID=1 and M.CostCenterID=69 and (M.UserID=@UserID or M.RoleID=@RoleID) group by ID,FavName order by FavName
 
 		select FavID from COM_Favourite F with(nolock) where TypeID=3 and FeatureActionID=@UserID
 		declare @LocID int
@@ -67,25 +50,8 @@ SET NOCOUNT ON
 	END
 	ELSE IF @Call='GETDASHBOARDLIST'
 	BEGIN
-		--select ID,FavName from COM_Favourite F with(nolock) join ADM_Assign M with(nolock) on F.ID=M.NodeID
-		--where F.TypeID=1 and M.CostCenterID=69 and (M.UserID=@UserID or M.RoleID=@RoleID) group by ID,FavName order by FavName
-		
-		IF(@UserID=1 OR @RoleID=1)
-		BEGIN
-			select ID,case isnull(s.ResourceData,'') when '' then FavName else s.ResourceData end FavName
-			from COM_Favourite F with(nolock) 
-			LEFT JOIN COM_LanguageResources S  WITH(NOLOCK) ON S.ResourceName=F.FavName AND S.LanguageID=@LangID  
-			where F.TypeID=1 
-			group by ID,FavName,s.ResourceData order by FavName
-		END
-		ELSE 
-		BEGIN
-			select ID,case isnull(s.ResourceData,'') when '' then FavName else s.ResourceData end FavName
-			from COM_Favourite F with(nolock) join ADM_Assign M with(nolock) on F.ID=M.NodeID
-			LEFT JOIN COM_LanguageResources S  WITH(NOLOCK) ON S.ResourceName=F.FavName AND S.LanguageID=@LangID  
-			where F.TypeID=1 and M.CostCenterID=69 and (M.UserID=@UserID or M.RoleID=@RoleID) group by ID,FavName,s.ResourceData order by FavName
-		END
-
+		select ID,FavName from COM_Favourite F with(nolock) join ADM_Assign M with(nolock) on F.ID=M.NodeID
+		where F.TypeID=1 and M.CostCenterID=69 and (M.UserID=@UserID or M.RoleID=@RoleID) group by ID,FavName order by FavName
 	END
 	ELSE IF @Call='DELETE' OR @Call='FORCEDELETE'
 	BEGIN
@@ -104,35 +70,16 @@ SET NOCOUNT ON
 	BEGIN
 		INSERT INTO @TABLE  
 		select distinct cf.FeatureactionID,cf.FeatureID,null FeatureActionName,  
-		s.ResourceData DisplayName,--cf.DisplayName,
-		cf.RowNo,cf.ColumnNo,cf.ShortCutKey, R.TabID,null TabName,   
-		R.GROUPID,null GroupName,
-		s.ResourceData ScreenName,--R.ScreenName,
-		R.ImagePath,R.ButtonKeyTip,0, af.FeatureActionTypeID ,
+		cf.DisplayName,cf.RowNo,cf.ColumnNo,cf.ShortCutKey, R.TabID,null TabName,   
+		R.GROUPID,null GroupName,R.ScreenName,R.ImagePath,R.ButtonKeyTip,0, af.FeatureActionTypeID ,
 		cf.FavName  FavoriteName,cf.Link,cf.Category
 		from COM_Favourite cf WITH(NOLOCK) 
 		join ADM_RibbonView R WITH(NOLOCK) on cf.FeatureactionID=R.FeatureActionID AND cf.FeatureID=R.FeatureID 
 		LEFT JOIN ADM_FeatureAction af  WITH(NOLOCK) ON   cf.FeatureactionID=af.FeatureactionID 
 		LEFT JOIN ADM_FeatureActionRoleMap far  WITH(NOLOCK) ON far.FeatureActionID=af.FeatureactionID and far.roleid=@RoleID 
-		LEFT JOIN COM_LanguageResources S  WITH(NOLOCK) ON S.ResourceID=cf.ResourceID AND S.LanguageID=@LangID  
 		WHERE cf.FavID=@FavID AND cf.isReport=0 --and af.featureid is not null 
 		and (far.featureactionrolemapid is not null or cf.featureid=498  or (cf.featureid between 40001 and 49999 and (af.FeatureActionTypeID=1 or af.FeatureActionTypeID=2)))
 		order by cf.RowNo,cf.ColumnNo
-		--select distinct cf.FeatureactionID,cf.FeatureID,null FeatureActionName,  
-		--s.ResourceData DisplayName,--cf.DisplayName,
-		--cf.RowNo,cf.ColumnNo,cf.ShortCutKey, R.TabID,null TabName,   
-		--R.GROUPID,null GroupName,
-		--s.ResourceData ScreenName,--R.ScreenName,
-		--R.ImagePath,R.ButtonKeyTip,0, af.FeatureActionTypeID ,
-		--cf.FavName  FavoriteName,cf.Link,cf.Category
-		--from COM_Favourite cf WITH(NOLOCK) 
-		--join ADM_RibbonView R WITH(NOLOCK) on cf.FeatureactionID=R.FeatureActionID AND cf.FeatureID=R.FeatureID 
-		--LEFT JOIN ADM_FeatureAction af  WITH(NOLOCK) ON   cf.FeatureactionID=af.FeatureactionID 
-		--LEFT JOIN ADM_FeatureActionRoleMap far  WITH(NOLOCK) ON far.FeatureActionID=af.FeatureactionID and far.roleid=@RoleID 
-		--LEFT JOIN COM_LanguageResources S  WITH(NOLOCK) ON S.ResourceID=R.ScreenResourceID AND S.LanguageID=@LangID  
-		--WHERE cf.FavID=@FavID AND cf.isReport=0 --and af.featureid is not null 
-		--and (far.featureactionrolemapid is not null or cf.featureid=498  or (cf.featureid between 40001 and 49999 and (af.FeatureActionTypeID=1 or af.FeatureActionTypeID=2)))
-		--order by cf.RowNo,cf.ColumnNo
 		
 		declare @OptXML xml
 		select @OptXML = OptionsXML from COM_Favourite F with(nolock) where TypeID=1 and ID=@FavID
@@ -189,10 +136,7 @@ SET NOCOUNT ON
 		order by cf.RowNo,cf.ColumnNo
 	
 		select RowNo,ColumnNo,DisplayName,FeatureactionID,ImagePath,ScreenName,ShortCutKey,FeatureID,ButtonKeyTip,isReport,FeatureActionTypeID,Link,Category,Dt.DocumentType
-		,CASE WHEN ISNULL(isReport,0)=0 AND t.FeatureID between 40001 and 49999 THEN dbo.fnCOM_HasAccess(@RoleID,t.FeatureID,2) ELSE 1 END  as HasAccess
-		from @TABLE  t 
-		left join Adm_DocumentTypes Dt WITH(NOLOCK) on Dt.CostcenterID=t.FeatureID 
-		order by RowNo,ColumnNo
+		from @TABLE  t left join Adm_DocumentTypes Dt on Dt.CostcenterID=t.FeatureID order by RowNo,ColumnNo
 	     
 		SELECT MAX(ROWNO) MaxRows FROM COM_Favourite WITH(NOLOCK) WHERE FavID=@FavID
 		
@@ -506,25 +450,9 @@ set @LangID='+convert(nvarchar,@LangID)+@SQL
 		--print(substring(@SQL,4001,len(@SQL)-4000))
 		EXEC(@SQL)
 
-		--select ID,FavName,F.CreatedBy from COM_Favourite F with(nolock) join ADM_Assign M with(nolock) on F.ID=M.NodeID
-		--where F.TypeID=1 and M.CostCenterID=69 and (M.UserID=@UserID or M.RoleID=@RoleID)
-		--group by ID,FavName,F.CreatedBy order by FavName
-		IF(@UserID=1 OR @RoleID=1)
-		BEGIN
-			select ID,case isnull(s.ResourceData,'') when '' then FavName else s.ResourceData end FavName
-			,F.CreatedBy from COM_Favourite F with(nolock) 
-			LEFT JOIN COM_LanguageResources S  WITH(NOLOCK) ON S.ResourceName=F.FavName AND S.LanguageID=@LangID  
-			where F.TypeID=1 
-			group by ID,FavName,F.CreatedBy,s.ResourceData order by FavName
-		END
-		ELSE
-		BEGIN
-			select ID,case isnull(s.ResourceData,'') when '' then FavName else s.ResourceData end FavName
-			,F.CreatedBy from COM_Favourite F with(nolock) join ADM_Assign M with(nolock) on F.ID=M.NodeID
-			LEFT JOIN COM_LanguageResources S  WITH(NOLOCK) ON S.ResourceName=F.FavName AND S.LanguageID=@LangID  
-			where F.TypeID=1 and M.CostCenterID=69 and (M.UserID=@UserID or M.RoleID=@RoleID)
-			group by ID,FavName,F.CreatedBy,s.ResourceData order by FavName
-		END
+		select ID,FavName,F.CreatedBy from COM_Favourite F with(nolock) join ADM_Assign M with(nolock) on F.ID=M.NodeID
+		where F.TypeID=1 and M.CostCenterID=69 and (M.UserID=@UserID or M.RoleID=@RoleID)
+		group by ID,FavName,F.CreatedBy order by FavName
 
 		SELECT REPORTID FeatureActionID,REPORTNAME GroupName,IsGroup,ParentID GroupID FROM ADM_RevenUReports WITH(NOLOCK) 
 		where reportid>0 and (IsGroup=1 or (@UserID=1 or @RoleID=1 or reportid in 
@@ -563,5 +491,4 @@ BEGIN CATCH
 	SET NOCOUNT OFF    
 	RETURN -999     
 END CATCH
-
 GO

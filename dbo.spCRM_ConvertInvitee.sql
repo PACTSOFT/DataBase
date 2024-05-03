@@ -3,12 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCRM_ConvertInvitee]
-	@InviteeID [int] = 0,
+	@InviteeID [bigint] = 0,
 	@Lead [bit] = 0,
 	@Resonse [bit] = 0,
 	@CompanyGUID [nvarchar](100),
 	@UserName [nvarchar](100),
-	@UserID [int],
+	@UserID [bigint],
 	@LoginRoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -17,13 +17,12 @@ BEGIN TRANSACTION
 BEGIN TRY 
 SET NOCOUNT ON
 
-  DECLARE @Dt float,@ParentCode nvarchar(200),@LeadStatusApprove bit,@IsCodeAutoGen bit,@CodePrefix NVARCHAR(300),@CodeNumber INT
-  DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT
-  DECLARE @SelectedIsGroup bit ,@CompanyName nvarchar(300), @CampaignID int,@LeadID int,@LeadCode nvarchar(400),@CustomerID INT, @ContactID INT,@SelectedNodeID INT,@IsGroup BIT,@AccountID INT 
+  DECLARE @Dt float,@ParentCode nvarchar(200),@LeadStatusApprove bit,@IsCodeAutoGen bit,@CodePrefix NVARCHAR(300),@CodeNumber BIGINT
+  DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint
+  DECLARE @SelectedIsGroup bit ,@CompanyName nvarchar(300), @CampaignID int,@LeadID int,@LeadCode nvarchar(400),@CustomerID bigint, @ContactID bigint,@SelectedNodeID INT,@IsGroup BIT,@AccountID BIGINT 
   SET @Dt=convert(float,getdate())--Setting Current Date  
 
- SELECT @CampaignID=CampaignNodeID,@CompanyName=Customer,@ContactID=ContactID, @CustomerID=CustomerID 
- FROM CRM_CampaignInvites with(NOLOCK) WHERE NodeID=@InviteeID
+ SELECT @CampaignID=CampaignNodeID,@CompanyName=Customer,@ContactID=ContactID, @CustomerID=CustomerID FROM CRM_CampaignInvites WHERE NodeID=@InviteeID
  
   SET @SelectedNodeID=1 
 --------INSERT INTO LEADS TABLE  
@@ -70,17 +69,27 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
     IF @IsCodeAutoGen IS NOT NULL AND @IsCodeAutoGen=1 
     BEGIN   
     	--CALL AUTOCODEGEN 
-		create table #temp1(prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+		create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
 		if(@SelectedNodeID is null)
 		insert into #temp1
 		EXEC [spCOM_GetCodeData] 86,1,''  
 		else
 		insert into #temp1
 		EXEC [spCOM_GetCodeData] 86,@SelectedNodeID,''  
-		select @LeadCode=code,@CodePrefix= prefix, @CodeNumber=number from #temp1 with(NOLOCK)
+		--select * from #temp1
+		select @LeadCode=code,@CodePrefix= prefix, @CodeNumber=number from #temp1
+		--select @AccountCode,@ParentID
+		
     END  
     
-
+    
+    
+  --  IF EXISTS( SELECT CODE FROM CRM_LEADS WHERE Company=@CompanyName)
+  --  BEGIN
+		--RAISERROR('-211',16,1)
+  --  END
+  --  ELSE
+	 BEGIN 
        INSERT INTO CRM_Leads
         (CodePrefix,CodeNumber,
          Code
@@ -135,7 +144,7 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 		
 			 DECLARE @return_value int,@LinkCostCenterID INT
 			SELECT @LinkCostCenterID=isnull([Value],0) FROM COM_CostCenterPreferences WITH(NOLOCK) 
-			WHERE FeatureID=86 AND [Name]='LinkDimension'
+			WHERE FeatureID=86 AND [Name]='LeadLinkDimension'
 
 			IF @LinkCostCenterID>0  AND @IsGroup=0  
 			BEGIN
@@ -197,7 +206,8 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
            ,CompanyGUID
            ,GUID
            ,CreatedBy
-           ,CreatedDate)
+           ,CreatedDate
+            )
            SELECT 86,@LeadID,
            FirstName,
            MiddleName,
@@ -239,34 +249,61 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
            ,CompanyGUID
            ,GUID
            ,CreatedBy
-           ,CreatedDate FROM COM_Contacts with(NOLOCK) WHERE ContactID=@ContactID
+           ,CreatedDate FROM COM_Contacts WHERE ContactID=@ContactID
     
     
-	INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[Guid],[CreatedBy],[CreatedDate])
-    VALUES(86,@LeadID,newid(),  @UserName, @Dt) 
+   INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[Guid],[CreatedBy],[CreatedDate])
+     VALUES(86,@LeadID,newid(),  @UserName, @Dt) 
+
 
       --INSERT PRIMARY CONTACT  
-    INSERT  [COM_Contacts] ([AddressTypeID],[FeatureID] ,[FeaturePK],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate])  
-    VALUES(1,86,@LeadID,@CompanyGUID,NEWID() ,@UserName,@Dt)  
-    
+    INSERT  [COM_Contacts]  
+    ([AddressTypeID]  
+    ,[FeatureID]  
+    ,[FeaturePK]  
+    ,[CompanyGUID]  
+    ,[GUID]   
+    ,[CreatedBy]  
+    ,[CreatedDate]  
+    )  
+    VALUES  
+    (1  
+    ,86  
+    ,@LeadID  
+    ,@CompanyGUID  
+    ,NEWID()  
+    ,@UserName,@Dt  
+    )  
     INSERT INTO COM_ContactsExtended(ContactID,[CreatedBy],[CreatedDate])
-	VALUES(SCOPE_IDENTITY(), @UserName, convert(float,getdate())) 
+			 	VALUES(SCOPE_IDENTITY(), @UserName, convert(float,getdate())) 
 			 	
 	UPDATE  CRM_CampaignInvites SET ConvertedLeadID=@LeadID WHERE NodeID=@InviteeID
 
-	IF exists(select * from  ADM_FeatureActionrolemap with(nolock) where RoleID=@LoginRoleID and FeatureActionID=4829)
-	BEGIN  
-	 	UPDATE CRM_LEADS SET IsApproved=1, ApprovedDate=CONVERT(float,getdate()),ApprovedBy=@UserName
-	 	 where Leadid=@LeadID 
-	end
+		IF exists(select * from  dbo.ADM_FeatureActionrolemap with(nolock) where RoleID=@LoginRoleID and FeatureActionID=4829)
+		BEGIN  
+		 	UPDATE CRM_LEADS SET IsApproved=1, ApprovedDate=CONVERT(float,getdate()),ApprovedBy=@UserName
+		 	 where Leadid=@LeadID 
+		end
 
-END    
+    END 
+   END    
    
   IF @Resonse=1
   BEGIN
-		declare @ResLookupID int
+		declare @FirstName NVARCHAR(50),@ResLookupID int, @MiddleName NVARCHAR(50), @LastName NVARCHAR(50), @Salutation bigint, @jobTitle NVARCHAR(50), @Phone1 NVARCHAR(50),
+		@Phone2 NVARCHAR(50), @Email NVARCHAR(50), @Fax NVARCHAR(50), @Department NVARCHAR(50), @RoleID bigint, @Address1 NVARCHAR(50),
+		@Address2 NVARCHAR(50), @Address3 NVARCHAR(50), @City NVARCHAR(50), @State NVARCHAR(50), @Zip NVARCHAR(50), @CountryID bigint, @Gender NVARCHAR(50)
 
-		select @ResLookupID=NodeID from com_lookup WITH(NOLOCK) where lookuptype=27 AND IsDefault=1
+		select @FirstName=FirstName,@MiddleName=MiddleName,@LastName=LastName,@Salutation=SalutationID,@jobTitle=jobTitle,@Phone1=Phone1,@Phone2=Phone2,
+		@Email=Email2,@Fax=Fax,@Department=Department,@RoleID=RoleLookUpID, @Address1=Address1,
+		@Address2 =Address2,
+		@Address3 =Address3,
+		@City =City,
+		@State =State,
+		@Zip =Zip, 
+		@Gender =Gender  from COM_Contacts WHERE ContactID=@ContactID
+
+		select @ResLookupID=NodeID from com_lookup WITH(NOLOCK) 	where lookuptype=27 AND IsDefault=1
 
 		INSERT into CRM_CAMPAIGNRESPONSE(CampaignID,CampaignActivityID,ProductID,
 		CampgnRespLookupID,ReceivedDate,[Description],CustomerID,CompanyName,ContactName,
@@ -274,10 +311,9 @@ END
 		CompanyGUID,GUID,CreatedBy,CreatedDate,
 		[FirstName],[MiddleName],[LastName],[JobTitle],[Department],[Address1],[Address2],[Address3],[City],[State]
 		,[Zip],[Country],[Phone2],[Email2])
-		SELECT @CampaignID,1,1,@ResLookupID,@Dt,@CompanyName,@CustomerID,@CompanyName,FirstName,Phone1,Email2,Fax,1,1,@CompanyGUID,NEWID(),
-		@UserName,@Dt,FirstName,MiddleName,LastName,jobTitle,Department,Address1,Address2,Address3,City,State,
-		Zip,Country,Phone2,Email2
-		from COM_Contacts with(NOLOCK) WHERE ContactID=@ContactID
+		VALUES(@CampaignID,1,1,@ResLookupID,@Dt,@CompanyName,@CustomerID,@CompanyName,@FirstName,@Phone1,@Email,@Fax,1,1,@CompanyGUID,NEWID(),
+		@UserName,@Dt,@FirstName,@MiddleName,@LastName,@jobTitle,@Department,@Address1,@Address2,@Address3,@City,@State,
+		@Zip,@CountryID,@Phone2,@Email)
 		UPDATE  CRM_CampaignInvites SET ConvertedResponseID=SCOPE_IDENTITY() WHERE NodeID=@InviteeID
  
   END 
@@ -312,5 +348,6 @@ BEGIN CATCH
  ROLLBACK TRANSACTION
  SET NOCOUNT OFF  
  RETURN -999   
-END CATCH
+END CATCH  
+
 GO

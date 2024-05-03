@@ -24,7 +24,7 @@ set @ArchDBName=@DbName+'_ARCHIVE'
 	end
 
 	--Declaration Section    
-	CREATE TABLE #TblTemp(ID INT)
+	CREATE TABLE #TblTemp(ID BIGINT)
 	CREATE TABLE #Tbl(ID INT IDENTITY(1,1),FeatureID INT)
 	CREATE TABLE #TblINV(ID INT IDENTITY(1,1),FeatureID INT,IsRevise BIT)
 	CREATE TABLE #TblACC(ID INT IDENTITY(1,1),FeatureID INT,IsRevise BIT)
@@ -38,7 +38,7 @@ set @ArchDBName=@DbName+'_ARCHIVE'
 	--DELETE DOCUMENTS DATA
 	IF LEN(@DocumentsList)>0
 	BEGIN
-		create table #TblIDS(DetailsID INT,ModifiedDate float)
+		create table #TblIDS(DetailsID bigint,ModifiedDate float)
 		CREATE NONCLUSTERED INDEX IDX_TbLID_DetailsID on #TblIDS(DetailsID)
 		CREATE NONCLUSTERED INDEX IDX_TbLID_Mod on #TblIDS(ModifiedDate)
 		
@@ -69,14 +69,14 @@ set @ArchDBName=@DbName+'_ARCHIVE'
 			FROM ADM_DocumentTypes D WITH(nolock) LEFT JOIN			
 			(SELECT CostCenterID,CASE WHEN PrefValue='TRUE' THEN 1 ELSE 0 END IsRevise FROM COM_DocumentPreferences with(nolock)
 			WHERE PrefName='EnableRevision') AS REV ON D.CostCenterID=REV.CostCenterID
-			WHERE D.IsInventory=1 AND D.CostCenterID IN (SELECT ID FROM #TblTemp with(nolock))
+			WHERE D.IsInventory=1 AND D.CostCenterID IN (SELECT ID FROM #TblTemp)
 			
 			INSERT INTO #TblACC(FeatureID,IsRevise)
 			SELECT D.CostCenterID,ISNULL(REV.IsRevise,0)
 			FROM ADM_DocumentTypes D WITH(nolock) LEFT JOIN			
 			(SELECT CostCenterID,CASE WHEN PrefValue='TRUE' THEN 1 ELSE 0 END IsRevise FROM COM_DocumentPreferences with(nolock)
 			WHERE PrefName='EnableRevision') AS REV ON D.CostCenterID=REV.CostCenterID
-			WHERE D.IsInventory=0 AND D.CostCenterID IN (SELECT ID FROM #TblTemp with(nolock))
+			WHERE D.IsInventory=0 AND D.CostCenterID IN (SELECT ID FROM #TblTemp)
 		END
 
 		delete from #TblINV where IsRevise=1
@@ -85,51 +85,51 @@ set @ArchDBName=@DbName+'_ARCHIVE'
 		CREATE NONCLUSTERED INDEX IDX_TbLINV_DetailsID on #TblINV(FeatureID)
 		CREATE NONCLUSTERED INDEX IDX_TbLACC_DetailsID on #TblACC(FeatureID)
 		
-		IF (SELECT COUNT(*) FROM #TblINV with(nolock) WHERE IsRevise=0)>0
+		IF (SELECT COUNT(*) FROM #TblINV WHERE IsRevise=0)>0
 		BEGIN		
 			set @sql='USE '+@ArchDBName+'
 			insert into #TblIDS(DetailsID,ModifiedDate)
-			SELECT INV.INVDocDetailsID,INV.ModifiedDate FROM INV_DocDetails_History INV with(nolock)
-			INNER JOIN #TblINV I with(nolock) ON I.FeatureID=INV.CostCenterID-- AND I.IsRevise=0
+			SELECT INV.INVDocDetailsID,INV.ModifiedDate FROM INV_DocDetails_History INV
+			INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID-- AND I.IsRevise=0
 			WHERE INV.ModifiedDate<'+@DtChar+'
 			GROUP BY INV.INVDocDetailsID,INV.ModifiedDate			
 			
-			DELETE CC FROM COM_DocCCData_History CC with(nolock)
-			INNER JOIN #TblIDS T with(nolock) ON CC.INVDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate
+			DELETE CC FROM COM_DocCCData_History CC
+			INNER JOIN #TblIDS T ON CC.INVDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate
 			
-			DELETE NUM FROM COM_DocNumData_History NUM with(nolock)
-			INNER JOIN #TblIDS T with(nolock) ON NUM.INVDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate
+			DELETE NUM FROM COM_DocNumData_History NUM
+			INNER JOIN #TblIDS T ON NUM.INVDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate
 			
-			DELETE TXT FROM COM_DocTextData_History TXT with(nolock)
-			INNER JOIN #TblIDS T with(nolock) ON TXT.INVDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate
+			DELETE TXT FROM COM_DocTextData_History TXT
+			INNER JOIN #TblIDS T ON TXT.INVDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate
 			
-			DELETE INV FROM INV_DocDetails_History INV with(nolock)
-			INNER JOIN #TblIDS T with(nolock) ON INV.INVDocDetailsID=T.DetailsID and INV.ModifiedDate=T.ModifiedDate'
+			DELETE INV FROM INV_DocDetails_History INV
+			INNER JOIN #TblIDS T ON INV.INVDocDetailsID=T.DetailsID and INV.ModifiedDate=T.ModifiedDate'
 			
 			TRUNCATE TABLE #TblIDS
 		END
 		
-		IF (SELECT COUNT(*) FROM #TblACC with(nolock) WHERE IsRevise=0)>0
+		IF (SELECT COUNT(*) FROM #TblACC WHERE IsRevise=0)>0
 		BEGIN
 			TRUNCATE TABLE #TblIDS
 			set @sql='USE '+@ArchDBName+'
 			insert into #TblIDS(DetailsID,ModifiedDate)
-			SELECT ACC.AccDocDetailsID,ACC.ModifiedDate FROM ACC_DocDetails_History ACC with(nolock)
-			INNER JOIN #TblACC I with(nolock) ON I.FeatureID=ACC.CostCenterID-- AND I.IsRevise=0
+			SELECT ACC.AccDocDetailsID,ACC.ModifiedDate FROM ACC_DocDetails_History ACC
+			INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID-- AND I.IsRevise=0
 			WHERE ACC.ModifiedDate<'+@DtChar+'
 			GROUP BY ACC.AccDocDetailsID,ACC.ModifiedDate
 			
-			DELETE CC FROM COM_DocCCData_History CC with(nolock)
-			INNER JOIN #TblIDS T with(nolock) ON CC.ACCDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate 
+			DELETE CC FROM COM_DocCCData_History CC
+			INNER JOIN #TblIDS T ON CC.ACCDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate 
 			
-			DELETE NUM FROM COM_DocNumData_History NUM with(nolock)
-			INNER JOIN #TblIDS T with(nolock) ON NUM.ACCDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate
+			DELETE NUM FROM COM_DocNumData_History NUM
+			INNER JOIN #TblIDS T ON NUM.ACCDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate
 			
-			DELETE TXT FROM COM_DocTextData_History TXT with(nolock)
-			INNER JOIN #TblIDS T with(nolock) ON TXT.ACCDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate
+			DELETE TXT FROM COM_DocTextData_History TXT
+			INNER JOIN #TblIDS T ON TXT.ACCDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate
 			
-			DELETE ACC FROM ACC_DocDetails_History ACC with(nolock)
-			INNER JOIN #TblIDS T with(nolock) ON ACC.ACCDocDetailsID=T.DetailsID and ACC.ModifiedDate=T.ModifiedDate '
+			DELETE ACC FROM ACC_DocDetails_History ACC
+			INNER JOIN #TblIDS T ON ACC.ACCDocDetailsID=T.DetailsID and ACC.ModifiedDate=T.ModifiedDate '
 		END
 		
 		drop table #TblIDS
@@ -140,13 +140,13 @@ set @ArchDBName=@DbName+'_ARCHIVE'
 	BEGIN
 		INSERT INTO #Tbl
 		EXEC SPSplitString @DimensionsList,','
-		
-		declare @featureid INT
-		 
-		select @I=1,@CNT=COUNT(*) from #Tbl with(nolock)
+		--SELECT @DimensionsList
+		declare @featureid bigint
+		set @I=1
+		select @CNT=COUNT(*) from #Tbl
 		while @I<=@CNT
 		BEGIN
-			select @featureid=FeatureID from #Tbl with(nolock) where ID=@I
+			select @featureid=FeatureID from #Tbl where ID=@I
 			IF (@featureid=2)
 			BEGIN
 				set @sql='USE '+@ArchDBName+'
@@ -163,8 +163,7 @@ set @ArchDBName=@DbName+'_ARCHIVE'
 			END
 			ELSE IF (@featureid=93 OR @featureid=94 OR @featureid=95)
 			BEGIN
-				set @sql='EXEC [spREN_DeleteArchiveData] '''+@ArchDBName+''','+convert(nvarchar,@featureid)+','''+@DtChar+''','+convert(nvarchar,@UserID)+','+convert(nvarchar,@LangID)
-				exec(@sql)
+				EXEC [spREN_DeleteArchiveData] @ArchDBName,@featureid,@DtChar,@UserID,@LangID 
 			END 
 			set @I=@I+1
 		END

@@ -6,7 +6,7 @@ CREATE PROCEDURE [dbo].[spPAY_PayrollWorksheetData]
 	@Flag [int] = 0,
 	@EmpNode [int] = 0,
 	@PayrollMonth [datetime],
-	@UserID [int] = 1,
+	@UserID [bigint] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -65,5 +65,5 @@ BEGIN
 END   
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH
+END CATCH   
 GO

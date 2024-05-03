@@ -6,9 +6,9 @@ CREATE PROCEDURE [dbo].[spPAY_ExtGetAssignedLeaves]
 	@EmployeeID [int] = 0,
 	@LeaveType [int] = 0,
 	@Date [datetime],
-	@DocID [int] = 0,
-	@Userid [int] = 1,
-	@Langid [int] = 1
+	@DocID [bigint] = 0,
+	@Userid [bigint] = 1,
+	@Langid [bigint] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY
@@ -23,7 +23,7 @@ BEGIN TRY
 	DECLARE @PrevYearNOOFHOLIDAYS INT,@PrevYearWEEKLYOFFCOUNT INT,@PrevYearLeavestaken float,@PrevYearExstAppliedEncashdays float,@PrevYearLeaveBalance FLOAT,@FDYear DateTime,@TDYear DateTime,@TopUpOpeningBalance FLOAT,@TopUpCarryBalance FLOAT
 	
 	DECLARE @GETLEAVES TABLE(AssignedLeaves FLOAT,AvailableLeaves FLOAT)
-	DECLARE @TABASSIGNEDLEAVES TABLE(ID INT IDENTITY(1,1),AssignedLeaves FLOAT,CarryforwardLeaves INT,EXTFROMDATE DATETIME,EXTTODATE DATETIME,NOOFMONTHS INT,TYPE VARCHAR(30))
+	DECLARE @TABASSIGNEDLEAVES TABLE(ID BIGINT IDENTITY(1,1),AssignedLeaves FLOAT,CarryforwardLeaves INT,EXTFROMDATE DATETIME,EXTTODATE DATETIME,NOOFMONTHS INT,TYPE VARCHAR(30))
 	
 	----FOR START DATE AND END DATE OF LEAVE YEAR	
 	EXEC [spPAY_EXTGetLeaveyearDates] @Date,@ALStartMonthYear OUTPUT,@ALEndMonthYear OUTPUT

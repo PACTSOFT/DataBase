@@ -16,10 +16,9 @@ CREATE PROCEDURE [dbo].[spADM_GetCostCenterListViewData]
 	@CustomWhere [nvarchar](max),
 	@DivisionWhere [nvarchar](max) = NULL,
 	@LocationWhere [nvarchar](max) = NULL,
-	@ProductID [int] = 0,
+	@ProductID [bigint] = 0,
 	@ExcludeFilter [bit] = 0,
 	@SearchWhere [nvarchar](max) = NULL,
-	@QtyWhere [nvarchar](max) = NULL,
 	@UserID [int] = 0,
 	@RoleID [int] = 0,
 	@LangID [int] = 1
@@ -28,13 +27,12 @@ AS
 BEGIN TRY      
 SET NOCOUNT ON    
    --Declaration Section      
-   DECLARE @HasAccess bit,@FEATUREID int,@TypeID int,@SearchOption int,@ignoreSpecial int,@FilterQOH bit
-   Declare @CostCenterID int,@RestrictionWhere nvarchar(max),@SearchOldValue bit,@ignoreUserwise bit
+   DECLARE @HasAccess bit,@FEATUREID int,@TypeID int,@SearchOption int,@ignoreSpecial int
+   Declare @CostCenterID int,@RestrictionWhere nvarchar(max),@SearchOldValue bit      
    Declare @Primarycol varchar(50),@lessthan nvarchar(3),@SearchOldValuetext     nvarchar(max)  
    Declare @Table nvarchar(max),@PrimaryKey varchar(50),@SQL nvarchar(max),@Where nvarchar(max)      
    Declare @OrderBY nvarchar(10),@i int  ,@PrefValue  varchar(50),@GroupFilter nvarchar(max)  
-
-   declare @pref table(name nvarchar(200),value nvarchar(max))
+   declare @pref table(name nvarchar(200),value nvarchar(200))
    insert into @pref
    select Name,Value from ADM_GlobalPreferences with(nolock)
    where Name in('Dimension List','HideInactiveDimensions','ExcludeUnMapped','Maintain Dimensionwise stock','HideBlockedAccountsandProducts','ListBoxCount','ListBoxIgnoreSpace')
@@ -45,15 +43,11 @@ SET NOCOUNT ON
      RAISERROR('-100',16,1)      
    END      
   
-    set @FilterQOH=0 
+      
    --Getting CostCenterID      
-   SELECT @CostCenterID=CostCenterID,@Where=SearchFilter,@TypeID=ListViewTypeID,@SearchOption=SearchOption ,@ignoreUserwise=ignoreUserwise 
-   ,@SearchOldValue=SearchOldValue,@GroupFilter=GroupSearchFilter,@ignoreSpecial=ignoreSpecial,@FilterQOH=FilterQOH FROM ADM_ListView WITH(NOLOCK)      
-   WHERE  ListViewID =@ListViewID             
-		
-    if(@ignoreUserwise is not null and @ignoreUserwise=1)
-		delete from @pref where name='Dimension List'
-    
+   SELECT @CostCenterID=CostCenterID,@Where=SearchFilter,@TypeID=ListViewTypeID,@SearchOption=SearchOption  
+   ,@SearchOldValue=SearchOldValue,@GroupFilter=GroupSearchFilter,@ignoreSpecial=ignoreSpecial FROM ADM_ListView WITH(NOLOCK)      
+   WHERE  ListViewID =@ListViewID      
           
 	if(@SearchOn not like '%.%')
 	BEGIN
@@ -83,7 +77,13 @@ SET NOCOUNT ON
    ELSE IF(@CostCenterID=11)      
     SET @Primarycol='UOMID'      
    ELSE IF(@CostCenterID=12)      
-    SET @Primarycol='CurrencyID'   
+    SET @Primarycol='CurrencyID'      
+   ELSE IF(@CostCenterID=51)      
+    SET @Primarycol='CustomerID'      
+   ELSE IF(@CostCenterID=58)      
+    SET @Primarycol='InsuranceID'      
+   ELSE IF(@CostCenterID=56)      
+    SET @Primarycol='ServiceTypeID'      
    ELSE IF(@CostCenterID=71 or @CostCenterID=80)      
     SET @Primarycol='ResourceID'      
       ELSE IF(@CostCenterID=7)      
@@ -134,10 +134,14 @@ SET NOCOUNT ON
     SET @Primarycol='ContractID'  
     ELSE IF(@CostCenterID=103 OR @CostCenterID=129)      
     SET @Primarycol='QuotationID'  
+    ELSE IF(@CostCenterID=61)      
+    SET @Primarycol='vehicleID'   
     ELSE IF(@CostCenterID=200)      
   SET @Primarycol='ReportID'   
  ELSE IF(@CostCenterID=300)  
-  SET @Primarycol='CostCenterID'     
+  SET @Primarycol='CostCenterID'   
+ ELSE IF(@CostCenterID=59)  
+  SET @Primarycol='ServiceTicketID'   
  ELSE IF(@CostCenterID=502)  
   SET @Primarycol='AccountTypeID'   
  ELSE IF(@CostCenterID=503)  
@@ -186,7 +190,6 @@ SET NOCOUNT ON
       
     set @tempSearchValue='@SearchValue nvarchar(500) OUTPUT'      
     set @tempSql='select @SearchValue=' + @SearchOn + ' from ' + @Table + ' a with(nolock) '
-    
     if(@CostCenterID =2)
 		set @tempSql=@tempSql+' LEft JOIN ACC_AccountsExtended E  WITH(NOLOCK) on  E.AccountID=a.AccountID '	
 	else if(@CostCenterID =3)
@@ -199,7 +202,9 @@ SET NOCOUNT ON
 		SET @tempSql=@tempSql+' LEft JOIN ren_TenantExtended E  WITH(NOLOCK) on  E.TenantID=a.TenantID '	 
     		
     set @tempSql=@tempSql+' where a.' + @Primarycol + ' = ' + @SelectedValue   
-    if(@RowCount=3 and @SearchOldValue=1)  
+    if( @CostCenterID=61)      
+    set @tempSql='select @SearchValue=Make+''-''+MOdel+''-''+Variant+''-''++''(''+convert(nvarchar,startYear)+''-''+convert(nvarchar,endYear)+'')'' from ' + @Table + ' a with(nolock) where ' + @Primarycol + ' = ' + @SelectedValue   
+       if(@RowCount=3 and @SearchOldValue=1)  
 		EXEC sp_executesql @tempSql, @tempSearchValue, @SearchOldValuetext OUTPUT    
     else     
         EXEC sp_executesql @tempSql, @tempSearchValue, @SearchValue OUTPUT       
@@ -213,8 +218,8 @@ SET NOCOUNT ON
    IF @Where IS NULL      
     SET @Where=''      
           
-   If len(@Where) > 0      	
-		SET @Where=' WHERE '+@Where+' AND '      
+   If len(@Where) > 0      
+    SET @Where=' WHERE '+@Where+' AND '      
    else      
     SET @Where=@Where+' WHERE '      
      
@@ -226,65 +231,23 @@ SET NOCOUNT ON
 		ELSE IF(@CostCenterID=103 OR @CostCenterID=129)
 			SET @Where=@Where+' a.RefQuotation=0 AND '
 	END
-    
-    declare  @TblList TABLE (iUserID int)  
-	
-	   
+       
 	if(@CustomWhere is not null and @CustomWhere<>'')
 	begin
 		if @CostCenterID=2
 		begin
 			if(@CustomWhere like '%#DEBTORTEE#%')
-			BEGIN
-				select @SQL=Value from adm_globalpreferences with(nolock) where Name='DebtorsControlGroup'
-				INSERT INTO @TblList    
-				exec spsplitstring @SQL,','  
-				
-				set @SQL='(a.lft=1'
-				
-				select @SQL=@SQL+' or (a.lft between '+convert(nvarchar,lft)+' and '+convert(nvarchar,rgt)+')' 
-				from acc_accounts a with(nolock)
-				join @TblList b on a.AccountID=iUserID	
-							
-				set @SQL=@SQL+')'
-				select @CustomWhere=replace(@CustomWhere,'#DEBTORTEE#',@SQL)
-			END	
+				select @CustomWhere=replace(@CustomWhere,'#DEBTORTEE#','(a.lft=1 or a.lft between '+convert(nvarchar,lft)+' and '+convert(nvarchar,rgt)+')') from acc_accounts with(nolock)
+				where AccountID=(select Value from adm_globalpreferences with(nolock) where Name='DebtorsControlGroup')
 			else if(@CustomWhere like '%#CREDITORTEE#%')
-			BEGIN
-				select @SQL=Value from adm_globalpreferences with(nolock) where Name='CreditorsControlGroup'
-				INSERT INTO @TblList    
-				exec spsplitstring @SQL,','  
-				
-				set @SQL='(a.lft=1'
-				
-				select @SQL=@SQL+' or (a.lft between '+convert(nvarchar,lft)+' and '+convert(nvarchar,rgt)+')' 
-				from acc_accounts a with(nolock)
-				join @TblList b on a.AccountID=iUserID	
-							
-				set @SQL=@SQL+')'
-				
-				select @CustomWhere=replace(@CustomWhere,'#CREDITORTEE#',@SQL)
-			END	
-			else if(@CustomWhere like '%#COATEE#%')			
+				select @CustomWhere=replace(@CustomWhere,'#CREDITORTEE#','(a.lft=1 or a.lft between '+convert(nvarchar,lft)+' and '+convert(nvarchar,rgt)+')') from acc_accounts with(nolock)
+				where AccountID=(select Value from adm_globalpreferences with(nolock) where Name='CreditorsControlGroup')
+			else if(@CustomWhere like '%#COATEE#%')
 				set @CustomWhere=replace(@CustomWhere,'#COATEE#','(a.AccountTypeID!=6 and a.AccountTypeID!=7)')   
 		end 
   
 		if(@CostCenterID<>11)
-		begin
-			IF((@CostCenterID=92 OR @CostCenterID=93 OR @CostCenterID=94) and @CustomWhere='ContractEdit')
-			BEGIN
-				if(@CostCenterID=92)
-					SET @Where=' WHERE a.StatusID in (422,423) AND a.IsGroup = 0 and '
-				else if(@CostCenterID=93)
-					SET @Where=' WHERE a.Status in (424,425) AND a.IsGroup = 0 and '
-				else if(@CostCenterID=94)
-					SET @Where=' WHERE a.StatusID in (462,463) AND a.IsGroup = 0 and '
-			END
-			ELSE
-			BEGIN
-				set @Where=@Where+@CustomWhere+' and '      
-			END
-		end
+			set @Where=@Where+@CustomWhere+' and '      
 		else
 			set @Where=@Where+@CustomWhere
    END
@@ -321,7 +284,7 @@ SET NOCOUNT ON
 	end      
    --Prepare query      
 
-	if(@ExcludeFilter =0 and @DivisionWhere is not null and @DivisionWhere<>'' and not (@CostCenterID =2 and @TypeID in(6,7,8)) and @CostCenterID <>6 and @CostCenterID<>113)      
+	if(@ExcludeFilter =0 and @DivisionWhere is not null and @DivisionWhere<>'' and not (@CostCenterID =2 and @TypeID in(6,7,8)) and not (@CostCenterID =51 and @TypeID=2) and @CostCenterID <>6 and @CostCenterID <>61  and @CostCenterID <>59 and @CostCenterID<>113)      
 	begin      
 		if(@CostCenterID=50001)      
 			set @Where=@Where+' (a.'+ @Primarycol+' in ('+@DivisionWhere+'))  and '      
@@ -332,25 +295,24 @@ SET NOCOUNT ON
 			set @Join=@Join+' JOIN  COM_CostCenterCostCenterMap CCMD with(nolock) on a.'+ @Primarycol+' =CCMD.ParentNodeID and CCMD.ParentCostCenterID = '+convert(nvarchar,@CostCenterID)
 			set @Where=@Where+'  (CCMD.CostCenterID=50001 and CCMD.NodeID in('+@DivisionWhere+')) and '      
 		END 
-	end 
-	
-	
+	end    
        
 	if(@ExcludeFilter =0 and @LocationWhere is not null and @LocationWhere<>''
 	 and not (@CostCenterID=2 and @TypeID in(6,7,8) and not exists(select value from ADM_GlobalPreferences with(nolock) where Name='LWAccountGroups' and value='True')) 
-	 and @CostCenterID <>7 and @CostCenterID<>113)      
+	 and not (@CostCenterID =51 and @TypeID=2)
+	 and @CostCenterID <>7 and @CostCenterID <>61 and @CostCenterID <>59 and @CostCenterID<>113)      
 	begin   
 		if(@CostCenterID=50002)      
 			set @Where=@Where+' (a.'+ @Primarycol+' in ('+@LocationWhere+'))  and '     
 		else if(@CostCenterID=76)      
 			set @Where=@Where+' (a.LocationID in ('+@LocationWhere+'))  and '      
-		else if( @CostCenterID>50002)      
+		else if( @CostCenterID>50002 and @CostCenterID<50080)      
 		begin    
 			select @PrefValue=value from COM_CostCenterPreferences with(nolock) where CostCenterID=@CostCenterID and name='OverrideLocation'  
 			if(@PrefValue is null or @PrefValue<>'True')  
 			begin
 				set @Join=@Join+' left JOIN  COM_CostCenterCostCenterMap CCMl with(nolock) on (a.'+ @Primarycol+' =CCMl.ParentNodeID and CCMl.ParentCostCenterID = '+convert(nvarchar,@CostCenterID)+')'
-				set @Where=@Where+'  ((CCMl.CostCenterID=50002 and CCMl.NodeID in('+@LocationWhere+')) or CC.ccnid2 in('+@LocationWhere+')  OR a.ParentID =0 ) and '          
+				set @Where=@Where+'  ((CCMl.CostCenterID=50002 and CCMl.NodeID in('+@LocationWhere+'))  OR a.ParentID =0 ) and '          
 			end    
 		end  
 		else if(@CostCenterID=6)
@@ -372,11 +334,11 @@ SET NOCOUNT ON
 	end      
      
    -- Dimensions Wise Filter On User   
+     
 	declare @Dimensions nvarchar(max),@Did int ,@Dcnt int,@DimensionWhere nvarchar(50)  
 	set @Dimensions=(select value from @pref where name='Dimension List')  
 	
-	
-	delete from  @TblList
+	declare  @TblList TABLE (iUserID int)    
 	INSERT INTO @TblList    
 	exec spsplitstring @Dimensions,','  
 	
@@ -432,33 +394,34 @@ SET NOCOUNT ON
 		PropertyUserRoleMap.ROLEID='+convert(nvarchar,@RoleID)+') and '   
 	end 
 	  
-	 
-	if((@CostCenterID=2 or @CostCenterID=3) and @Dimensions is not null and @Dimensions<>'' and EXISTS(SELECT * FROM @TblList WHERE iUserID=@CostCenterID) and @UserID!=1)
+	if (@Dimensions is not null and @Dimensions<>'')
 	begin
-	
-		set @PrefValue=''
-		select @PrefValue=value from @pref where name='ExcludeUnMapped'
-		if (@PrefValue<>'true' or (@PrefValue='true'
-			and exists(select CostCenterID from COM_CostCenterCostCenterMap WITH(NOLOCK) where ParentCostCenterID=@CostCenterID and NodeID=@userid and CostCenterID=7)))
-		BEGIN
-			set @Where=@Where+'(a.Createdby in (SELECT USERNAME FROM ADM_USERS WITH(NOLOCK) WHERE USERID in
-			(select nodeid from dbo.COM_CostCenterCostCenterMap with(nolock) where 
-			Parentcostcenterid=7 and costcenterid=7 and ParentNodeid='+CONVERT(NVARCHAR(40),@UserID)+') or 
-			userid = '+CONVERT(NVARCHAR(40),@UserID)+') or A.'+ @Primarycol+'  IN (SELECT DISTINCT CA.'+@Primarycol+' FROM '+@Table+' CAA WITH(NOLOCK)
-JOIN '+@Table+' CA WITH(NOLOCK) ON CA.LFT BETWEEN CAA.LFT AND CAA.RGT
-JOIN ( 
-SELECT CCMU.ParentNodeID ID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU.ParentCostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+' and CCMU.CostCenterID=7 and CCMU.NodeID='+CONVERT(NVARCHAR,@UserID)+'
-UNION
-SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU.ParentCostCenterID = 7 and CCMU.CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+' and CCMU.ParentNodeID='+CONVERT(NVARCHAR,@UserID)+') AS T ON T.ID=CAA.'+@Primarycol+')'
-			
-			if @CostCenterID=2
-				set @Where=@Where+' or a.'+ @Primarycol+'=1'    
-
-			set @Where=@Where+') and '  
-			
-		END	
+		 
+		if((@CostCenterID=2 or @CostCenterID=3) and @Dimensions is not null and (EXISTS(SELECT * FROM @TblList WHERE iUserID=@CostCenterID)) and @UserID!=1)
+		begin
+			set @PrefValue=''
+			select @PrefValue=value from @pref where name='ExcludeUnMapped'
+			if (@PrefValue<>'true' or (@PrefValue='true'
+				and exists(select CostCenterID from COM_CostCenterCostCenterMap WITH(NOLOCK) where ParentCostCenterID=7 and ParentNodeID=@userid and CostCenterID=@CostCenterID)))
+			BEGIN
+				set @Where=@Where+'(a.Createdby in (SELECT USERNAME FROM ADM_USERS WITH(NOLOCK) WHERE USERID in
+				(select nodeid from dbo.COM_CostCenterCostCenterMap with(nolock) where 
+				Parentcostcenterid=7 and costcenterid=7 and ParentNodeid='+CONVERT(NVARCHAR(40),@UserID)+') or 
+				userid = '+CONVERT(NVARCHAR(40),@UserID)+') or '
+				
+				if @CostCenterID=2
+				begin
+					set @Where=@Where+' A.AccountID =CCMU.ParentNodeID or a.AccountID=1) and '  
+					set @Join=@Join+' LEFT JOIN  COM_CostCenterCostCenterMap CCMU with(nolock) on CCMU.ParentCostCenterID=2 and A.AccountID=CCMU.ParentNodeID and CCMU.CostCenterID=7 and CCMU.NodeID='+convert(nvarchar,@UserID)+' '   
+				end
+				else if @CostCenterID=3
+				begin 
+					set @Where=@Where+' A.ProductID =CCMU.ParentNodeID) and '  
+					set @Join=@Join+' LEFT JOIN  COM_CostCenterCostCenterMap CCMU with(nolock) on CCMU.ParentCostCenterID=3 and A.ProductID=CCMU.ParentNodeID and CCMU.CostCenterID=7 and CCMU.NodeID='+convert(nvarchar,@UserID)+' '   
+				end
+			END	
+		end
 	end
-	
    --  print @Join 
    -- Dimensions Wise Filter On User   
      
@@ -477,44 +440,12 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 	select @Dimensions=isnull(value,'') from @pref where name='HideInactiveDimensions'  
 	
 	delete from @TblList
-	--COM_CostCenterStatusMap
-	IF EXISTS(select NodeID from [COM_CostCenterStatusMap] with(nolock) where CostCenterID=@CostCenterID)
+	INSERT INTO @TblList    
+	exec spsplitstring @Dimensions,','  
+	if EXISTS(SELECT * FROM @TblList WHERE iUserID=@CostCenterID) and @userid!=1
 	BEGIN
-		IF (@CostCenterID=2 OR @CostCenterID=3 OR @CostCenterID=7 OR @CostCenterID>50000)
-		BEGIN
-			SET @Join=@Join+' LEFT JOIN   COM_CostCenterStatusMap CCSMP WITH(NOLOCK) ON '
-			
-			IF (@CostCenterID=2)
-				SET @Join=@Join+' CCSMP.NODEID=A.AccountID '
-			ELSE IF (@CostCenterID=3)
-				SET @Join=@Join+' CCSMP.NODEID=A.ProductID '
-			ELSE IF (@CostCenterID=7)
-				SET @Join=@Join+' CCSMP.NODEID=A.UserID '			
-			ELSE
-				SET @Join=@Join+' CCSMP.NODEID=A.NODEID '			
-				
-			SET @Join=@Join+' AND CCSMP.CostCenterID='+ CONVERT(VARCHAR,@CostCenterID) +' and CCSMP.status=2 
-							   AND ((Convert(DateTime,getdate()) between Convert(DateTime,CCSMP.FromDate) and Convert(DateTime,CCSMP.ToDate))
-									 OR ( isnull(CCSMP.ToDate,'''')='''' AND Convert(DateTime,getdate()) >= Convert(DateTime,CCSMP.FromDate)) 
-								   ) '	
-			SET @Where=@Where+' CCSMP.NODEID IS NULL AND '
-		END
-	END
-	ELSE
-	BEGIN
-		INSERT INTO @TblList    
-			exec spsplitstring @Dimensions,',' 
-	END
-	--INSERT INTO @TblList    
-	--exec spsplitstring @Dimensions,',' 
-	
-	if EXISTS(SELECT * FROM @TblList WHERE iUserID=@CostCenterID) and @userid!=1 
-	BEGIN
-		select @RestrictionWhere=StatusID from COM_Status WITH(NOLOCK) where CostCenterID=@CostCenterID and Status='In Active'			
-		if(@CostCenterID=93)
-			set @Where=@Where+' a.status<>'+@RestrictionWhere+' and '  
-		else
-			set @Where=@Where+' a.statusid<>'+@RestrictionWhere+' and '  	
+		select @RestrictionWhere=StatusID from COM_Status WITH(NOLOCK) where CostCenterID=@CostCenterID and Status='In Active'
+		set @Where=@Where+' statusid<>'+@RestrictionWhere+' and '  
 	END
 	
 	IF @CostCenterID>50000
@@ -530,8 +461,8 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 				set @Join=@Join+' join inv_product INVP with(nolock) on INVP.productid='+convert(nvarchar,@ProductID)+' 
 				join COM_CCCCData INVCC with(nolock) on INVP.productid=INVCC.NODEID and INVCC.CostCenterID=3 and INVCC.CCNID'+convert(nvarchar,(@CostCenterID-50000))+' =a.NODEID  and INVCC.CCNID'+convert(nvarchar,(@CostCenterID-50000))+' <>1 '
 		end 
-		
-		SET @SQL='select distinct  convert(BIGINT,a.'+ @Primarycol+') '+@Primarycol+','+@Columns
+
+		SET @SQL='select distinct a.'+ @Primarycol+','+@Columns
 		if exists(select value from @pref where name='ListBoxIgnoreSpace' and value='true')
 			SET @SQL=@SQL+',replace('+@SearchOn + ','' '','''')'
 		
@@ -579,10 +510,34 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 			SET @SQL=@SQL+' ORDER BY '+@SearchOn + '  '+ @OrderBY  	
 			
 		if(@RowCount<>3 and @SelectedValue is not null and @SelectedValue<>'')   
-			set @SQL=@SQL+','+@Primarycol 
+			set @SQL=@SQL+',a.'+@Primarycol 
 	
 	END   
-	
+	else if(@CostCenterID=61)  
+	BEGIN  
+		SET @SQL='select * from (select a.vehicleID,a.Make+''-''+a.MOdel+''-''+a.Variant+''-''++''(''+convert(nvarchar,a.startYear)+''-''+  
+		case when (a.EndYear= ''0'') then convert(nvarchar, Datepart(YEAR,GETDATE()))+'')'' else convert(nvarchar,a.endYear)+'')'' end Vehicle   
+		from SVC_Vehicle a WITH(NOLOCK)'
+		if(@ProductID>0)  
+			SET @SQL=@SQL+ ' join SVC_ProductVehicle PV with(nolock) on a.VehicleID=PV.VehicleID and PV.ProductID='+convert(nvarchar,@ProductID)  
+		SET @SQL=@SQL+') as tt'  
+		if(@RowCount=3 or (@SelectedValue is not null and @SelectedValue <> '' and @SelectedValue<>'0') or @SearchOption=1 )  
+			SET @SQL=@SQL+' WHERE lower(Vehicle) '+ @lessthan + ''''+@SearchValue+''''  
+		else  
+			SET @SQL=@SQL+' WHERE Vehicle like N'+ '''%'+@SearchValue+'%'''  
+		SET @SQL=@SQL+' ORDER BY  Vehicle '      
+	END  
+   else if (@CostCenterID=59 and @ListViewID=510)  
+   BEGIN  
+		--select @CustomWhere  
+		SET @SQL=' SELECT  a.ServiceTicketID, a.ServiceTicketNumber, C.PLATENUMBER as CustomerVehicleID, a.LOCATIONID FROM   
+		SVC_SERVICETICKET a with(nolock) LEFT JOIN SVC_CUSTOMERSVEHICLE C with(nolock)
+		ON a.CUSTOMERVEHICLEID=C.CV_ID ' +@Where+' servicetickettypeid=2  and '+' lower('+@SearchOn+') '+ @lessthan + ''''+@SearchValue+''''  
+		if(@RowCount<>3 and @IsMoveUp <> 1)  
+			SET @SQL=@SQL+' union SELECT 0 as ServiceTicketID,''All'' as ServiceTicketNumber, ''All'' as CustomerVehicleID, 0 AS LOCATIONID order by 
+			a.ServiceTicketNumber'  
+  -- PRINT @SQL
+	END  
 	ELSE if(@CostCenterID=400 and @TypeID=2)  
 	begin
 		set @Join=''
@@ -594,16 +549,12 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 			if (@DivisionWhere is not null and @DivisionWhere!='')
 				set @Where=@Where+' dcc.dcCCNID1 IN ('+@DivisionWhere+') and '
 		end
-		SET @SQL=' SELECT distinct VoucherNo,convert(bigint,DocID) DocID FROM INV_DocDetails a WITH(NOLOCK)'+@Join+@Where
+		SET @SQL=' SELECT distinct VoucherNo,DocID FROM INV_DocDetails a WITH(NOLOCK)'+@Join+@Where
 		if(@RowCount!=3)
 			SET @SQL=@SQL+@SearchOn+ ' like ''%'+@SearchValue+'%'''  
 		else
 			SET @SQL=@SQL+' lower('+@SearchOn+') '+ @lessthan + ''''+@SearchValue+''''  
-		SET @SQL=@SQL+' ORDER BY '+@SearchOn 
-		if(@OrderBY<>'')
-			SET @SQL=@SQL+' '+@OrderBY
-		else
-			SET @SQL=@SQL+' asc'
+		SET @SQL=@SQL+' ORDER BY '+@SearchOn + '  asc'
 		print(@SQL)
 	end
 	ELSE if(@CostCenterID=40064 and @TypeID=1)  
@@ -617,7 +568,7 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 			if (@DivisionWhere is not null and @DivisionWhere!='')
 				set @Where=@Where+' dcc.dcCCNID1 IN ('+@DivisionWhere+') and '
 		end
-		set @Join=@Join+' inner join COM_DocTextData e with(nolock) on e.InvDocDetailsID=a.InvDocDetailsID '
+		set @Join=' inner join COM_DocTextData e with(nolock) on e.InvDocDetailsID=a.InvDocDetailsID '
 		
 		SET @SQL=' SELECT distinct '+@Columns+',DocID FROM INV_DocDetails a WITH(NOLOCK)'+@Join+@Where
 		if(@RowCount!=3)
@@ -669,22 +620,22 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 			SET @SQL='select *,'+@CalcColumns+' from (select '
 
 			if(@RowCount>0)
-				SET @SQL=@SQL+'distinct top '+CONVERT(nvarchar,@RowCount)+' convert(BIGINT,a.'+ @Primarycol+') '+@Primarycol+','+@Columns 		
+				SET @SQL=@SQL+'distinct top '+CONVERT(nvarchar,@RowCount)+' a.'+ @Primarycol+','+@Columns 		
 			else
 				SET @SQL=@SQL+' a.'+ @Primarycol+','+@Columns 		
 		END	
 		else
 		begin
 			if @CostCenterID in (6,113,503,502)
-				SET @SQL='select distinct convert(BIGINT,a.'+ @Primarycol+') '+@Primarycol+','+@Columns   
+				SET @SQL='select distinct convert(bigint,a.'+ @Primarycol+') '+@Primarycol+','+@Columns   
 			else if @CostCenterID=200 and @RowCount>0
-				SET @SQL='select distinct top '+CONVERT(nvarchar,@RowCount)+' convert(BIGINT,a.'+ @Primarycol+') '+@Primarycol+',a.StaticReportType,a.ParentID,'+@Columns   
+				SET @SQL='select distinct top '+CONVERT(nvarchar,@RowCount)+' a.'+ @Primarycol+',a.StaticReportType,a.ParentID,'+@Columns   
 			else
-				SET @SQL='select distinct convert(BIGINT,a.'+ @Primarycol+') '+@Primarycol+','+@Columns   
+				SET @SQL='select distinct a.'+ @Primarycol+','+@Columns   
 		end
 
 		if(@CostCenterID=113)  
-			SET @SQL='select  convert(BIGINT,a.'+ @Primarycol+') as NodeID,'+@Columns  
+			SET @SQL='select  convert(bigint,a.'+ @Primarycol+') as NodeID,'+@Columns  
 		
 		if(@CostCenterID=3)
 		begin
@@ -697,25 +648,10 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 		
 		SET @SQL=@SQL+' from '+@Table +' a WITH(NOLOCK) '
 
-		if(@CostCenterID=3) 
-		BEGIN 
-			if(@FilterQOH=1)
-			BEGIN
-				SET @SQL=' declare @tab table(Pid int)
-					insert into @tab
-					SELECT ProductID 
-					FROM INV_DocDetails i  WITH(NOLOCK) 
-					join COM_DocCCData d  WITH(NOLOCK) on i.InvDocDetailsID=d.InvDocDetailsID 
-					where IsQtyIgnored=0 and ' + @QtyWhere + ' i.StatusID in(371,441,369)  and docdate<=floor(convert(float,getdate()))
-					group by ProductID
-					having round(isnull(sum(UOMConvertedQty*case when vouchertype=1 and statusid in(371,441) then 0 else  VoucherType end),0),2)>0.01
-					
-				'+@SQL+' join @tab BQ on a.ProductID=BQ.Pid '
-			END
+		if(@CostCenterID=3)  
 			SET @SQL=@SQL+' LEft JOIN INV_ProductExtended E  WITH(NOLOCK) on  E.ProductID=a.ProductID 
 							left join COM_Files f WITH(NOLOCK) on FeaturePK=a.ProductID and FeatureID=3 and IsDefaultImage=1  
 							LEft JOIN COM_UOM U  WITH(NOLOCK) on  a.UOMID=U.UOMID '  
-		END					
 		Else if(@CostCenterID=2)  
 			SET @SQL=@SQL+' LEft JOIN ACC_AccountsExtended E  WITH(NOLOCK) on  E.AccountID=a.AccountID '
 		ELSE IF(@CostCenterID=92)      
@@ -725,9 +661,9 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 		ELSE IF(@CostCenterID=94)      
 			SET @SQL=@SQL+' LEft JOIN ren_TenantExtended E  WITH(NOLOCK) on  E.TenantID=a.TenantID '	 
     		
-		if(@CostCenterID in(2,3,16) or (@Join<>'' and @CostCenterID in(92,93,94,95)))
+		if(@CostCenterID in(2,3,16))
 			SET @SQL=@SQL+' LEFT JOIN COM_CCCCData CC with(nolock) ON CC.COSTCENTERID='+CONVERT(NVARCHAR,@CostCenterID)+' AND CC.NODEID=a.'+@Primarycol+@Join       
-			
+	
 		if(@CostCenterID=7)
 		begin
 			if @UserID!=1
@@ -748,8 +684,8 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 		end
 		else if(@CostCenterID=200 and @RoleID!=1 and @UserID!=1)
 		begin 
-			SET @SQL='DECLARE @UserID INT,@RoleID INT
-	declare @TblRID as table(RID INT)
+			SET @SQL='DECLARE @UserID BIGINT,@RoleID BIGINT
+	declare @TblRID as table(RID bigint)
 	SET @UserID='+CONVERT(NVARCHAR,@UserID)+'              
 	SELECT @RoleID='+CONVERT(NVARCHAR,@RoleID)+'
 
@@ -791,10 +727,6 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 		
 		
 		SET @SQL=@SQL+ @Where 
-		
-		IF(@CostCenterID=6 AND @RoleID!=1)
-			SET @SQL=@SQL+' Name<>''ADMIN'' AND '
-			
 		if(@RowCount=3 and @SearchOldValue=1 and @SelectedValue is not null and @SelectedValue <> '' and @SelectedValue<>'0' and exists(select value from @pref where name='ListBoxIgnoreSpace' and value='true'))  
 			SET @SQL=@SQL+' replace('+@SearchOn+','' '','''') like '+  'replace(N''%'+@SearchValue+'%'','' '','''')  escape ''\'' ' 
 		else if(@RowCount=3 and @SearchOldValue=1 and @SelectedValue is not null and @SelectedValue <> '' and @SelectedValue<>'0')  
@@ -867,12 +799,7 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 				and not (@SelectedValue is not null and @SelectedValue<>''))
 				SET @SQL=@SQL+' ORDER BY replace('+@SearchOn + ','' '','''')  '+ @OrderBY 
 			else if (@CostCenterID<>11 and @SelectedValue is not null and @SelectedValue <> '' and @SelectedValue<>'0' and (@ignoreSpecial=1 or @ignoreSpecial=2))
-			begin		
-				if(@ignoreSpecial=1 or @ignoreSpecial=2)
-					SET @SQL=@SQL+' ORDER BY '+@SearchOn + ' , '+@Primarycol + '  '+ @OrderBY      
-				else	
-					SET @SQL=@SQL+' ORDER BY '+@Primarycol + '  '+ @OrderBY      
-			end
+				 SET @SQL=@SQL+' ORDER BY a.'+@Primarycol + '  '+ @OrderBY      
 			else   
 				SET @SQL=@SQL+' ORDER BY '+@SearchOn + '  '+ @OrderBY      
 		END		
@@ -883,10 +810,9 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
    
     if(@CalcColumns<>'' and (@CostCenterID=2 or @CostCenterID=3))	
 		SET @SQL=@SQL+' ) as a ORDER BY '+replace(@SearchOn,'e.','') + '  '+ @OrderBY   
-   --Execute statement  
-   
-   print @SQL    
-   Exec sp_executesql @SQL    
+   --Execute statement    
+ print @SQL  
+   Exec(@SQL)      
       
 	if(@RowCount<>3 and exists(select Value from @pref where name='ListBoxCount' and Value='true'))
 	BEGIN
@@ -908,12 +834,12 @@ SELECT CCMU.NodeID FROM COM_CostCenterCostCenterMap CCMU with(nolock) WHERE CCMU
 		BEGIN
 			select @i=Charindex('ORDER BY',@SQL,0)
 			select @SQL=SUBSTRING(@SQL,0,@i)
-			set @SQL=' select count(*) cnt from ('+@SQL+' ) as t'    
+			set @SQL='select count(*) cnt from ('+@SQL+' ) as t'    
 		END	
 		print @SQL 
 		
 		BEGIN TRY  
-			Exec sp_executesql @SQL      
+			Exec(@SQL)      
 		END TRY      
 		BEGIN CATCH  	
 			SELECT 0
@@ -954,6 +880,5 @@ BEGIN CATCH
 
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH
-
+END CATCH       
 GO

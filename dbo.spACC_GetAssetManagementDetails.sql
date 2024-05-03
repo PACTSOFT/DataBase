@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_GetAssetManagementDetails]
-	@AssetManagementID [int] = 0,
-	@UserID [int],
+	@AssetManagementID [bigint] = 0,
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -108,7 +108,7 @@ SET NOCOUNT ON
     --Asset Location Name
 	if @AssetManagementID!=0
 	begin
-		declare @AssLocation INT,@AssEmp INT,@AssetLoc nvarchar(200),@AssetOwner nvarchar(200)
+		declare @AssLocation bigint,@AssEmp bigint,@AssetLoc nvarchar(200),@AssetOwner nvarchar(200)
 		select @AssLocation=LocationID,@AssEmp=EmployeeID from ACC_Assets with(nolock) where AssetID=@AssetManagementID 
 		if @AssetLocDim!='' and @AssetLocDim is not null
 		begin
@@ -130,7 +130,7 @@ SET NOCOUNT ON
    
    -- select A.*,convert(datetime,A.ChangeDate) as Date,L.Name as Location  from ACC_AssetChanges A,COM_Location L where A.AssetID=@AssetManagementID and convert(nvarchar(50),A.LocationID)=L.Code    
       
-	select A.*,convert(datetime,A.ChangeDate) as Date,convert(datetime,A.CreatedDate) as CreatedDt  from ACC_AssetChanges A with(nolock) 
+	select A.*,convert(datetime,A.ChangeDate) as Date  from ACC_AssetChanges A with(nolock) 
 	where A.AssetID=@AssetManagementID order by A.ChangeDate
       
 	if @AssetManagementID!=0 and @AssetLocDim is not null and @AssetLocDim!=''
@@ -206,7 +206,7 @@ SET NOCOUNT ON
 	WHERE FeatureID=72 and  FeaturePK=@AssetManagementID  
 
 	--Getting Files  
-	SELECT CONVERT(DATETIME,CreatedDate) CreatedDate,* FROM  COM_Files WITH(NOLOCK)   
+	SELECT * FROM  COM_Files WITH(NOLOCK)   
 	WHERE FeatureID=72 and  FeaturePK=@AssetManagementID  
 
 	--Extra Fields  
@@ -233,5 +233,5 @@ BEGIN CATCH
  END    
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH
+END CATCH      
 GO

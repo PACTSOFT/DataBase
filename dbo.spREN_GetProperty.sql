@@ -3,22 +3,16 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_GetProperty]
-	@PropertyID [int] = 0,
+	@PropertyID [bigint] = 0,
 	@ContractType [int] = 0,
-	@UserID [int],
-	@RoleID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION        
 BEGIN TRY         
 SET NOCOUNT ON        
-    
-   	declare @dimCid int,@table nvarchar(50)
-	set @dimCid=0
-	select @dimCid=Value from COM_CostCenterPreferences WITH(NOLOCK)
-	where Name='DimensionWiseContract' and costcenterid=95 and Value is not null and Value<>'' and ISNUMERIC(value)=1
-     
+        
           
 	select * from REN_Property WITH(NOLOCK) where IsGroup=1        
 	    
@@ -50,34 +44,21 @@ SET NOCOUNT ON
 		
 		if exists(select * from adm_globalpreferences
 			where name ='VATVersion')
-			SET @DATA=@DATA+',Tx.Name TaxCategory,SPT.Name SPTypeName'
+			SET @DATA=@DATA+',Tx.Name TaxCategory'
 		else
-			SET @DATA=@DATA+','''' TaxCategory,'''' SPTypeName'
-		
-		if (@dimCid>50000)
-			set @DATA=@DATA+' ,Dim.Name Dimname'
-		ELSE
-			set @DATA=@DATA+' ,'''' Dimname'	
+			SET @DATA=@DATA+','''' TaxCategory'
 			
-		SET @DATA=@DATA+',Bnk.ACCOUNTNAME BankAccount,A.ACCOUNTNAME A,B.ACCOUNTNAME B,Ad.ACCOUNTNAME AdvanceAccountName,'+@T1+'.NAME from REN_Particulars WITH(NOLOCK)        
+		SET @DATA=@DATA+',A.ACCOUNTNAME A,B.ACCOUNTNAME B,Ad.ACCOUNTNAME AdvanceAccountName,'+@T1+'.NAME from REN_Particulars WITH(NOLOCK)        
 		LEFT JOIN ACC_ACCOUNTS A WITH(NOLOCK) ON A.AccountID=REN_Particulars.CreditAccountID        
-		LEFT JOIN ACC_ACCOUNTS B WITH(NOLOCK) ON B.AccountID=REN_Particulars.DebitAccountID
-		LEFT JOIN ACC_ACCOUNTS Bnk WITH(NOLOCK) ON Bnk.AccountID=REN_Particulars.BankAccountID        
+		LEFT JOIN ACC_ACCOUNTS B WITH(NOLOCK) ON B.AccountID=REN_Particulars.DebitAccountID        
 		LEFT JOIN ACC_ACCOUNTS Ad WITH(NOLOCK) ON Ad.AccountID=REN_Particulars.AdvanceAccountID'
 		
-		if (@dimCid>50000)
-		BEGIN
-			select @table=tablename from adm_features with(NOLOCK) where featureid=@dimCid
-			set @DATA=@DATA+' LEFT JOIN '+@table+' Dim WITH(NOLOCK) ON Dim.NodeID=REN_Particulars.DimNodeID '			
-		END
-
 		if exists(select * from adm_globalpreferences
 			where name ='VATVersion')	 
-			SET @DATA=@DATA+' LEFT JOIN COM_CC50060 Tx WITH(NOLOCK) ON Tx.NodeID=REN_Particulars.TaxCategoryID   LEFT JOIN COM_CC50061 SPT WITH(NOLOCK) ON SPT.NodeID=REN_Particulars.SPType      '
+			SET @DATA=@DATA+' LEFT JOIN COM_CC50060 Tx WITH(NOLOCK) ON Tx.NodeID=REN_Particulars.TaxCategoryID        '
 		
 		SET @DATA=@DATA+' LEFT JOIN '+@T1+' ON '+@T1+'.NodeID=REN_Particulars.ParticularID        
-		where PropertyID='+CONVERT(VARCHAR,@PropertyID)+' and Unitid= 0 ' 
-		SET  @DATA = @DATA + ' order by '+@T1+'.Code'	        
+		where PropertyID='+CONVERT(VARCHAR,@PropertyID)+' and Unitid= 0 '     
 	END 
 	ELSE
 	BEGIN
@@ -86,23 +67,21 @@ SET NOCOUNT ON
 		
 		if exists(select * from adm_globalpreferences
 			where name ='VATVersion')
-			SET @DATA=@DATA+',Tx.Name TaxCategory,SPT.Name SPTypeName'
+			SET @DATA=@DATA+',Tx.Name TaxCategory'
 		else
-			SET @DATA=@DATA+','''' TaxCategory,'''' SPTypeName'
+			SET @DATA=@DATA+','''' TaxCategory'
 			
-		SET @DATA=@DATA+',Bnk.ACCOUNTNAME BankAccount,A.ACCOUNTNAME A,B.ACCOUNTNAME B,Ad.ACCOUNTNAME AdvanceAccountName,'+@T1+'.NAME from REN_Particulars WITH(NOLOCK)        
+		SET @DATA=@DATA+',A.ACCOUNTNAME A,B.ACCOUNTNAME B,Ad.ACCOUNTNAME AdvanceAccountName,'+@T1+'.NAME from REN_Particulars WITH(NOLOCK)        
 		LEFT JOIN ACC_ACCOUNTS A WITH(NOLOCK) ON A.AccountID=REN_Particulars.CreditAccountID        
 		LEFT JOIN ACC_ACCOUNTS B WITH(NOLOCK) ON B.AccountID=REN_Particulars.DebitAccountID
-		LEFT JOIN ACC_ACCOUNTS Bnk WITH(NOLOCK) ON Bnk.AccountID=REN_Particulars.BankAccountID        
 		LEFT JOIN ACC_ACCOUNTS Ad WITH(NOLOCK) ON Ad.AccountID=REN_Particulars.AdvanceAccountID'
 		
 		if exists(select * from adm_globalpreferences
 			where name ='VATVersion')	 
-			SET @DATA=@DATA+' LEFT JOIN COM_CC50060 Tx WITH(NOLOCK) ON Tx.NodeID=REN_Particulars.TaxCategoryID  LEFT JOIN COM_CC50061 SPT WITH(NOLOCK) ON SPT.NodeID=REN_Particulars.SPType      '
+			SET @DATA=@DATA+' LEFT JOIN COM_CC50060 Tx WITH(NOLOCK) ON Tx.NodeID=REN_Particulars.TaxCategoryID        '
 		
 		SET @DATA=@DATA+' LEFT JOIN '+@T1+' ON '+@T1+'.NodeID=REN_Particulars.ParticularID        
 		where PropertyID='+CONVERT(VARCHAR,@PropertyID)+' and Unitid= 0  AND ContractType = ' +CONVERT(VARCHAR,@ContractType)   
-		SET  @DATA = @DATA + ' order by '+@T1+'.Code'	    
 	END
 	print @DATA
 	EXEC (@DATA)        
@@ -134,19 +113,15 @@ SET NOCOUNT ON
 	    
 	exec (@Sql)      
 	  
-	SELECT * FROM COM_Notes WITH(NOLOCK)   
-	WHERE FeatureID = 92 AND FeaturePK  = @PropertyID
-	
-	EXEC [spCOM_GetAttachments] 92,@PropertyID,@UserID
-	
+	SELECT NodeID  FROM COM_LOOKUP WITH(NOLOCK)   
+	WHERE LOOKUPTYPE = 46 AND NAME  = 'Normal'    
+		   --Getting Files
+	SELECT * FROM  COM_Files WITH(NOLOCK) 
+	WHERE FeatureID=92 and  FeaturePK=@PropertyID
+
 	select sh.*,a.AccountName from  REN_PropertyShareHolder sh WITH(NOLOCK)
 	left join ACC_Accounts a with(nolock) on sh.account=a.AccountID
 	where propertyid=@PropertyID
-	
-	--WorkFlow
-	EXEC spCOM_CheckCostCentetWFApprove 92,@PropertyID,@UserID,@RoleID
-	
-	
 	
 COMMIT TRANSACTION        
 SET NOCOUNT OFF;        
@@ -168,5 +143,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION        
 SET NOCOUNT OFF          
 RETURN -999           
-END CATCH
+END CATCH     
 GO

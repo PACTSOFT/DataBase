@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetDimensionTabGridData]
-	@CCID [int] = 0,
-	@ChildCCID [int] = 0,
-	@UserID [int],
+	@CCID [bigint] = 0,
+	@ChildCCID [bigint] = 0,
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -20,15 +20,15 @@ SET NOCOUNT ON
   ORDER BY Name  
 
 	CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),ResourceData nvarchar(300),SysColumnName nvarchar(300),
-	Width nvarchar(300),Visible bit, GridOrder int, ColumnCostCenterID INT, UserColumnType nvarchar(100),LocalReference nvarchar(100))
+	Width nvarchar(300),Visible bit, GridOrder int, ColumnCostCenterID bigint)
 
 			    insert into #TBLTEMP
-			    SELECT  R.ResourceData,C.SysColumnName,0,0, ISNULL(c.sectionseqnumber,0),c.ColumnCostCenterID, c.UserColumnType,c.LocalReference
+			    SELECT  R.ResourceData,C.SysColumnName,0,0, ISNULL(c.sectionseqnumber,0),c.ColumnCostCenterID
 	        	FROM ADM_CostCenterDef C WITH(NOLOCK)
 	        	LEFT JOIN COM_LanguageResources R ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
 	        	WHERE C.CostCenterID=@ChildCCID AND C.IsColumnInUse=1 AND C.ISCOLUMNDELETED=0	        	
 				and CostCenterColID not in (27176,27169,27178,26946,24376,50522)
-			  DECLARE @COUNT INT,@I INT,@SYSCOLUMN NVARCHAR(300),@WIDTH NVARCHAR(300),@VISIBLE BIT , @GOrder int, @ColumnCostCenterID INT
+			  DECLARE @COUNT INT,@I INT,@SYSCOLUMN NVARCHAR(300),@WIDTH NVARCHAR(300),@VISIBLE BIT , @GOrder int, @ColumnCostCenterID bigint
 			  SELECT @COUNT=COUNT(*) FROM #TBLTEMP
 			  SET @I=1 
 			  WHILE @I<=@COUNT
@@ -46,30 +46,15 @@ SET NOCOUNT ON
 			 SELECT * FROM #TBLTEMP order by GridOrder
 			 DROP TABLE #TBLTEMP
 			   
-			   if @ChildCCID =144
-			   begin 
-			   SELECT TG.SYSCOLUMNNAME,LR.ResourceData USERCOLUMNNAME,TG.WIDTH, TG.GRIDORDER,TG.ParentCostCenter FROM COM_TabGridCustomize TG WITH(NOLOCK) 			 
-			 JOIN ADM_CostCenterDef CD WITH(NOLOCK) ON CD.CostCenterID=TG.ChildCostCenter AND CD.SysColumnName=TG.SysColumnName and CD.LocalReference = TG.ParentCostCenter
-			 LEFT JOIN COM_LanguageResources LR WITH(NOLOCK) ON LR.ResourceID=CD.ResourceID AND LR.LanguageID=@LangID
-			 WHERE TG.ParentCostCenter=@CCID	
-			 AND TG.ChildCostCenter=@ChildCCID
-			 AND TG.VISIBLE=1 ORDER BY TG.GRIDORDER
-			   end
-			   else
-			   begin
-			 SELECT TG.SYSCOLUMNNAME,LR.ResourceData USERCOLUMNNAME,TG.WIDTH, TG.GRIDORDER,TG.ParentCostCenter FROM COM_TabGridCustomize TG WITH(NOLOCK) 			 
-			 JOIN ADM_CostCenterDef CD WITH(NOLOCK) ON CD.CostCenterID=TG.ChildCostCenter AND CD.SysColumnName=TG.SysColumnName
-			 LEFT JOIN COM_LanguageResources LR WITH(NOLOCK) ON LR.ResourceID=CD.ResourceID AND LR.LanguageID=@LangID
-			 WHERE TG.ParentCostCenter=@CCID	
-			 AND TG.ChildCostCenter=@ChildCCID
-			 AND TG.VISIBLE=1 ORDER BY TG.GRIDORDER
-			 end
+			 SELECT SYSCOLUMNNAME,USERCOLUMNNAME,WIDTH, GRIDORDER FROM COM_TabGridCustomize WITH(NOLOCK) WHERE ParentCostCenter=@CCID	
+			 AND ChildCostCenter=@ChildCCID
+			 AND VISIBLE=1 ORDER BY GRIDORDER
    
 			SELECT  R.ResourceData,C.SysColumnName,0,0, ISNULL(c.sectionseqnumber,0),c.UserColumnType,
 			c.ColumnCostCenterID, C.ParentCostCenterID
         	FROM ADM_CostCenterDef C WITH(NOLOCK)
         	LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=1
-        	join COM_TabGridCustomize t WITH(NOLOCK) on c.SysColumnName=t.SysColumnName and ChildCostCenter=@ChildCCID and ParentCostCenter=@CCID
+        	  join COM_TabGridCustomize t WITH(NOLOCK) on c.SysColumnName=t.SysColumnName and ChildCostCenter=@ChildCCID and ParentCostCenter=@CCID
         	WHERE C.CostCenterID=@ChildCCID
 	 
 		  

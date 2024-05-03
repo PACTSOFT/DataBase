@@ -12,9 +12,9 @@ SET NOCOUNT ON;
      
      
   --Getting  UserName.          
- SELECT  AUSR.UserName FROM [PACT2C].[dbo].[ADM_USERS] AUSR WITH(NOLOCK)   
- LEFT JOIN [ADM_USERS] USR WITH(NOLOCK) ON AUSR.UserName collate database_default = USR.UserName collate database_default  
-WHERE  AUSR.UserName collate database_default = @UserName collate database_default and IsUserDeleted=0
+ SELECT  AUSR.UserName FROM [PACT2C].[dbo].[ADM_USERS] AUSR   
+ LEFT JOIN [ADM_USERS] USR ON AUSR.UserName = USR.UserName  
+WHERE  AUSR.UserName = @UserName and IsUserDeleted=0
          
            
 COMMIT TRANSACTION         

@@ -11,7 +11,7 @@ WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN
 
-declare @PDays INT,@dt1 DateTime,@dt2 DateTime
+declare @PDays BIGINT,@dt1 DateTime,@dt2 DateTime
 SELECT @PDays=ISNULL(Value,'') From ADM_GlobalPreferences WITH(NOLOCK) Where Name='ProcessPayrollbeforeCalanderdays'
 
 IF(ISNULL(@PDays,0)>0)
@@ -35,7 +35,7 @@ END
 ELSE
 BEGIN
 
-              DECLARE  @dt DateTime ,@PayDay INT,@DinM INT,@iTemp INT
+              DECLARE  @dt DateTime ,@PayDay BIGINT,@DinM INT,@iTemp INT
 			  SELECT @PayDay=ISNULL(Value,'') From ADM_GlobalPreferences WITH(NOLOCK) Where Name='PayDayStart'
                 
 
@@ -95,4 +95,6 @@ BEGIN
 END
 
 END
+  
+        
 GO

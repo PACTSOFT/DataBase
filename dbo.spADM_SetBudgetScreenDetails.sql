@@ -9,12 +9,12 @@ CREATE PROCEDURE [dbo].[spADM_SetBudgetScreenDetails]
 	@RelationsXML [nvarchar](max) = null,
 	@BudgetYear [datetime],
 	@BudgetName [nvarchar](50) = null,
-	@BudgetTypeID [int] = 0,
+	@BudgetTypeID [bigint] = 0,
 	@BudgetTypeName [nvarchar](50) = null,
-	@StatusID [int],
+	@StatusID [bigint],
 	@IsQtyBudget [int],
-	@BudgetID [int] = 0,
-	@SelectedNodeID [int] = 0,
+	@BudgetID [bigint] = 0,
+	@SelectedNodeID [bigint] = 0,
 	@IsGroup [bit],
 	@QtyType [int],
 	@ChkBudgetOnlyForDefnAccounts [bit],
@@ -25,7 +25,7 @@ CREATE PROCEDURE [dbo].[spADM_SetBudgetScreenDetails]
 	@AccountTypes [nvarchar](max) = null,
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -33,9 +33,11 @@ BEGIN TRANSACTION
 BEGIN TRY
 SET NOCOUNT ON;  
 	
-	declare @XML xml,@DT float
-	DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT  
-	DECLARE @SelectedIsGroup bit,@SQL nvarchar(max)
+	declare @I int,@Count int,@XML xml,@BudgetCCXML xml,@DT float,@GUID nvarchar(max),@budgetAlloc int
+	declare @CurrencyID int,@ExchangeRate float,@Budget nvarchar(50),@Y1 float,@H1 float,@H2 float,@Q1 float,@Q2 float,@Q3 float,@Q4 float,
+        	@M1 float,@M2 float,@M3 float,@M4 float,@M5 float,@M6 float,@M7 float,@M8 float,@M9 float,@M10 float,@M11 float,@M12 float,@Sno INT,@CF NVARCHAR(10)
+	DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint  
+	DECLARE @SelectedIsGroup bit
 	
 	IF @BudgetID=0  
     BEGIN  
@@ -140,33 +142,30 @@ SET NOCOUNT ON;
 
 			set @XML=@BudgetXML
 			
-			set @SQL='INSERT INTO COM_BudgetAlloc(BudgetDefID,CurrencyID,ExchangeRT,AnnualAmount,YearH1Amount,YearH2Amount,Qtr1Amount,Qtr2Amount,Qtr3Amount,Qtr4Amount,
+			INSERT INTO COM_BudgetAlloc(BudgetDefID,CurrencyID,ExchangeRT,AnnualAmount,YearH1Amount,YearH2Amount,Qtr1Amount,Qtr2Amount,Qtr3Amount,Qtr4Amount,
 				Month1Amount,Month2Amount,Month3Amount,Month4Amount,Month5Amount,Month6Amount,Month7Amount,Month8Amount,Month9Amount,Month10Amount,Month11Amount,Month12Amount,RowID,CF,CompanyGUID,GUID,CreatedBy,CreatedDate,
 				AccountID,ProductID,Rate,
-				dcNumField1,dcNumField2,dcNumField3,dcNumField4,dcNumField5'
-			
-			select @SQL=@SQL+',['+name+']' 
-			from sys.columns 
-			where object_id=object_id('COM_BudgetAlloc') and name LIKE 'ccnid%'
-			
-			SET @SQL=@SQL+')
-			SELECT '+CONVERT(NVARCHAR,@BudgetID)+',X.value(''@Currency'',''int''),X.value(''@ExchangeRate'',''float''),X.value(''@AnnualAmount'',''float''),X.value(''@YearH1Amount'',''float''),
-				X.value(''@YearH2Amount'',''float''),X.value(''@Qtr1Amount'',''float''),X.value(''@Qtr2Amount'',''float''),X.value(''@Qtr3Amount'',''float''),
-				X.value(''@Qtr4Amount'',''float''),X.value(''@Month1Amount'',''float''),X.value(''@Month2Amount'',''float''),X.value(''@Month3Amount'',''float''),
-				X.value(''@Month4Amount'',''float''),X.value(''@Month5Amount'',''float''),X.value(''@Month6Amount'',''float''),X.value(''@Month7Amount'',''float''),
-				X.value(''@Month8Amount'',''float''),X.value(''@Month9Amount'',''float''),X.value(''@Month10Amount'',''float''),X.value(''@Month11Amount'',''float''),
-				X.value(''@Month12Amount'',''float''),X.value(''@Sno'',''int''),X.value(''@CF'',''NVARCHAR(10)''),'''+@CompanyGUID+''',newid(),'''+@UserName+''','+CONVERT(NVARCHAR,@DT)+',
-				ISNULL(X.value(''@AccountID'',''INT''),1),ISNULL(X.value(''@ProductID'',''INT''),1),X.value(''@Rate'',''float''),
-				isnull(X.value(''@dcNumField1'',''float''),0),isnull(X.value(''@dcNumField2'',''float''),0),isnull(X.value(''@dcNumField3'',''float''),0),isnull(X.value(''@dcNumField4'',''float''),0),isnull(X.value(''@dcNumField5'',''float''),0)'
-			
-			select @SQL=@SQL+',ISNULL(X.value(''@'+REPLACE(name,'NID','')+''',''INT''),1)' 
-			from sys.columns 
-			where object_id=object_id('COM_BudgetAlloc') and name LIKE 'ccnid%'
-					
-			SET @SQL=@SQL+' FROM @XML.nodes(''/XML/Row'') as Data(X)'
-		
-			EXEC sp_executesql @SQL,N'@XML XML',@XML
-				
+				dcNumField1,dcNumField2,dcNumField3,dcNumField4,dcNumField5,
+				[CCNID1],[CCNID2],[CCNID3],[CCNID4],[CCNID5],[CCNID6],[CCNID7],[CCNID8],[CCNID9],[CCNID10],
+				[CCNID11],[CCNID12],[CCNID13],[CCNID14],[CCNID15],[CCNID16],[CCNID17],[CCNID18],[CCNID19],[CCNID20],
+				[CCNID21],[CCNID22],[CCNID23],[CCNID24],[CCNID25],[CCNID26],[CCNID27],[CCNID28],[CCNID29],[CCNID30],
+				[CCNID31],[CCNID32],[CCNID33],[CCNID34],[CCNID35],[CCNID36],[CCNID37],[CCNID38],[CCNID39],[CCNID40],
+				[CCNID41],[CCNID42],[CCNID43],[CCNID44],[CCNID45],[CCNID46],[CCNID47],[CCNID48],[CCNID49],[CCNID50])
+			SELECT @BudgetID,X.value('@Currency','int'),X.value('@ExchangeRate','float'),X.value('@AnnualAmount','float'),X.value('@YearH1Amount','float'),
+				X.value('@YearH2Amount','float'),X.value('@Qtr1Amount','float'),X.value('@Qtr2Amount','float'),X.value('@Qtr3Amount','float'),
+				X.value('@Qtr4Amount','float'),X.value('@Month1Amount','float'),X.value('@Month2Amount','float'),X.value('@Month3Amount','float'),
+				X.value('@Month4Amount','float'),X.value('@Month5Amount','float'),X.value('@Month6Amount','float'),X.value('@Month7Amount','float'),
+				X.value('@Month8Amount','float'),X.value('@Month9Amount','float'),X.value('@Month10Amount','float'),X.value('@Month11Amount','float'),
+				X.value('@Month12Amount','float'),X.value('@Sno','int'),X.value('@CF','NVARCHAR(10)'),@CompanyGUID,newid(),@UserName,@DT,
+				ISNULL(X.value('@AccountID','BIGINT'),1),ISNULL(X.value('@ProductID','BIGINT'),1),X.value('@Rate','float'),
+				isnull(X.value('@dcNumField1','float'),0),isnull(X.value('@dcNumField2','float'),0),isnull(X.value('@dcNumField3','float'),0),isnull(X.value('@dcNumField4','float'),0),isnull(X.value('@dcNumField5','float'),0),
+				ISNULL(X.value('@CC1','BIGINT'),1),ISNULL(X.value('@CC2','BIGINT'),1),ISNULL(X.value('@CC3','BIGINT'),1),ISNULL(X.value('@CC4','BIGINT'),1),ISNULL(X.value('@CC5','BIGINT'),1),ISNULL(X.value('@CC6','BIGINT'),1),ISNULL(X.value('@CC7','BIGINT'),1),ISNULL(X.value('@CC8','BIGINT'),1),ISNULL(X.value('@CC9','BIGINT'),1),ISNULL(X.value('@CC10','BIGINT'),1),
+				ISNULL(X.value('@CC11','BIGINT'),1),ISNULL(X.value('@CC12','BIGINT'),1),ISNULL(X.value('@CC13','BIGINT'),1),ISNULL(X.value('@CC14','BIGINT'),1),ISNULL(X.value('@CC15','BIGINT'),1),ISNULL(X.value('@CC16','BIGINT'),1),ISNULL(X.value('@CC17','BIGINT'),1),ISNULL(X.value('@CC18','BIGINT'),1),ISNULL(X.value('@CC19','BIGINT'),1),ISNULL(X.value('@CC20','BIGINT'),1),
+				ISNULL(X.value('@CC21','BIGINT'),1),ISNULL(X.value('@CC22','BIGINT'),1),ISNULL(X.value('@CC23','BIGINT'),1),ISNULL(X.value('@CC24','BIGINT'),1),ISNULL(X.value('@CC25','BIGINT'),1),ISNULL(X.value('@CC26','BIGINT'),1),ISNULL(X.value('@CC27','BIGINT'),1),ISNULL(X.value('@CC28','BIGINT'),1),ISNULL(X.value('@CC29','BIGINT'),1),ISNULL(X.value('@CC30','BIGINT'),1),
+				ISNULL(X.value('@CC31','BIGINT'),1),ISNULL(X.value('@CC32','BIGINT'),1),ISNULL(X.value('@CC33','BIGINT'),1),ISNULL(X.value('@CC34','BIGINT'),1),ISNULL(X.value('@CC35','BIGINT'),1),ISNULL(X.value('@CC36','BIGINT'),1),ISNULL(X.value('@CC37','BIGINT'),1),ISNULL(X.value('@CC38','BIGINT'),1),ISNULL(X.value('@CC39','BIGINT'),1),ISNULL(X.value('@CC40','BIGINT'),1),
+				ISNULL(X.value('@CC41','BIGINT'),1),ISNULL(X.value('@CC42','BIGINT'),1),ISNULL(X.value('@CC43','BIGINT'),1),ISNULL(X.value('@CC44','BIGINT'),1),ISNULL(X.value('@CC45','BIGINT'),1),ISNULL(X.value('@CC46','BIGINT'),1),ISNULL(X.value('@CC47','BIGINT'),1),ISNULL(X.value('@CC48','BIGINT'),1),ISNULL(X.value('@CC49','BIGINT'),1),ISNULL(X.value('@CC50','BIGINT'),1)
+			FROM @XML.nodes('/XML/Row') as Data(X)
+
 			SET @XML=@RelationsXML
 			INSERT INTO COM_BudgetDimRelations(BudgetDefID,ParentBudgetDimValID,ChildBudgetDimValID,CompanyGUID,CreatedBy,CreatedDate)
 			SELECT  @BudgetID,X.value('@PID','INT'),X.value('@CID','INT'),@CompanyGUID,@UserName,@DT from @XML.nodes('/Relations/Row') as Data(X)	
@@ -194,5 +193,5 @@ BEGIN CATCH
 	ROLLBACK TRANSACTION
 	SET NOCOUNT OFF  
 	RETURN -999   
-END CATCH
+END CATCH 
 GO

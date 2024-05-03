@@ -159,10 +159,10 @@ BEGIN TRY
 			set @AttachXml=@AttacthList 
 			
 			INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,
-			FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,[GUID],CreatedBy,CreatedDate,IsSign)  
+			FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,[GUID],CreatedBy,CreatedDate)  
 			SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(50)'),  
 			X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),144,144,@ActivityID,  
-			X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt,X.value('@IsSign','BIT')
+			X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt  
 			FROM @AttachXml.nodes('/AttachmentsXML/Row') as Data(X)    
 			WHERE X.value('@Action','NVARCHAR(10)')='NEW'  
 
@@ -176,7 +176,6 @@ BEGIN TRY
 			[GUID]=X.value('@GUID','NVARCHAR(50)'),  
 			ModifiedBy=@UserName,  
 			ModifiedDate=@Dt  
-			,IsSign=X.value('@IsSign','BIT')
 			FROM COM_Files C WITH(NOLOCK)  
 			INNER JOIN @AttachXml.nodes('/AttachmentsXML/Row') as Data(X) ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID  
 			WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
@@ -346,7 +345,7 @@ BEGIN TRY
 					
 		set @Count=@Count+1
 	end	 
-			 
+				 
 	IF @CostCenterID=128 --if activities are creating from events tab(CAMPAIGN) then change costcenter to its parent 
 	BEGIN	
 		--EXEC spCOM_SetActivityLinkingData  88 ,@NodeID
@@ -356,7 +355,8 @@ BEGIN TRY
 		UPDATE CRM_Activities SET RefNo=@UpdateSQL WHERE CostCenterID=128 AND NodeID=@NodeID
 	END
 	ELSE
-		EXEC spCOM_SetActivityLinkingData  @CostCenterID ,@NodeID					  
+		EXEC spCOM_SetActivityLinkingData  @CostCenterID ,@NodeID	
+					  
 					
 COMMIT TRANSACTION
 --select * from CRM_Activities where CostCenterID=86 and NodeID=@NodeID
@@ -391,5 +391,9 @@ BEGIN CATCH
  ROLLBACK TRANSACTION  
  SET NOCOUNT OFF    
  RETURN -999     
-END CATCH
+END CATCH    
+ 
+ 
+ 
+
 GO

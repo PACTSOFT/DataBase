@@ -3,27 +3,28 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetProductSearchFields]
-	@GridViewID [int],
-	@UserID [int],
+	@GridViewID [bigint],
+	@VehicleID [bigint],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY        
 SET NOCOUNT ON;   
 
-	declare @value nvarchar(50),@cc int,@colid INT,@FeatureID INT,@ColWidth float,@filter nvarchar(max)
+	declare @value nvarchar(50),@cc int,@colid bigint,@FeatureID INT,@ColWidth float,@filter nvarchar(max)
 	
 	if(@GridViewID=161)
 	begin
 		SET @FeatureID=161
-		set @GridViewID= (select top 1  gridviewid from adm_gridview WITH(NOLOCK) where featureid=161)
+		set @GridViewID= (select top 1  gridviewid from adm_gridview where featureid=161)
 	end
 	else
 		SELECT @FeatureID=FeatureID FROM [ADM_GridView] WITH(NOLOCK) WHERE GRIDVIEWID=@GridViewID
    
    if(@FeatureID=3)
    BEGIN
-			declare @tab table(colid INT,name nvarchar(500))
+			declare @tab table(colid bigint,name nvarchar(500))
 			if (exists(select name from adm_globalpreferences WITH(NOLOCK)
 			where name='EnableLocationWise' and value='True') and exists(select name from adm_globalpreferences WITH(NOLOCK)
 			where name='Location Stock' and value='True') )
@@ -62,24 +63,28 @@ SET NOCOUNT ON;
 			end
    END
     
-    select b.costcentercolid,isnull(ColumnCostCenterID, -b.costcentercolid) ColumnCostCenterID,ColumnCCListViewTypeID,case when t.name is null then ResourceData else t.name end as ResourceData,SysColumnName,ColumnDataType,UserColumnType,isnull(a.iscolumninuse,1) iscolumninuse,b.description,b.columntype,b.[ColumnWidth],b.columnorder,a.dependanton,a.dependancy
+    select b.costcentercolid,isnull(ColumnCostCenterID, -b.costcentercolid) ColumnCostCenterID,ColumnCCListViewTypeID,case when t.name is null then ResourceData else t.name end as ResourceData,SysColumnName,ColumnDataType,UserColumnType,isnull(a.iscolumninuse,1) iscolumninuse,b.description,b.columntype,b.[ColumnWidth],b.columnorder
 	from ADM_GridViewColumns b WITH(NOLOCK)
 	inner join ADM_CostCenterDef a WITH(NOLOCK) on b.CostCenterColID=a.CostCenterColID
 	left join com_languageresources c WITH(NOLOCK) on c.Resourceid=a.resourceid and c.LanguageID=1
     left join @tab t on a.CostCenterColID=t.colid
     WHERE GRIDVIEWID=@GridViewID
     union
-    select b.costcentercolid,-b.costcentercolid ColumnCostCenterID,1 ColumnCCListViewTypeID,a.Name ResourceData,null SysColumnName,null ColumnDataType,'LISTBOX' UserColumnType,'True' iscolumninuse,b.description,b.columntype,b.[ColumnWidth],b.columnorder,'',''
+    select b.costcentercolid,-b.costcentercolid ColumnCostCenterID,1 ColumnCCListViewTypeID,a.Name ResourceData,null SysColumnName,null ColumnDataType,'LISTBOX' UserColumnType,'True' iscolumninuse,b.description,b.columntype,b.[ColumnWidth],b.columnorder
 	from ADM_GridViewColumns b WITH(NOLOCK)
 	left join ADM_Features a WITH(NOLOCK) on (-b.costcentercolid)=a.FeatureID
     WHERE GRIDVIEWID=@GridViewID and b.costcentercolid<0 and charindex('~',b.Description,1)=0
     union
-    select b.costcentercolid,abs(b.costcentercolid) ColumnCostCenterID,1 ColumnCCListViewTypeID,a.Name ResourceData,null SysColumnName,null ColumnDataType,'LISTBOX' UserColumnType,'True' iscolumninuse,b.description,b.columntype,b.[ColumnWidth],b.columnorder,'',''
+    select b.costcentercolid,abs(b.costcentercolid) ColumnCostCenterID,1 ColumnCCListViewTypeID,a.Name ResourceData,null SysColumnName,null ColumnDataType,'LISTBOX' UserColumnType,'True' iscolumninuse,b.description,b.columntype,b.[ColumnWidth],b.columnorder
 	from ADM_GridViewColumns b WITH(NOLOCK)
 	left join ADM_Features a WITH(NOLOCK) on abs(b.costcentercolid)=a.FeatureID
     WHERE GRIDVIEWID=@GridViewID and charindex('~',b.Description,1)>0
     order by columntype,columnorder
     
+    
+    SELECT * FROM SVC_Vehicle WITH(NOLOCK)  
+    WHERE VehicleID=@VehicleID
+	
 	select @ColWidth=[ColumnWidth] from  ADM_GridViewColumns b WITH(NOLOCK) 
 	where GRIDVIEWID=@GridViewID and b.CostCenterColID=0 
 	
@@ -105,5 +110,5 @@ BEGIN CATCH
 
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH
+END CATCH      
 GO

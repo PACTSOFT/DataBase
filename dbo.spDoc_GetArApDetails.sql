@@ -3,14 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDoc_GetArApDetails]
-	@AccountID [int] = 0,
+	@AccountID [bigint] = 0,
 	@DocDate [datetime],
 	@docno [nvarchar](500) = NULL,
 	@linkedids [nvarchar](max),
 	@DocumentType [int],
-	@CostCenterID [int],
-	@DimWhere [nvarchar](max),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -22,7 +20,7 @@ SET NOCOUNT ON
 
 	if(@DocumentType=38)
 	BEGIN
-		DECLARE @Tblids AS TABLE(ID INT NOT NULL IDENTITY(1,1),DetailsID INT)
+		DECLARE @Tblids AS TABLE(ID INT NOT NULL IDENTITY(1,1),DetailsID BIGINT)
 		INSERT INTO @Tblids(DetailsID)
 		exec SPSplitString @linkedids,','  
 		
@@ -52,64 +50,17 @@ SET NOCOUNT ON
 	END
 	ELSE
 	BEGIN
-
-		declare @dpMap NVARCHAR(MAX),@dpXML XML,@sDPNumCols NVARCHAR(MAX),@SQL nvarchar(MAX)
-		SET @SQL=''
-		SELECT @dpMap=PrefValue From COM_DocumentPreferences WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND PrefName='DocDownPaymentMapXML' 
-		if(@dpMap IS NOT NULL AND @dpMap<>'')
-		BEGIN
-			SET @sDPNumCols=''
-			SET @dpXML=@dpMap
-			SELECT @sDPNumCols+=',MAX(ISNULL(nd.'+X.value('@DownPaySysColName','NVARCHAR(50)')+',0)) as '+X.value('@DownPaySysColName','NVARCHAR(50)')
-			FROM @dpXML.nodes('/XML/Row') as Data(X) 
-			WHERE ( X.value('@DownPaySysColName','NVARCHAR(50)') <>'Debit'  AND X.value('@DownPaySysColName','NVARCHAR(50)') <>'Credit')
-		END
-		
-		SELECT @SQL='
 		select * from (
-		select  a.DocNo,a.Amount,abs(a.Amount)-abs(sum(isnull(b.Amount,0))) Bal '
-		IF(LEN(@sDPNumCols)>0)
-		BEGIN
-			SET @SQL+=@sDPNumCols+',id.DebitAccount as DP_DebitAccount,id.CreditAccount as DP_CreditAccount '
-		END
-
-		SET @SQL+=' from com_billwisenonacc a WITH(NOLOCK)
-		left join com_billwisenonacc b WITH(NOLOCK) on a.DocNo=b.RefDocNO and b.Docno<>'''+@docno+''' '
-
-		IF(LEN(@sDPNumCols)>0)
-		BEGIN
-			SET @SQL+=' Left Join INV_DocDetails id WITH(NOLOCK) on id.VoucherNo=a.Docno 
-						Left Join COM_DocNumData nd WITH(NOLOCK) on nd.InvDocDetailsID=id.InvDocDetailsID '
-				if(@DimWhere<>'')
-						SET @SQL+=' Left Join COM_DocCCData cd WITH(NOLOCK) on cd.InvDocDetailsID=id.InvDocDetailsID '
-		END
-		else if(@DimWhere<>'')
-		BEGIN
-			SET @SQL+='  Left Join INV_DocDetails id WITH(NOLOCK) on id.VoucherNo=a.Docno
-					Left Join COM_DocCCData cd WITH(NOLOCK) on cd.InvDocDetailsID=id.InvDocDetailsID '				
-			
-		END
-		
-		
-		SET @SQL+=' where a.AccountID is not null and a.AccountID='+convert(nvarchar,@AccountID)+' and a.RefDocNO='''' '
-		SET @SQL+=@DimWhere	
-		IF(LEN(@sDPNumCols)>0)
-			SET @SQL+=' AND id.StatusID=369 '
-
-		SET @SQL+=' group by a.DocNo,a.Amount '
-		
-		IF(LEN(@sDPNumCols)>0)
-			SET @SQL+=',id.DebitAccount,id.CreditAccount '
-			
-		SET @SQL+=' ) as t
-		where Bal>0.001'
-		PRINT @SQL
-		EXEC(@SQL)
+		select a.DocNo,a.Amount,abs(a.Amount)-abs(sum(isnull(b.Amount,0))) Bal from com_billwisenonacc a WITH(NOLOCK)
+		left join com_billwisenonacc b WITH(NOLOCK) on a.DocNo=b.RefDocNO and b.Docno<>@docno
+		where a.AccountID is not null and a.AccountID=@AccountID and a.RefDocNO=''
+		group by a.DocNo,a.Amount) as t
+		where Bal>0.001
 		
 		if(@linkedids<>'')
 		BEGIN
 			
-			DECLARE @Tbl AS TABLE(ID INT NOT NULL IDENTITY(1,1), DetailsID INT,LinkedInvDocDetailsID INT)
+			DECLARE @Tbl AS TABLE(ID INT NOT NULL IDENTITY(1,1), DetailsID BIGINT,LinkedInvDocDetailsID BIGINT)
 			
 			INSERT INTO @Tbl(DetailsID)
 			exec SPSplitString @linkedids,','  
@@ -154,7 +105,15 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
+
+
+
+
+
+
+
+
 
 
 

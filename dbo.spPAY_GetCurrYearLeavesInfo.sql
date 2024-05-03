@@ -7,8 +7,8 @@ CREATE PROCEDURE [dbo].[spPAY_GetCurrYearLeavesInfo]
 	@ToDate [varchar](20) = null,
 	@EmployeeID [int] = 0,
 	@LeaveType [int] = 0,
-	@userid [int] = 1,
-	@langid [int] = 1,
+	@userid [bigint] = 1,
+	@langid [bigint] = 1,
 	@LVStartDate [datetime],
 	@EncahsedLeavesMode [int] = 0,
 	@CurrYearLeavesTakenOP [float] OUTPUT,
@@ -30,7 +30,7 @@ BEGIN
 	DECLARE @YEARDIFF INT,@YC INT
 	DECLARE @Year INT,@ALStartMonth INT
 	DECLARE @ALStartMonthYear DATETIME,@ALEndMonthYear DATETIME
-	DECLARE @MONTHTAB TABLE(ID INT IDENTITY(1,1),STDATE DATETIME,EDDATE DATETIME)
+	DECLARE @MONTHTAB TABLE(ID BIGINT IDENTITY(1,1),STDATE DATETIME,EDDATE DATETIME)
 	DECLARE @LocID INT
 	DECLARE @PayrollDate DATETIME,@PayrollStart DATETIME,@PayrollEnd DATETIME
 
@@ -158,7 +158,7 @@ BEGIN
 				END
 				--START :CURRENT DATERANGE LEAVES TAKEN
 					--START: LOADING DATES FROM @MONTHTAB TABLE	   
-				   	DECLARE @DATESCOUNT TABLE (SNO INT IDENTITY(1,1),ID INT ,DATE1 DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,COUNT INT,NOOFDAYS DECIMAL(9,2),FLAG INT,IncExc varchar(5))
+				   	DECLARE @DATESCOUNT TABLE (SNO BIGINT IDENTITY(1,1),ID BIGINT ,DATE1 DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,COUNT INT,NOOFDAYS DECIMAL(9,2),FLAG INT,IncExc varchar(5))
 				   	DECLARE @STARTDATE1 DATETIME,@ENDATE1 DATETIME
 				   	DECLARE @MRC AS INT,@MC AS INT,@MID INT
 				   	
@@ -281,7 +281,7 @@ BEGIN
 						SET @I=@I+1
 						END
 						--PRINT @STRQUERY
-						EXEC sp_executesql @STRQUERY
+						EXEC (@STRQUERY)
 					END
 					ELSE
 					BEGIN
@@ -304,7 +304,7 @@ BEGIN
 							SET @I=@I+1
 							END
 							--PRINT @STRQUERY
-							EXEC sp_executesql @STRQUERY
+							EXEC (@STRQUERY)
 						END
 						--EMPLOYEE MASTER
 						IF((SELECT COUNT(*) FROM COM_CC50051 WHERE NODEID=@EmployeeID AND (ISNULL(WeeklyOff1,'')<>'' AND ISNULL(WeeklyOff1,'None')<>'None') AND (ISNULL(WeeklyOff2,'')<>'' AND ISNULL(WeeklyOff2,'None')<>'None'))>0)
@@ -323,7 +323,7 @@ BEGIN
 							SET @I=@I+1
 							END
 							--PRINT @STRQUERY
-							EXEC sp_executesql @STRQUERY
+							EXEC (@STRQUERY)
 						END
 						ELSE
 						BEGIN
@@ -343,7 +343,7 @@ BEGIN
 							SET @I=@I+1
 							END
 							--PRINT @STRQUERY
-							EXEC sp_executesql @STRQUERY
+							EXEC (@STRQUERY)
 						END
 					END
 					--CHECKING FOR EMPLOYEE WEEKLY OFF COUNT FROM EMPLOYEE MASTER IF NO DATA FOUND
@@ -424,7 +424,7 @@ BEGIN
 					--LOADING WEEKDATE,DAYNAME AND WEEKNO FOR SELECTED DATERANGE
 					--select * from #WEEKLYOFF
 					print 'eek'
-					DECLARE @WEEKOFFCOUNT TABLE (ID INT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,COUNT INT,WEEKNOMANUAL INT)
+					DECLARE @WEEKOFFCOUNT TABLE (ID BIGINT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,COUNT INT,WEEKNOMANUAL INT)
 					DECLARE @STARTDATE DATETIME,@STARTDATE2 DATETIME,@ENDATE2 DATETIME
 				   	DECLARE @MRC2 AS INT,@MC2 AS INT,@MID2 INT
 				   	
@@ -628,7 +628,7 @@ FROM INV_DOCDETAILS a WITH(NOLOCK)
 Left Join COM_DocTextData b WITH(NOLOCK) on b.InvDocdetailsID=a.InvDocDetailsId
 Left Join COM_DocCCData c WITH(NOLOCK) on c.InvDocdetailsID=a.InvDocDetailsId
 left join com_status status WITH(NOLOCK) on status.statusId=369
-Where a.StatusID=369 AND a.CostCenterID=40051  and isdate(b.dcAlpha1)=1 And convert(datetime,b.dcalpha1) BETWEEN '''+CONVERT(NVARCHAR,@FromDate)+''' AND '''+CONVERT(NVARCHAR,@ToDate)+''''
+Where a.StatusID=369 AND a.CostCenterID=40051  and isdate(b.dcAlpha1)=1 And convert(datetime,b.dcalpha1) BETWEEN '''+CONVERT(NVARCHAR,@PayrollStart)+''' AND '''+CONVERT(NVARCHAR,@PayrollEnd)+''''
 IF(@WhereCond IS NOT NULL AND @WhereCond <>'' AND LEN(@WhereCond)>0)
 BEGIN
 	SET @SQL=@SQL+ @WhereCond
@@ -637,7 +637,7 @@ PRINT @SQL
 
 --Declare @TEmp table (ID int Identity(1,1),WEEKDATE Nvarchar(max),Remarks nvarchar(max))
 --insert into @TEmp
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 UPDATE DATESCOUNT SET DATESCOUNT.count=4 FROM @DATESCOUNT DATESCOUNT 
 inner join #TEmp TD on CONVERT(DATETIME,DATESCOUNT.DATE1)=CONVERT(DATETIME,TD.WEEKDATE)

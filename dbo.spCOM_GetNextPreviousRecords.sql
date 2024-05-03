@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetNextPreviousRecords]
-	@CostCenterID [int],
-	@SeqNo [int] = null,
+	@CostCenterID [bigint],
+	@SeqNo [bigint] = null,
 	@Next [bit] = Null,
 	@ControlType [int],
 	@UserID [nvarchar](200) = Null,
@@ -58,27 +58,11 @@ SET NOCOUNT ON;
 		if @ControlType=1
 			set @ViewWhereCond=@ViewWhereCond+' and (a.AccountTypeID!=6 and a.AccountTypeID!=7)'
 		else if @ControlType=2
-		begin
-			TRUNCATE TABLE #TblUsers
-			SELECT @Dimensionlist=isnull(VALUE,0) FROM ADM_GLOBALPREFERENCES with(nolock) WHERE NAME='DebtorsControlGroup'
-
-			INSERT INTO #TblUsers
-			exec spsplitstring @Dimensionlist,','
-	
 			select @ViewWhereCond=@ViewWhereCond+' and a.AccountTypeID=7 and (a.lft between '+convert(nvarchar,lft)+' and '+convert(nvarchar,rgt)+')' from acc_accounts with(nolock)
-			where AccountID=(select TOP 1 iUserID from #TblUsers with(nolock))
-		end
+			where AccountID=(select Value from adm_globalpreferences with(nolock) where Name='DebtorsControlGroup')
 		else if @ControlType=3
-		begin
-			TRUNCATE TABLE #TblUsers
-			SELECT @Dimensionlist=isnull(VALUE,0) FROM ADM_GLOBALPREFERENCES with(nolock) WHERE NAME='DebtorsControlGroup'
-
-			INSERT INTO #TblUsers
-			exec spsplitstring @Dimensionlist,','
-	
 			select @ViewWhereCond=@ViewWhereCond+' and a.AccountTypeID=6 and (a.lft between '+convert(nvarchar,lft)+' and '+convert(nvarchar,rgt)+')' from acc_accounts with(nolock)
-			where AccountID=(select TOP 1 iUserID from #TblUsers with(nolock))
-		end
+			where AccountID=(select Value from adm_globalpreferences with(nolock) where Name='CreditorsControlGroup')
 	END 
 	ELSE IF @CostCenterID=3 --PRODUCT
 	BEGIN
@@ -201,5 +185,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION  
  SET NOCOUNT OFF    
  RETURN -999     
-END CATCH
+END CATCH   
 GO

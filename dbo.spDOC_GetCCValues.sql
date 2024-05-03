@@ -11,12 +11,12 @@ AS
 BEGIN TRY      
 SET NOCOUNT ON      
       
-		DECLARE @SQL NVARCHAR(MAX),@XML XML,@I INT,@CNT INT,@INVID INT
+		DECLARE @SQL NVARCHAR(MAX),@XML XML,@I INT,@CNT INT,@INVID BIGINT
 		DECLARE @CCID int,@syscolname nvarchar(200),@value nvarchar(200),@tablename nvarchar(200)
 		 
 		SET @XML=@CCXML      
 
-		DECLARE @tblres AS TABLE(CostCenterID int,NODEID INT,Name nvarchar(500), Code nvarchar(200),VenderID INT,UnitID INT,UnitName nvarchar(200),AccountCode nvarchar(200),AccountName nvarchar(200),ECode  nvarchar(200),FieldName nvarchar(200),barcodeid INT)      
+		DECLARE @tblres AS TABLE(CostCenterID int,NODEID bigint,Name nvarchar(500), Code nvarchar(200),VenderID bigint,UnitID bigint,UnitName nvarchar(200),AccountCode nvarchar(200),AccountName nvarchar(200),ECode  nvarchar(200),FieldName nvarchar(200),barcodeid bigint)      
 		
 		DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,syscolname nvarchar(200),value nvarchar(200))      
 		INSERT INTO @tblCC
@@ -44,7 +44,7 @@ SET NOCOUNT ON
 						where Barcode='''+@value+'''  
 					  else select '+CONVERT(nvarchar,@CCID)+',a.ProductID NODEID,a.ProductName NAME,a.ProductCode CODE,0,0,'''','''','''','''','''',0  from '+@tablename+' a with(nolock) 
 						join INV_ProductExtended c with(nolock) on a.ProductID=c.ProductID
-						where ('+@syscolname+'='''+@value+''' OR BARCODEID='''+@value+''')'
+						where IsGroup=0 and  ('+@syscolname+'='''+@value+''' OR BARCODEID='''+@value+''')'
 				end 
 				else if(@CCID=400)
 				begin
@@ -64,7 +64,7 @@ SET NOCOUNT ON
          
         if(@INVID is not null and @INVID>0)
         BEGIN 
-			declare @date float,@vno nvarchar(200),@productID INT,@boe int
+			declare @date float,@vno nvarchar(200),@productID bigint,@boe int
 			select @date=DocDate,@vno=VoucherNo,@productID=a.ProductID,@boe=isbillofentry from INV_DocDetails a WITH(NOLOCK)
 			join INV_Product b with(nolock)  on a.ProductID=b.ProductID
 			where InvDocDetailsID=@INVID
@@ -72,7 +72,7 @@ SET NOCOUNT ON
 			BEGIN
 				select a.InvDocDetailsID,a.Quantity+isnull(sum(b.Quantity*c.VoucherType),0) Qty from INV_DocDetails a WITH(NOLOCK)
 				left join INV_DocExtraDetails b  WITH(NOLOCK) on a.InvDocDetailsID=b.RefID and b.Type=1 
-				left join INV_DocDetails c WITH(NOLOCK) on c.InvDocDetailsID=b.InvDocDetailsID and c.IsQtyIgnored=0
+				left join INV_DocDetails c on c.InvDocDetailsID=b.InvDocDetailsID and c.IsQtyIgnored=0
 				where a.IsQtyIgnored=0 and a.VoucherType=1 and a.ProductID=@productID and (a.DocDate<@date or (a.DocDate=@date and a.VoucherNo<@vno)) 
 				group by a.InvDocDetailsID,a.Quantity,a.DocDate,a.VoucherNo
 				having (a.Quantity+isnull(sum(b.Quantity*c.VoucherType),0))>0
@@ -97,5 +97,5 @@ BEGIN CATCH
 
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH
+END CATCH   
 GO

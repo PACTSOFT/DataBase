@@ -12,9 +12,10 @@ AS
 BEGIN TRANSACTION  
 BEGIN TRY  
 SET NOCOUNT ON  
- 
+   IF @LangID=0  
+    SET @LangID=1  
    --Declaration Section  
-   DECLARE @ListViewID INT  
+   DECLARE @HasAccess bit,@FEATUREID int,@ListViewID INT  
    --Check for manadatory paramters  
    if(@UserID=0 or @CostCenterID=0)  
     RAISERROR('-100',16,1)  
@@ -49,9 +50,8 @@ SET NOCOUNT ON
       ,[SearchFilter]  
       ,[RoleID]  
       ,[UserID]  
-      ,[IsUserDefined]  ,ListViewPageSize,ListViewDelaytime,IgnoreUserWise,FilterQOH
-      ,[GUID],FilterXML,SearchOption,SearchOldValue,[GroupSearchFilter],[GroupFilterXML],IgnoreSpecial 
-      from ADM_ListView WITH(NOLOCK)   
+      ,[IsUserDefined]  ,ListViewPageSize,ListViewDelaytime
+      ,[GUID],FilterXML,SearchOption,SearchOldValue,[GroupSearchFilter],[GroupFilterXML],IgnoreSpecial from ADM_ListView WITH(NOLOCK)   
    where ListViewID=@ListViewID  
       
    --Getting ListViewColumns  
@@ -79,8 +79,7 @@ SET NOCOUNT ON
    FROM ADM_CostCenterDef C WITH(NOLOCK)   
    LEFT JOIN COM_LANGUAGERESOURCES R  WITH(NOLOCK) ON C.RESOURCEID=R.RESOURCEID  AND R.LanguageID=@LangID 
    WHERE  C.IsColumnInUse=1 and C.CostCenterID=@CostCenterID AND C.CostCenterColID NOT IN  
-   (SELECT COSTCENTERCOLID FROM ADM_ListViewColumns a  WITH(NOLOCK)  
-   JOIN ADM_ListView b  WITH(NOLOCK)  on a.ListViewID=b.ListViewID   
+   (SELECT COSTCENTERCOLID FROM ADM_ListViewColumns a  WITH(NOLOCK)  JOIN ADM_ListView b  WITH(NOLOCK)  on a.ListViewID=b.ListViewID   
    WHERE b.[ListViewTypeID]=@ListViewTypeID)  
   ORDER BY C.UserColumnName
 --   SELECT 'NEW' as 'Link/Delink', SysColumnName,UserColumnName,CostCenterColID,ColumnDataType,'200' as 'ColumnWidth'  
@@ -92,7 +91,7 @@ SET NOCOUNT ON
    WHERE  C.IsColumnInUse=1 and C.CostCenterID=@CostCenterID   AND R.LanguageID=@LangID   
   ORDER BY C.UserColumnName   
    
-  declare @CCColID INT
+  declare @CCColID bigint
   select @CCColID=CostCenterColID from ADM_CostCenterDef  WITH(NOLOCK) where SysColumnName like 'Status%' and costcenterid=@CostCenterID
   select StatusID,Status,@CCColID as CostCenterColID from com_Status  WITH(NOLOCK)  where costcenterid=@CostCenterID
   
@@ -115,5 +114,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH
+END CATCH    
 GO

@@ -3,12 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetPriceofUnit]
-	@ProductID [int] = 0,
-	@UOMID [int] = 0,
+	@ProductID [bigint] = 0,
+	@UOMID [bigint] = 0,
 	@CCXML [nvarchar](max),
-	@CostCenterID [int],
+	@CostCenterID [bigint],
 	@DocDate [datetime],
-	@CreditAccount [int],
+	@CreditAccount [bigint],
 	@UserID [int] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -16,15 +16,15 @@ AS
 BEGIN TRY        
 SET NOCOUNT ON        
         
-    DECLARE @SQL NVARCHAR(MAX),@XML XML,@WHERE NVARCHAR(MAX),@I INT,@CNT INT,@NODEID INT,@CcID INT,@table   nvarchar(200),@CC nvarchar(max)                 
-    DECLARE @baseID INT,@DocumentType int,@NID INT,@JOIN NVARCHAR(MAX),@OrderBY NVARCHAR(MAX),@tblName nvarchar(200)          
+    DECLARE @SQL NVARCHAR(MAX),@XML XML,@WHERE NVARCHAR(MAX),@I INT,@CNT INT,@NODEID BIGINT,@CcID BIGINT,@table   nvarchar(200),@CC nvarchar(max)                 
+    DECLARE @baseID BIGINT,@DocumentType int,@NID BIGINT,@JOIN NVARCHAR(MAX),@OrderBY NVARCHAR(MAX),@tblName nvarchar(200)          
 	declare @isGrp bit	
 	SET @XML=@CCXML        
     
           
-   DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId INT)        
+   DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId BIGINT)        
    INSERT INTO @tblCC(CostCenterID,NodeId)        
-   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','INT')        
+   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','BIGINT')        
    FROM @XML.nodes('/XML/Row') as Data(X)        
 
 	select @DocumentType=DocumentType from adm_documenttypes with(nolock) where CostCenterID=@CostCenterID    
@@ -66,7 +66,7 @@ SET NOCOUNT ON
 				BEGIN
 					set @SQL='Select @NID='+REPLACE(@CC,'=','')+' from com_CCCCData WITH(NOLOCK) 
 					where CostcenterID=3 and NOdeID='+convert(nvarchar,@ProductID)
-					EXEC sp_executesql @SQL, N'@NID INT OUTPUT', @NID OUTPUT  
+					EXEC sp_executesql @SQL, N'@NID BIGINT OUTPUT', @NID OUTPUT  
 					if(@NID>1)
 						insert into @tblCC(CostCenterID,NodeId)values(@CcID,@NID)
 				END
@@ -84,14 +84,14 @@ SET NOCOUNT ON
 			BEGIN				
 				if(@CcID in(2,3))
 				BEGIN
-					set @JOIN=@JOIN+' left join '+@tblName+' CC'+CONVERT(nvarchar,@I)+' with(nolock) on P.'+@CC+'CC'+CONVERT(nvarchar,@I)+'.'+REPLACE(@CC,'=','')+'
-								left join '+@tblName+'  CJ'+CONVERT(nvarchar,@I)+' with(nolock) on CJ'+CONVERT(nvarchar,@I)+'.lft between CC'+CONVERT(nvarchar,@I)+'.lft and CC'+CONVERT(nvarchar,@I)+'.rgt'				
+					set @JOIN=@JOIN+' join '+@tblName+' CC'+CONVERT(nvarchar,@I)+' with(nolock) on P.'+@CC+'CC'+CONVERT(nvarchar,@I)+'.'+REPLACE(@CC,'=','')+'
+								join '+@tblName+'  CJ'+CONVERT(nvarchar,@I)+' with(nolock) on CJ'+CONVERT(nvarchar,@I)+'.lft between CC'+CONVERT(nvarchar,@I)+'.lft and CC'+CONVERT(nvarchar,@I)+'.rgt'				
 					set @WHERE=@WHERE+'CJ'+CONVERT(nvarchar,@I)+'.'+@CC+convert(nvarchar,@NODEID)+' or '
 				END
 				ELSE
 				BEGIN
-					set @JOIN=@JOIN+' left join '+@tblName+' CC'+CONVERT(nvarchar,@I)+' with(nolock) on P.'+@CC+'CC'+CONVERT(nvarchar,@I)+'.NodeID
-								left join '+@tblName+'  CJ'+CONVERT(nvarchar,@I)+' with(nolock) on CJ'+CONVERT(nvarchar,@I)+'.lft between CC'+CONVERT(nvarchar,@I)+'.lft and CC'+CONVERT(nvarchar,@I)+'.rgt'				
+					set @JOIN=@JOIN+' join '+@tblName+' CC'+CONVERT(nvarchar,@I)+' with(nolock) on P.'+@CC+'CC'+CONVERT(nvarchar,@I)+'.NodeID
+								join '+@tblName+'  CJ'+CONVERT(nvarchar,@I)+' with(nolock) on CJ'+CONVERT(nvarchar,@I)+'.lft between CC'+CONVERT(nvarchar,@I)+'.lft and CC'+CONVERT(nvarchar,@I)+'.rgt'				
 					set @WHERE=@WHERE+'CJ'+CONVERT(nvarchar,@I)+'.NODEID='+convert(nvarchar,@NODEID)+' or '
 				END
 			END
@@ -122,7 +122,7 @@ SET NOCOUNT ON
     set @SQL='select top 1 [WEF],P.[PurchaseRate],P.[SellingRate],P.[PurchaseRateA],P.[PurchaseRateB],P.[PurchaseRateC],P.[PurchaseRateD]
       ,P.[PurchaseRateE],P.[PurchaseRateF],P.[PurchaseRateG],P.[SellingRateA],P.[SellingRateB],P.[SellingRateC]
       ,P.[SellingRateD],P.[SellingRateE],P.[SellingRateF],P.[SellingRateG] from COM_CCPrices P WITH(NOLOCK) '+@JOIN+'
-		where P.StatusID=1 AND (TillDate is null or TillDate=0 or TillDate>='+convert(nvarchar,convert(float,@DocDate))+') and WEF<='+convert(nvarchar,convert(float,@DocDate))+@WHERE
+		where (TillDate is null or TillDate=0 or TillDate>='+convert(nvarchar,convert(float,@DocDate))+') and WEF<='+convert(nvarchar,convert(float,@DocDate))+@WHERE
 		
    	if(@DocumentType in(11,7,9,24,33,10,8,12,38))        
 		set @SQL=@SQL+' and PriceType in(0,1) '
@@ -143,7 +143,7 @@ SET NOCOUNT ON
 		set @SQL='select top 1 [WEF],P.[PurchaseRate],P.[SellingRate],P.[PurchaseRateA],P.[PurchaseRateB],P.[PurchaseRateC],P.[PurchaseRateD]
       ,P.[PurchaseRateE],P.[PurchaseRateF],P.[PurchaseRateG],P.[SellingRateA],P.[SellingRateB],P.[SellingRateC]
       ,P.[SellingRateD],P.[SellingRateE],P.[SellingRateF],P.[SellingRateG] from COM_CCPrices P WITH(NOLOCK) '+@JOIN+'
-		where P.StatusID=1 AND (TillDate is null or TillDate=0 or TillDate>='+convert(nvarchar,convert(float,@DocDate))+') and WEF<='+convert(nvarchar,convert(float,@DocDate))+@WHERE
+		where (TillDate is null or TillDate=0 or TillDate>='+convert(nvarchar,convert(float,@DocDate))+') and WEF<='+convert(nvarchar,convert(float,@DocDate))+@WHERE
 
 		if(@DocumentType in(11,7,9,24,33,10,8,12))        
 			set @SQL=@SQL+' and PriceType in(0,1) '

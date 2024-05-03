@@ -22,19 +22,6 @@ ELSE IF @Type=5
 begin
 	select ReportID,ReportName from ADM_RevenuReports WITH(NOLOCK) where ReportID>0 order by ReportName
 end
-ELSE IF @Type=6
-begin
-	if @FormateID>40000 and @FormateID<50000
-		select P.DocPrintLayoutID,F.Name DocName,P.Name from ADM_DocPrintLayouts P with(nolock)
-		join ADM_Features F with(nolock) on F.FeatureID=P.DocumentID
-		where F.FeatureID>40000 and F.FeatureID<50000
-		order by DocName,Name
-	else
-		select P.DocPrintLayoutID,F.Name DocName,P.Name from ADM_DocPrintLayouts P with(nolock)
-		join ADM_Features F with(nolock) on F.FeatureID=P.DocumentID
-		where F.FeatureID<40000 or F.FeatureID>50000
-		order by DocName,Name
-end
 
 SET NOCOUNT OFF;
 RETURN 1

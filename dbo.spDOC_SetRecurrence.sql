@@ -4,8 +4,8 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SetRecurrence]
 	@CostCenterID [int],
-	@NodeID [int],
-	@ScheduleID [int],
+	@NodeID [bigint],
+	@ScheduleID [bigint],
 	@ScheduleName [nvarchar](100),
 	@StatusID [int],
 	@FreqType [int],
@@ -22,12 +22,12 @@ CREATE PROCEDURE [dbo].[spDOC_SetRecurrence]
 	@Gropus [nvarchar](max),
 	@Roles [nvarchar](max),
 	@Users [nvarchar](max),
-	@Occurrence [int] = 0,
+	@Occurrence [bigint] = 0,
 	@RecurAutoPost [int] = 1,
 	@RecurMethod [tinyint],
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -36,7 +36,7 @@ BEGIN TRY
 SET NOCOUNT ON;     
 	--Declaration Section    
 	DECLARE @HasAccess BIT,@Dt FLOAT
-	DECLARE @TblApp AS TABLE(G INT NOT NULL DEFAULT(0),R INT NOT NULL DEFAULT(0),U INT NOT NULL DEFAULT(0))
+	DECLARE @TblApp AS TABLE(G BIGINT NOT NULL DEFAULT(0),R BIGINT NOT NULL DEFAULT(0),U BIGINT NOT NULL DEFAULT(0))
 	
 	SET @Dt=CONVERT(FLOAT,GETDATE())
 
@@ -79,15 +79,6 @@ SET NOCOUNT ON;
 		WHERE ScheduleID=@ScheduleID
 	END
 	
-	if (@RecurAutoPost=0 and exists(select * from ACC_DocDetails WITH(NOLOCK)
-	where CostCenterID=@CostCenterID and DocID=@NodeID and StatusID=369))
-	BEGIN
-		update a
-		set PostRecurWithApproval=0
-		from ACC_DocDetails a WITH(NOLOCK)
-		where CostCenterID=@CostCenterID and DocID=@NodeID
-	END
-	
 	DELETE FROM COM_UserSchedules WHERE ScheduleID=@ScheduleID
 	
 	INSERT INTO @TblApp(G)
@@ -127,5 +118,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION    
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH
+END CATCH    
 GO

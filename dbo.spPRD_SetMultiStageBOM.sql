@@ -232,13 +232,13 @@ SET NOCOUNT ON
      
   END     
 	--Stages Inserting
-	DECLARE @TblStages AS TABLE(ID INT IDENTITY(1,1),StageID INT,StageNodeID BIGINT,Parent INT,lft INT,Depth INT,NewStageID INT,Duration int)
+	DECLARE @TblStages AS TABLE(ID INT IDENTITY(1,1),StageID INT,StageNodeID BIGINT,Parent INT,lft INT,Depth INT,NewStageID INT)
 	DECLARE @I INT,@CNT INT,@StageID INT
 	
 	SET @XML=@StageXML
-	INSERT INTO @TblStages(StageID,StageNodeID,Parent,lft,Depth,NewStageID,Duration)
+	INSERT INTO @TblStages(StageID,StageNodeID,Parent,lft,Depth,NewStageID)
 	SELECT X.value('@ID','int'),X.value('@StageNodeID','bigint'),X.value('@Parent','int'),
-		X.value('@lft','int'),X.value('@Depth','int'),X.value('@ID','int'),X.value('@Duration','int')
+		X.value('@lft','int'),X.value('@Depth','int'),X.value('@ID','int')
 	FROM @XML.nodes('/Stages/Stage') as Data(X)      
  
 	
@@ -251,8 +251,8 @@ SET NOCOUNT ON
 	BEGIN
 		IF (SELECT StageID FROM @TblStages WHERE ID=@I)<0
 		BEGIN
-			INSERT INTO [PRD_BOMStages](BOMID,StageNodeID,[ParentID],[lft],[Depth],CreatedDate,Duration)
-			SELECT @BOMID,StageNodeID,Parent,lft,Depth,@Dt,Duration FROM @TblStages WHERE ID=@I
+			INSERT INTO [PRD_BOMStages](BOMID,StageNodeID,[ParentID],[lft],[Depth],CreatedDate)
+			SELECT @BOMID,StageNodeID,Parent,lft,Depth,@Dt FROM @TblStages WHERE ID=@I
 			SET @StageID=SCOPE_IDENTITY()
 			
 			UPDATE @TblStages 
@@ -269,7 +269,6 @@ SET NOCOUNT ON
 	
 	UPDATE PRD_BOMStages
 	SET StageNodeID=TS.StageNodeID,ParentID=TS.Parent,lft=TS.lft,Depth=TS.Depth,CreatedDate=@Dt
-	,Duration=ts.Duration
 	FROM PRD_BOMStages S INNER JOIN @TblStages TS ON TS.StageID>0 AND TS.StageID=S.StageID
 	
 
@@ -301,9 +300,7 @@ WHERE NodeID = '+convert(nvarchar,@BOMID) + ' AND CostCenterID = 76 '
 			@UserName,@Dt,isnull(X.value('@IncInFinalCost','bit'),0),isnull(X.value('@IncInStageCost','bit'),0),X.value('@AutoStage','BIGINT')
 			,X.value('@Remarks','nvarchar(max)')
 		FROM @XML.nodes('/BOMProductXML/Row') as Data(X)     
-		inner join @TblStages TS ON TS.StageID=X.value('@StageID','int') 
-		
-		SELECT X.value('@UOMID','bigint') FROM @XML.nodes('/BOMProductXML/Row') as Data(X)     
+		inner join @TblStages TS ON TS.StageID=X.value('@StageID','int')      
    END
     
     SET @XML=@BOMExpenseXML    
@@ -329,12 +326,10 @@ WHERE NodeID = '+convert(nvarchar,@BOMID) + ' AND CostCenterID = 76 '
     BEGIN      
 		--INSERT RECORD INTO BOM Resources    
 		INSERT INTO [PRD_BOMResources] ([BOMID],StageID,[ResourceID],[Hours]    
-		   ,[ExchgRT],[CurrencyID],[Value],[CreatedBy],[CreatedDate],IncInFinalCost,IncInStageCost
-		   ,MachineDim1,MachineDim2)    
+		   ,[ExchgRT],[CurrencyID],[Value],[CreatedBy],[CreatedDate],IncInFinalCost,IncInStageCost)    
 		SELECT @BOMID,TS.NewStageID,  X.value('@ResourceID','bigint') ,X.value('@Hours','float'),       
 			X.value('@ExchgRT','float'),X.value('@CurrencyID','bigint'),X.value('@Value','float'),    
 			@UserName,@Dt,isnull(X.value('@IncInFinalCost','bit'),0),isnull(X.value('@IncInStageCost','bit'),0)      
-			,X.value('@MachineDim1','bigint'), X.value('@MachineDim2','bigint')
 		FROM @XML.nodes('/BOMResourceXML/Row') as Data(X)     
 		inner join @TblStages TS ON TS.StageID=X.value('@StageID','int')
     END     
@@ -486,6 +481,4 @@ BEGIN CATCH
  SET NOCOUNT OFF        
  RETURN -999         
 END CATCH 
-
-
 GO

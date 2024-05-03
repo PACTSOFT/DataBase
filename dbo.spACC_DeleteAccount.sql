@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_DeleteAccount]
-	@AccountID [int] = 0,
-	@UserID [int],
-	@RoleID [int],
+	@AccountID [bigint] = 0,
+	@UserID [bigint],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -13,8 +13,8 @@ BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;  
 		--Declaration Section
-		DECLARE @HasAccess bit,@RowsDeleted INT,@lft INT,@rgt INT,@Width INT,@ActionType INT,@UserName NVARCHAR(50)
-		DECLARE @HasRecord INT,@CCID int,@ErrorMsg nvarchar(max)
+		DECLARE @HasAccess bit,@RowsDeleted bigint,@lft bigint,@rgt bigint,@Width bigint,@ActionType INT,@UserName NVARCHAR(50)
+		DECLARE @HasRecord bigint,@CCID int,@ErrorMsg nvarchar(max)
 
 		--SP Required Parameters Check
 		if(@AccountID=0)
@@ -52,20 +52,12 @@ SET NOCOUNT ON;
 		SELECT @lft = lft, @rgt = rgt, @Width = rgt - lft + 1
 		FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=@AccountID
 		
-		create table #tmpACC (id int identity(1,1),AccountID INT, ConvertFromCustomerID INT)
+		create table #tmpACC (id int identity(1,1),AccountID bigint, ConvertFromCustomerID bigint)
 	
 		if @AccountID>0
 		begin
-			if exists(SELECT * FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=@AccountID and IsGroup=1)
-			BEGIN
-				insert into #tmpACC
-				select AccountID,ConvertFromCustomerID from ACC_Accounts with(nolock) WHERE lft >= @lft AND rgt <= @rgt
-			END
-			else
-			BEGIN
-				insert into #tmpACC
-				select AccountID,ConvertFromCustomerID from ACC_Accounts with(nolock) WHERE AccountID=@AccountID
-			END
+			insert into #tmpACC
+			select AccountID,ConvertFromCustomerID from ACC_Accounts with(nolock) WHERE lft >= @lft AND rgt <= @rgt
 		end
 		else
 		begin
@@ -75,23 +67,19 @@ SET NOCOUNT ON;
 			delete from ADM_OfflineOnlineIDMap where CostCenterID=2 and OfflineID=@AccountID
 		end
 		
-		if exists(select name from sys.tables where name='Crm_Customer')
+		
+		 --Added to update customer master if converted account is deleted
+		declare @a int, @cnt1 int,@CusId bigint
+		set @a=1
+		select @cnt1=count(*) from #tmpACC with(nolock)  
+		while @a<=@cnt1
 		begin
-			 --Added to update customer master if converted account is deleted
-			declare @a int, @cnt1 int,@CusId INT
-			select @a=1,@cnt1=count(*) from #tmpACC with(nolock)  
-			while @a<=@cnt1
-			begin
-				select @CusId=ConvertFromCustomerID from #tmpACC with(nolock) where id=@a 
-				if(@CusId>0)
-				begin
-					set @ErrorMsg='update Crm_Customer set StatusID=393 where customerid='+convert(nvarchar(max),@CusId)
-					exec (@ErrorMsg)
-				end
-				set @a=@a+1
-			end
+			select @CusId=ConvertFromCustomerID from #tmpACC with(nolock) where id=@a 
+			if(@CusId>0)
+				update Crm_Customer  set StatusID=393 where customerid=@CusId
+			set @a=@a+1
 		end
-		set @ErrorMsg=''
+		
 		/*****Check Refrences here****/		 
 		if @AccountID>0
 		begin
@@ -151,20 +139,16 @@ SET NOCOUNT ON;
 				RAISERROR(@ErrorMsg,16,1)
 			end
 			--Document Definition
-			select top 1 @HasRecord=CostCenterID FROM (
-			SELECT DISTINCT C.CostCenterID FROM ADM_DocumentDef C with(nolock) inner join #tmpACC T with(nolock) ON T.AccountID=C.DebitAccount
-			UNION
-			SELECT DISTINCT C.CostCenterID FROM ADM_DocumentDef C with(nolock) inner join #tmpACC T with(nolock) ON T.AccountID=C.CreditAccount
-			) AS T
+			select top 1 @HasRecord=C.CostCenterID FROM ADM_DocumentDef C with(nolock) inner join #tmpACC T with(nolock) ON T.AccountID=C.DebitAccount
 			if(@HasRecord>0)
 			begin
-				select @ErrorMsg=@ErrorMsg+':'+DocumentName from adm_documenttypes with(nolock) 
-				where CostcenterID IN (select top 10 CostCenterID FROM (
-				SELECT DISTINCT C.CostCenterID FROM ADM_DocumentDef C with(nolock) inner join #tmpACC T with(nolock) ON T.AccountID=C.DebitAccount
-				UNION
-				SELECT DISTINCT C.CostCenterID FROM ADM_DocumentDef C with(nolock) inner join #tmpACC T with(nolock) ON T.AccountID=C.CreditAccount
-				) AS T)
-				SELECT @ErrorMsg='Account used in Document Definition of '+@ErrorMsg
+				select @ErrorMsg='Account used in Document Definition of "'+DocumentName+'"' from adm_documenttypes with(nolock) where CostcenterID=@HasRecord
+				RAISERROR(@ErrorMsg,16,1)
+			end
+			select top 1 @HasRecord=C.CostCenterID FROM ADM_DocumentDef C with(nolock) inner join #tmpACC T with(nolock) ON T.AccountID=C.CreditAccount
+			if(@HasRecord>0)
+			begin
+				select @ErrorMsg='Account used in Document Definition of "'+DocumentName+'"' from adm_documenttypes with(nolock) where CostcenterID=@HasRecord
 				RAISERROR(@ErrorMsg,16,1)
 			end
 			--CostCenter Definition
@@ -195,21 +179,10 @@ SET NOCOUNT ON;
 				RAISERROR('Account used in Open Company Data',16,1)
 		end
 		
-		--ondelete External function
-		IF (@AccountID>0)
-		BEGIN
-			DECLARE @tablename NVARCHAR(200)
-			set @tablename=''
-			select @tablename=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=2 and Mode=8
-			if(@tablename<>'')
-				exec @tablename 2,@AccountID,'',@UserID,@LangID	
-		END	
-		
 		SELECT @UserName=USERNAME FROM ADM_USERS WITH(NOLOCK) WHERE UserID=@UserID
 		
 		declare @i int, @cnt int
-		DECLARE @NodeID INT, @Dimesion INT 
-		DECLARE @CostCntID INT,@NID INT,@sSQL NVARCHAR(MAX),@UsrName NVARCHAR(MAX),@StatusID INT
+		DECLARE @NodeID bigint, @Dimesion bigint 
 			
 		select @i=1,@cnt=count(*) from #tmpACC with(nolock)
 		while @i<=@cnt
@@ -225,15 +198,6 @@ SET NOCOUNT ON;
 			
 			set @i=@i+1
 		end
-		
-		
-		--ondelete External function
-		declare @spname nvarchar(200)
-		set @spname=''
-		select @spname=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=2 and Mode=8
-		if(@spname<>'')
-			exec @spname 2,@AccountID,'',@UserID,@LangID
-		--
 		
 		Delete from ACC_ReportTemplate WHERE AccountID in (select AccountID from #tmpACC with(nolock))
 		
@@ -278,7 +242,7 @@ SET NOCOUNT ON;
 			begin
 				Update Acc_accounts set CCID=0, CCNodeID=0 where AccountID in
 				(select AccountID from #tmpACC with(nolock) where id=@i)
-				declare @return_value INT
+				declare @return_value bigint
 			
 		
 				EXEC	@return_value = [dbo].[spCOM_DeleteCostCenter]
@@ -296,32 +260,6 @@ SET NOCOUNT ON;
 			set @i=@i+1
 		end
 		
-		--Delete user from adm_users while deleting account (vendor portal)
-		select @i=0,@cnt=count(*) from #tmpACC with(nolock)
-		while @i<=@cnt
-		begin
-			select  @CostCntID=CostCenterID,@NID=NodeID from COM_DocBridge  with(nolock) where RefDimensionID=2 and RefDimensionNodeID in (select AccountID from #tmpACC with(nolock) where id=@i)
-			IF(@CostCntID=50170)
-			BEGIN
-				SET @UsrName=''
-				IF EXISTS(SELECT USERCOLUMNNAME FROM ADM_COSTCENTERDEF WHERE COSTCENTERID=@CostCntID AND SYSCOLUMNNAME='UserNameAlpha')
-				BEGIN
-					SET @sSQL='select @str=UserNameAlpha from COM_CC'+convert(varchar,@CostCntID)+' where NodeID='+CONVERT(VARCHAR,@NID)
-					EXEC sp_executesql @sSQL,N'@str varchar(max) OUTPUT',@UsrName OUTPUT
-					IF(ISNULL(@UsrName,'')<>'')
-					BEGIN
-						DELETE FROM ADM_USERS WHERE USERNAME=@UsrName
-						DELETE FROM COM_DocBridge WHERE CostCenterID=@CostCntID AND NodeID=@NID 
-						SELECT @StatusID=StatusID FROM COM_STATUS WHERE COSTCENTERID=@CostCntID AND STATUS='Active'
-						SET @sSQL=''
-						SET @sSQL='Update COM_CC'+CONVERT(VARCHAR,@CostCntID)+' Set StatusID='+ CONVERT(VARCHAR,@StatusID) +' where NodeID='+ CONVERT(VARCHAR,@NID) +''
-						--PRINT (@sSQL)
-						EXEC (@sSQL)
-					END
-				 END
-			END
-		set @i=@i+1
-		end	  
 		--Delete from main table
 		DELETE FROM ACC_Accounts WHERE AccountID IN (select AccountID from #tmpACC with(nolock))
 

@@ -78,33 +78,20 @@ ELSE IF (@ReportID=207)
 BEGIN
 	SET @SQL='
 select *
-,convert(xml,PreXML).value(''/XML[1]/@StartDate'',''datetime'') StartDate
-,convert(xml,PreXML).value(''/XML[1]/@EndDate'',''datetime'') EndDate
-,convert(xml,PreXML).value(''/XML[1]/@Months'',''int'') [Mns]
+,PreXML.value(''/XML[1]/@StartDate'',''datetime'') StartDate,PreXML.value(''/XML[1]/@EndDate'',''datetime'') EndDate
+,PreXML.value(''/XML[1]/@Months'',''int'') [Mns]
 from
 (
 select D.AccDocDetailsID,convert(datetime,D.DocDate) DocDate,D.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber
 ,DA.AccountName DrMainAccName,CA.AccountName CrMainAccName
 ,D.Amount TotalAmount,D.CommonNarration,D.LineNarration
-,D.DocumentType,D.[Description] PreXML'+@Select+'
-FROM ACC_DocDetails D with(nolock) 
+,D.DocumentType,convert(xml,D.[Description]) PreXML'+@Select+'
+FROM ACC_DocDetails D with(nolock) --join COM_DocCCDATA DCC with(nolock) on DCC.AccDocDetailsID=D.AccDocDetailsID
 join ACC_Accounts DA with(nolock) on D.DebitAccount=DA.AccountID
 join ACC_Accounts CA with(nolock) on D.CreditAccount=CA.AccountID'+@strCCJoin+'
-where D.RefCCID=0 and D.[Description] is not null and D.DocumentType in (15,18,22,23)'+@strCCWhere+'
-
-union
-
-select D.DocID AccDocDetailsID,convert(datetime,D.DocDate) DocDate,D.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber
-,DA.AccountName DrMainAccName,CA.AccountName CrMainAccName
-,D.Net TotalAmount,D.CommonNarration,D.LineNarration
-,D.DocumentType,D.[Description] PreXML'+@Select+'
-FROM INV_DocDetails D with(nolock) 
-join ACC_Accounts DA with(nolock) on D.DebitAccount=DA.AccountID
-join ACC_Accounts CA with(nolock) on D.CreditAccount=CA.AccountID'+REPLACE(@strCCJoin,'AccDocDetailsID','InvDocDetailsID')+'
-where D.RefCCID=0 and D.[Description] is not null and D.DocumentType in (1,11)'+@strCCWhere+'
+where D.[Description] is not null and D.DocumentType in (15,18,22,23)'+@strCCWhere+'
 ) AS T
-where convert(float,convert(xml,PreXML).value(''/XML[1]/@StartDate'',''datetime'')) between '+convert(nvarchar,@From)+' and '+convert(nvarchar,@To)+'
-
+where convert(float,PreXML.value(''/XML[1]/@StartDate'',''datetime'')) between '+convert(nvarchar,@From)+' and '+convert(nvarchar,@To)+'
 order by DocDate,DocAbbr,DocPrefix,DocNumber
 
 select T.AccDocDetailsID,convert(datetime,D.DocDate) DocDate,D.VoucherNo,sum(Amount) Amount
@@ -116,49 +103,32 @@ join (
 select AccDocDetailsID from
 (
 select convert(xml,D.[Description]) PreXML,D.AccDocDetailsID
-FROM ACC_DocDetails D with(nolock) '+@strCCJoin+'
+FROM ACC_DocDetails D with(nolock) '+@strCCJoin+'--join COM_DocCCDATA DCC with(nolock) on DCC.AccDocDetailsID=D.AccDocDetailsID
 where D.[Description] is not null and D.DocumentType in (15,18,22,23)'+@strCCWhere+'
 ) AS T
 where convert(float,PreXML.value(''/XML[1]/@StartDate'',''datetime'')) between '+convert(nvarchar,@From)+' and '+convert(nvarchar,@To)+'
 ) AS T on D.RefCCID=400 and D.RefNodeID=T.AccDocDetailsID
 where D.InvDocDetailsID is null
 group by T.AccDocDetailsID,D.DocDate,D.VoucherNo,DA.AccountName,CA.AccountName
-union
-select T.AccDocDetailsID,convert(datetime,D.DocDate) DocDate,D.VoucherNo,sum(Amount) Amount
-,DA.AccountName DrAccName,CA.AccountName CrAccName
-from ACC_DocDetails D with(nolock)
-join ACC_Accounts DA with(nolock) on D.DebitAccount=DA.AccountID
-join ACC_Accounts CA with(nolock) on D.CreditAccount=CA.AccountID
-join (
-select AccDocDetailsID from
-(
-select convert(xml,D.[Description]) PreXML,D.DocID AccDocDetailsID
-FROM INV_DocDetails D with(nolock) '+REPLACE(@strCCJoin,'AccDocDetailsID','InvDocDetailsID')+'
-where D.[Description] is not null and D.DocumentType in (1,11)'+@strCCWhere+'
-) AS T
-where convert(float,PreXML.value(''/XML[1]/@StartDate'',''datetime'')) between '+convert(nvarchar,@From)+' and '+convert(nvarchar,@To)+'
-) AS T on D.RefCCID=300 and D.RefNodeID=T.AccDocDetailsID
-where D.InvDocDetailsID is null and D.DocumentType in (15,18,22,23)
-group by T.AccDocDetailsID,D.DocDate,D.VoucherNo,DA.AccountName,CA.AccountName
-
-order by AccDocDetailsID,DrAccName,CrAccName,VoucherNo'
+order by AccDocDetailsID,DrAccName,CrAccName,D.VoucherNo'
  	--print (@SQL) 
 	EXEC (@SQL)  
 END
 ELSE IF (@ReportID=203 or @ReportID=204)
 BEGIN
-	DECLARE @CCID INT
-	select @CCID=CONVERT(INT,Value) from COM_CostCenterPreferences P with(nolock) where name='BinsDimension' and isnumeric(Value)=1
-	select @SQL=TableName from ADM_Features with(nolock) where FeatureID=@CCID
-	
+--,case when BT.BatchID>1 then BT.BatchNumber else null end BatchNumber
+--,case when BT.BatchID>1 then convert(datetime,BT.ExpiryDate) else null end ExpiryDate
+--join INV_Batches BT with(nolock) on BT.BatchID=D.BatchID
+--,BT.BatchID,BT.BatchNumber,BT.ExpiryDate
+--,BT.BatchNumber,BT.ExpiryDate
 	SET @SQL='
 	select P.ProductCode,P.ProductName,BIN.Code BinCode,BIN.Name BinName,sum(B.Quantity*D.UOMConversion*B.VoucherType) Qty'+@Select+'
 from INV_BinDetails B with(nolock)  
-join '+@SQL+' BIN with(nolock) on BIN.NodeID=B.BinID  
+join '+(select TableName from ADM_Features with(nolock) where FeatureID=(select Value from COM_CostCenterPreferences P with(nolock) where name='BinsDimension' and isnumeric(Value)=1))+' BIN with(nolock) on BIN.NodeID=B.BinID  
 join INV_DocDetails D with(nolock) on D.InvDocDetailsID=B.InvDocDetailsID  
 join INV_Product P with(nolock) on P.ProductID=D.ProductID  
 '+@strCCJoin+'
-where D.IsQtyIgnored=0 AND D.DocDate<='+convert(nvarchar,@To)+REPLACE(@strCCWhere,'DCC.dcCCNID'+CONVERT(NVARCHAR,(@CCID-50000)),'B.BinID')+'
+where D.IsQtyIgnored=0 AND D.DocDate<='+convert(nvarchar,@To)+@strCCWhere+'
 group by P.ProductCode,P.ProductName,BIN.Code,BIN.Name'+@SelectAlias+'
 order by '+@OptionsXML+',BIN.Code'
  print (@SQL) 

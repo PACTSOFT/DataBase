@@ -11,9 +11,9 @@ CREATE PROCEDURE [dbo].[spDoc_GetPDCdocuments]
 	@Locations [nvarchar](max),
 	@Divisions [nvarchar](max),
 	@Dimensions [nvarchar](max),
-	@BankAccountID [int],
+	@BankAccountID [bigint],
 	@Status [int],
-	@Filter [int],
+	@Filter [bigint],
 	@SELECTQRY [nvarchar](max),
 	@FROMQRY [nvarchar](max),
 	@CostCenterID [nvarchar](max),
@@ -89,7 +89,7 @@ SET NOCOUNT ON;
 		if(@Status>0)
 			set @WHERE=@WHERE+' and (D.StatusID = '+convert(nvarchar,@Status)+' or D.OpPdcStatus = '+convert(nvarchar,@Status)+')'
 		if(@CostCenterID<>'')
-			set @WHERE=@WHERE+' and D.CostCenterID in ('+convert(nvarchar(max),@CostCenterID)+')'
+			set @WHERE=@WHERE+' and D.CostCenterID = '+convert(nvarchar,@CostCenterID)
 		if(@ExcTerminatedPDC is not null and @ExcTerminatedPDC='true')
 		BEGIN	
 			if(@ExcRefPDC is not null and @ExcRefPDC='true')
@@ -103,7 +103,7 @@ SET NOCOUNT ON;
 		--Reference Vouchers Temp Table
 		if @Status!=370 and @Filter!=2
 		begin
-			CREATE TABLE #TblPDR(AccDocDetailsID INT,ConvertedCostCenterID int,ConvertedVoucherNO nvarchar(100),ConvertedDocID INT,ConvertedDocUser nvarchar(100),ConvertedDocDate datetime)
+			CREATE TABLE #TblPDR(AccDocDetailsID bigint,ConvertedCostCenterID int,ConvertedVoucherNO nvarchar(100),ConvertedDocID bigint,ConvertedDocUser nvarchar(100),ConvertedDocDate datetime)
 			
 			set @PDRsql='
 		INSERT INTO #TblPDR
@@ -132,7 +132,7 @@ SET NOCOUNT ON;
 			convert(datetime,ChequeMaturityDate) ChequeMaturityDate,convert(datetime,ChequeMaturityDate) BillDate,D.BillDate BillNo,
 			Case when D.StatusID=429 then (select count(DocNO) from COM_ChequeReturn CR with(nolock) where cr.RefDocNo=D.VoucherNo) else 0 end as AdjCnt
 			,case when D.DocumentType=16 then CD.Status else C.Status end Status,D.ChequeNumber,A.AccountName as BankAccountID,D.DebitAccount as BankAccountID_Key,
-			S.AccountName as AccountID,D.CreditAccount as AccountID_Key,D.CreditAccount as ActDr,D.BankAccountID BankID,BA.AccountName BankName,D.DocumentType,convert(datetime,D.ChequeDate) ChequeDate'
+			S.AccountName as AccountID,D.CreditAccount as AccountID_Key,D.CreditAccount as ActDr,D.BankAccountID BankID,BA.AccountName BankName,D.DocumentType,convert(datetime,D.ChequeDate) ChequeDate '
 		
 		if(@isCrossDimRct=1)
 			set @PDRsql=@PDRsql+ ',D.RefCCID,D.RefNodeID '
@@ -158,8 +158,6 @@ SET NOCOUNT ON;
 				,BT.ConvertedDocID BouncedVoucherDocID
 				,BT.ConvertedDocUser BouncedDocUser
 				,BT.ConvertedDocDate BouncedDocDate'
-
-				set @PDRsql=@PDRsql+',DT.BounceInvDoc,DT.PDCAmtFld,DT.PDCActionFld,BA.PDCReplaceAccount ReplaceAccountID'
 						
 		set @PDRsql=@PDRsql+@SELECTQRY+'
 			from  ACC_DocDetails D with(nolock)
@@ -168,12 +166,12 @@ SET NOCOUNT ON;
 			join ACC_Accounts A with(nolock) on D.DebitAccount=A.AccountID
 			join ACC_Accounts S with(nolock) on D.CreditAccount=S.AccountID
 			join ADM_DocumentTypes DT with(nolock) on DT.CostCenterID=D.CostCenterID
-			left join ACC_Accounts BA with(nolock) on D.BankAccountID=BA.AccountID'
+			left join ACC_Accounts BA with(nolock) on D.BankAccountID=BA.AccountID '
 		if @Status!=370
 			set @PDRsql=@PDRsql+'
-			left join #TblPDR T with(nolock) on T.AccDocDetailsID=D.AccDocDetailsID  and DT.ConvertAS=T.ConvertedCostCenterID
-			left join #TblPDR IT with(nolock) on IT.AccDocDetailsID=D.AccDocDetailsID  and DT.IntermediateConvertion=IT.ConvertedCostCenterID
-			left join #TblPDR BT with(nolock) on BT.AccDocDetailsID=D.AccDocDetailsID  and DT.Bounce=BT.ConvertedCostCenterID'
+			left join #TblPDR T on T.AccDocDetailsID=D.AccDocDetailsID  and DT.ConvertAS=T.ConvertedCostCenterID
+			left join #TblPDR IT on IT.AccDocDetailsID=D.AccDocDetailsID  and DT.IntermediateConvertion=IT.ConvertedCostCenterID
+			left join #TblPDR BT on BT.AccDocDetailsID=D.AccDocDetailsID  and DT.Bounce=BT.ConvertedCostCenterID'
 			
 		if(@ExcTerminatedPDC is not null and @ExcTerminatedPDC='true')
 			set @PDRsql=@PDRsql+' left join Ren_contract RC with(nolock) on Rc.ContractID=D.RefNOdeID and D.refccid=95 
@@ -199,7 +197,7 @@ SET NOCOUNT ON;
 		if(@Status>0)
 			set @WHERE=@WHERE+' and D.StatusID = '+convert(nvarchar,@Status)
 		if(@CostCenterID<>'')
-			set @WHERE=@WHERE+' and D.CostCenterID in ('+convert(nvarchar(max),@CostCenterID)+')'
+			set @WHERE=@WHERE+' and D.CostCenterID = '+convert(nvarchar,@CostCenterID)
 		if(@ExcTerminatedPDC is not null and @ExcTerminatedPDC='true')
 		BEGIN
 			if(@ExcRefPDC is not null and @ExcRefPDC='true')				
@@ -214,7 +212,7 @@ SET NOCOUNT ON;
 		--Reference Vouchers Temp Table
 		if @Status!=370 and @Filter!=1
 		begin
-			CREATE TABLE #TblPDP(AccDocDetailsID INT,ConvertedCostCenterID int,ConvertedVoucherNO nvarchar(100),ConvertedDocID INT,ConvertedDocUser nvarchar(100),ConvertedDocDate datetime)
+			CREATE TABLE #TblPDP(AccDocDetailsID bigint,ConvertedCostCenterID int,ConvertedVoucherNO nvarchar(100),ConvertedDocID bigint,ConvertedDocUser nvarchar(100),ConvertedDocDate datetime)
 			
 			set @PDPsql='
 		INSERT INTO #TblPDP
@@ -233,7 +231,7 @@ SET NOCOUNT ON;
 		
 			set @PDPsql=@PDPsql+@WHERE
 			set @PDPsql=@PDPsql+' group by D.AccDocDetailsID,RD.CostCenterID'
-			print(@PDPsql)
+			--print(@PDPsql)
 			EXEC(@PDPsql)
 		end
 		
@@ -271,8 +269,6 @@ SET NOCOUNT ON;
 				,BT.ConvertedDocID BouncedVoucherDocID
 				,BT.ConvertedDocUser BouncedDocUser
 				,BT.ConvertedDocDate BouncedDocDate'
-
-		set @PDPsql=@PDPsql+ ',DT.BounceInvDoc,DT.PDCAmtFld,DT.PDCActionFld,BA.PDCReplaceAccount ReplaceAccountID'
 			
 		set @PDPsql=@PDPsql+@SELECTQRY+'
 		from  ACC_DocDetails D  with(nolock)
@@ -283,9 +279,9 @@ SET NOCOUNT ON;
 		left join ACC_Accounts BA with(nolock) on D.BankAccountID=BA.AccountID '
 		if @Status!=370
 			set @PDPsql=@PDPsql+'
-			left join #TblPDP T with(nolock) on T.AccDocDetailsID=D.AccDocDetailsID  and DT.ConvertAS=T.ConvertedCostCenterID
-			left join #TblPDP IT with(nolock) on IT.AccDocDetailsID=D.AccDocDetailsID  and DT.IntermediateConvertion=IT.ConvertedCostCenterID
-			left join #TblPDP BT with(nolock) on BT.AccDocDetailsID=D.AccDocDetailsID  and DT.Bounce=BT.ConvertedCostCenterID'
+			left join #TblPDP T on T.AccDocDetailsID=D.AccDocDetailsID  and DT.ConvertAS=T.ConvertedCostCenterID
+			left join #TblPDP IT on IT.AccDocDetailsID=D.AccDocDetailsID  and DT.IntermediateConvertion=IT.ConvertedCostCenterID
+			left join #TblPDP BT on BT.AccDocDetailsID=D.AccDocDetailsID  and DT.Bounce=BT.ConvertedCostCenterID'
 		if(@ExcTerminatedPDC is not null and @ExcTerminatedPDC='true')
 			set @PDPsql=@PDPsql+' left join Ren_contract RC with(nolock) on Rc.ContractID=D.RefNOdeID and D.refccid=95 
 								  left join REN_ContractDocMapping RCM with(nolock) on D.DOCID=RCM.DOCID and RCM.IsAccDOc=1 '
@@ -329,7 +325,7 @@ SET NOCOUNT ON;
 				
 				set @PDRsql=@PDRsql+','''' ConvertedVoucherNO,0 ConvertedDocID,null ConvertedDocUser,convert(datetime,1) ConvertedDocDate'
 				set @PDRsql=@PDRsql+','''' InterMediateVoucherNO,0 InterMediateDocID,null InterMediateDocUser,null InterMediateDocDate'
-				set @PDRsql=@PDRsql+',null BouncedVoucher,null BouncedVoucherDocID,null BouncedDocUser,null BouncedDocDate,DT.BounceInvDoc,DT.PDCAmtFld,DT.PDCActionFld,BA.PDCReplaceAccount'
+				set @PDRsql=@PDRsql+',null BouncedVoucher,null BouncedVoucherDocID,null BouncedDocUser,null BouncedDocDate'
 			
 			set @PDRsql=@PDRsql+@SELECTQRY+'
 				from  ACC_DocDetails D with(nolock)							
@@ -362,7 +358,7 @@ SET NOCOUNT ON;
 				if(@PDCFilterDimension IS NOT NULL AND @PDCFilterDimension >0 AND @Dimensions<>'')	
 					set @PDRsql=@PDRsql+' and CC.dcCCNID'+CONVERT(NVARCHAR,(@PDCFilterDimension-50000))+' in ('+@Dimensions+')'	
 				if(@CostCenterID<>'')
-					set @PDRsql=@PDRsql+' and a.CostCenterID in ('+convert(nvarchar(max),@CostCenterID)+')'
+					set @PDRsql=@PDRsql+' and a.CostCenterID = '+convert(nvarchar,@CostCenterID)
 				if(@Status>0)
 					set @WHERE=@WHERE+' and b.StatusID = '+convert(nvarchar,@Status)
 
@@ -399,5 +395,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH 
 GO

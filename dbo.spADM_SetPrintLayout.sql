@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_SetPrintLayout]
-	@LayoutID [int],
-	@DocumentID [int],
+	@LayoutID [bigint],
+	@DocumentID [bigint],
 	@DocType [int] = 0,
 	@LayoutName [nvarchar](50),
 	@Preferences [nvarchar](max),
@@ -15,11 +15,11 @@ CREATE PROCEDURE [dbo].[spADM_SetPrintLayout]
 	@ReportFooter [nvarchar](max),
 	@ExtendedDataQuery [nvarchar](max),
 	@FormulaFieldsXML [nvarchar](max) = null,
-	@SaveAsLayoutID [int] = 0,
+	@SaveAsLayoutID [bigint] = 0,
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@RoleID [int],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -92,7 +92,7 @@ SET NOCOUNT ON;
 			SET @LayoutID=SCOPE_IDENTITY()
 
 			INSERT INTO ADM_DocPrintLayoutsMap(UserID,RoleID,GroupID,DocPrintLayoutID,CreatedBy,CreatedDate)
-			SELECT UserID,0,0,@LayoutID,@UserName,CONVERT(FLOAT,GETDATE()) FROM ADM_Users with(nolock)
+			SELECT UserID,0,0,@LayoutID,@UserName,CONVERT(FLOAT,GETDATE()) FROM ADM_Users
 		END--------END INSERT RECORD-----------  
 		ELSE--------START UPDATE RECORD-----------  
 		BEGIN
@@ -101,7 +101,6 @@ SET NOCOUNT ON;
 
 			UPDATE ADM_DocPrintLayouts  
 			SET Preferences = @Preferences  
-			,Name=@LayoutName 
 			,BodyFields = @BodyFields  
 			,ReportHeader = @ReportHeader  
 			,PageHeader = @PageHeader  
@@ -159,5 +158,4 @@ BEGIN CATCH
  SET NOCOUNT OFF    
  RETURN -999     
 END CATCH   
-
 GO

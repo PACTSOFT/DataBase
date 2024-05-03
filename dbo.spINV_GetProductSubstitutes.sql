@@ -3,22 +3,22 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spINV_GetProductSubstitutes]
-	@ProductID [int] = 0,
-	@UserID [int],
+	@ProductID [bigint] = 0,
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY  
 SET NOCOUNT ON;  
  
-	SELECT SP.SProductID,P.ProductName,P.ProductCode,SP.SubstituteGroupID GroupID,L.Name [Type],L.NodeID STypeID,0 IsUsed,ISNULL(S.SNo,0) SNo
+	SELECT SP.SProductID,P.ProductName,P.ProductCode,SP.SubstituteGroupID GroupID,L.Name [Type],L.NodeID STypeID,0 IsUsed
 	FROM INV_ProductSubstitutes S WITH(NOLOCK)   
 	INNER JOIN INV_ProductSubstitutes SP WITH(NOLOCK) on SP.ProductID=S.ProductID
 	INNER JOIN INV_Product P WITH(NOLOCK) on SP.SProductID=P.ProductID
 	INNER JOIN COM_Lookup L WITH(NOLOCK) on SP.SubstituteGroupID=L.NodeID
 	WHERE S.SProductID=@ProductID and SP.SProductID!=@ProductID
 	UNION
-	SELECT S.ProductID,P.ProductName,P.ProductCode,S.SubstituteGroupID GroupID,L.Name [Type],L.NodeID STypeID,1 IsUsed,ISNULL(S.SNo,0) SNo
+	SELECT S.ProductID,P.ProductName,P.ProductCode,S.SubstituteGroupID GroupID,L.Name [Type],L.NodeID STypeID,1 IsUsed
 	FROM INV_ProductSubstitutes S WITH(NOLOCK)   
 	INNER JOIN INV_Product P WITH(NOLOCK) on S.ProductID=P.ProductID
 	INNER JOIN COM_Lookup L WITH(NOLOCK) on S.SubstituteGroupID=L.NodeID
@@ -41,5 +41,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

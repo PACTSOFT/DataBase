@@ -5,19 +5,25 @@ GO
 CREATE PROCEDURE [dbo].[spCRM_CheckSerialNumber]
 	@ProductID [int],
 	@SerialNumber [int],
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;    
+		--Declaration Section  
+		DECLARE @Dt FLOAT
+		DECLARE @TempGuid NVARCHAR(50) 
+		DECLARE @HasAccess bit
+		declare @Count int
 
-	declare @Count int
 
-
-	select @Count=count(*) from CRM_ContractLines with(nolock)
-	where ProductID=@ProductID and SerialNumber =@SerialNumber
+select @Count=count(*) from CRM_ContractLines with(nolock)
+where 
+ProductID=@ProductID
+--and SvcContractID =@SvcContractID
+and SerialNumber =@SerialNumber
  
  
   
@@ -39,5 +45,20 @@ BEGIN CATCH
  ROLLBACK TRANSACTION  
  SET NOCOUNT OFF    
  RETURN -999     
-END CATCH
+END CATCH   
+  
+ 
+  
+  
+  
+  
+  
+
+
+
+
+
+
+
+
 GO

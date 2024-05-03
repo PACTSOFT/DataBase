@@ -12,21 +12,29 @@ AS
 BEGIN TRANSACTION
 BEGIN TRY	
 SET NOCOUNT ON
-		
-	SELECT * FROM REN_Tenant  WITH(NOLOCK) 
-	WHERE TenantID=@TenantID
-	
+			
+			
+	SELECT * FROM COM_Lookup  WITH(NOLOCK) WHERE LookUpType = 32
+	SELECT * FROM COM_Lookup  WITH(NOLOCK) WHERE LookUpType = 33 
+
+	IF @TenantID>0
+	BEGIN
+		SELECT REN_Tenant.*,Passport,Nationality,PassportIssueDate,PassportExpiryDate,
+		SponsorName,SponsorPassport,SponsorIssueDate,SponsorExpiryDate,License,
+		LicenSeIssuedBy,LicenseIssueDate,LicenseExpiryDate FROM REN_Tenant  WITH(NOLOCK) 
+		WHERE TenantID=@TenantID
+	END
+
 	--Getting data from Tenant extended table
 	SELECT * FROM  REN_TenantExtended WITH(NOLOCK) 
 	WHERE TenantID=@TenantID
 
 	SELECT * FROM COM_CCCCDATA  WITH(NOLOCK)
 	WHERE NodeID = @TenantID AND CostCenterID  = 94 
-	
-	SELECT * FROM COM_Notes WITH(NOLOCK)   
-	WHERE FeatureID = 94 AND FeaturePK  = @TenantID
-	
-	EXEC [spCOM_GetAttachments] 94,@TenantID,@UserID
+
+	--Getting Files
+	SELECT * FROM  COM_Files WITH(NOLOCK) 
+	WHERE FeatureID=94 and  FeaturePK=@TenantID
 	
 	--WorkFlow
 	EXEC spCOM_CheckCostCentetWFApprove 94,@TenantID,@UserID,@RoleID
@@ -35,12 +43,6 @@ SET NOCOUNT ON
 		EXEC spCRM_GetFeatureByActvities @TenantID,94,'',@UserID,@LangID  
 	ELSE
 		SELECT 1 WHERE 1<>1
-
-	--8 Getting Contacts  
-	EXEC [spCom_GetFeatureWiseContacts] 94,@TenantID,2,1,1
-
-	--9 Getting Contacts  
-	EXEC [spCom_GetFeatureWiseContacts] 94,@TenantID,1,1,1
 	
 COMMIT TRANSACTION
 SET NOCOUNT OFF;
@@ -60,5 +62,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

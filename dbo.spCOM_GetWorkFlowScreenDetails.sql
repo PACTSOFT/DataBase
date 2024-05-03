@@ -5,7 +5,7 @@ GO
 CREATE PROCEDURE [dbo].[spCOM_GetWorkFlowScreenDetails]
 	@LocationWhere [nvarchar](max) = null,
 	@DivisionWhere [nvarchar](max) = null,
-	@UserID [int],
+	@UserID [bigint],
 	@RoleID [int],
 	@LangID [int] = 1,
 	@IsCRM [bit] = 0
@@ -91,7 +91,7 @@ SET NOCOUNT ON;
 	order by GroupName
 	
 	--getting Worflow list
-	declare @Tbl as table(WorkFlowID INT,WorkFlowName nvarchar(max))
+	declare @Tbl as table(WorkFlowID bigint,WorkFlowName nvarchar(max))
 	if @UserID=1
 		insert into @Tbl
 		select  distinct WorkFlowID,WorkFlowName from COM_WorkFlow with(nolock)

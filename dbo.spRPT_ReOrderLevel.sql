@@ -51,7 +51,7 @@ SET NOCOUNT ON
 	DECLARE @TblPendingOrders AS TABLE(ProductID BIGINT,ExpQty1 FLOAT,ExpQty2 FLOAT,ExpQty3 FLOAT,ComQty1 FLOAT,ComQty2 FLOAT,ComQty3 FLOAT,TagID BIGINT)
 	CREATE TABLE #TblProducts(ID INT IDENTITY(1,1) NOT NULL,ProductID BIGINT,PreexpiryDays INT,ParentID bigint)
 	CREATE TABLE #TblGroups(ID INT IDENTITY(1,1) NOT NULL,ProductID BIGINT)
-	DECLARE @Query nvarchar(MAX),@ToDate DATETIME,@StDate DATETIME,@EndDate DATETIME,@ProductIDCol nvarchar(50)
+	DECLARE @Query nvarchar(MAX),@ToDate DATETIME,@StDate DATETIME,@EndDate DATETIME,@CurrYearMonths FLOAT,@ProductIDCol nvarchar(50)
 	DECLARE @TblTagList AS TABLE(ID INT IDENTITY(1,1) NOT NULL,NodeID BIGINT)
 	DECLARE @TblTagSelected AS TABLE(ID INT IDENTITY(1,1) NOT NULL,NodeID BIGINT)
 	DECLARE @TCNT INT,@PID BIGINT,@TI INT,@NodeID BIGINT,@SubTagSQL NVARCHAR(MAX)
@@ -260,8 +260,7 @@ SET NOCOUNT ON
 	SET @StDate=CONVERT(DATETIME,'01 jan '+CONVERT(NVARCHAR,year(@SalesToDate)))
 
 	IF @SalesDocs<>''
-	BEGIN
-		declare @CurrYearMonths FLOAT
+	BEGIN		
 		SET @CurrYearMonths=datediff(dd,@StDate,@SalesToDate)/30.0
 		IF @CurrYearMonths=0
 			SET @CurrYearMonths=1
@@ -282,26 +281,15 @@ SET NOCOUNT ON
 			INSERT INTO @TblAvgSale(ProductID,TAGID,TotalSaleQty)
 			EXEC(@Query)	
 		end
+			
 		if (select COUNT(*) from @TblCalc where Name='CYAvgSale')=0
 		begin
-			if (select COUNT(*) from @TblCalc where Name='AvgSaleByTrMn')=1
-			begin
-				SET @Query='select ProductID,TAGID,round(sum(Qty)/count(*),4) from (SELECT '+@ProductIDCol+@DimCol+' TAGID,month(convert(datetime,A.DocDate)) Mn,SUM(isnull(UOMConvertedQty,0)*-VoucherType) Qty
-				FROM INV_DocDetails A WITH(NOLOCK) inner join #TblProducts TP on TP.ProductID=A.ProductID '+@CCWHERE+'
-				WHERE A.CostCenterID IN('+@SalesDocs+') AND (DocDate BETWEEN '+CONVERT(NVARCHAR,CONVERT(INT,@StDate))+' AND '+CONVERT(NVARCHAR,CONVERT(INT,@SalesToDate))+')'
-				+@SaleStatusWhere+' GROUP BY '+@ProductIDCol+@DimCol+',month(convert(datetime,A.DocDate))) as T
-				GROUP BY ProductID,TAGID'
-			end
-			else
-			begin
-				SET @Query='SELECT '+@ProductIDCol+@DimCol+' TAGID,SUM(isnull(UOMConvertedQty,0)*-VoucherType)/'+convert(nvarchar,@CurrYearMonths)+'
-				FROM INV_DocDetails A WITH(NOLOCK) inner join #TblProducts TP on TP.ProductID=A.ProductID '+@CCWHERE+'
-				WHERE A.CostCenterID IN('+@SalesDocs+') AND (DocDate BETWEEN '+CONVERT(NVARCHAR,CONVERT(INT,@StDate))+' AND '+CONVERT(NVARCHAR,CONVERT(INT,@SalesToDate))+')'
-				+@SaleStatusWhere+' GROUP BY '+@ProductIDCol+@DimCol
-			end
+			SET @Query='SELECT '+@ProductIDCol+@DimCol+' TAGID,SUM(UOMConvertedQty*-VoucherType)
+			FROM INV_DocDetails A WITH(NOLOCK) inner join #TblProducts TP on TP.ProductID=A.ProductID '+@CCWHERE+'
+			WHERE A.CostCenterID IN('+@SalesDocs+') AND (DocDate BETWEEN '+CONVERT(NVARCHAR,CONVERT(INT,@StDate))+' AND '+CONVERT(NVARCHAR,CONVERT(INT,@SalesToDate))+')'
+			+@SaleStatusWhere+' GROUP BY '+@ProductIDCol+@DimCol
 			INSERT INTO @TblAvgSale(ProductID,TAGID,CYAvgSale)
 			EXEC(@Query)
---			print @Query
 		end
 
 		SET @EndDate=@SalesToDate
@@ -539,11 +527,6 @@ SET NOCOUNT ON
 
 		IF @DimensionID=0
 		BEGIN	
-			DECLARE @SQL NVARCHAR(MAX)=''
-			select @SQL=@SQL+' AND '+name+'=0' 
-			from sys.columns WITH(NOLOCK)
-			where object_id=object_id('COM_CCPrices') and name LIKE 'ccnid%'
-		
 			WHILE(@I<=@COUNT)
 			BEGIN			
 				SELECT @PID=ProductID,@ReorderLevel=NULL,@ReorderQty=NULL FROM #TblProducts WHERE ID=@I		
@@ -551,39 +534,30 @@ SET NOCOUNT ON
 				--Reorder Level
 				if @CalcReOrderLevel=0
 				begin
-					SET @Query='SET @ReorderLevel=(SELECT TOP 1 ReorderLevel FROM COM_CCPrices with(nolock)
-					WHERE WEF<='+CONVERT(NVARCHAR(MAX),@EDATE)+' and ProductID='+CONVERT(NVARCHAR,@PID)+' AND ReorderLevel>0 AND (PriceType=0 or PriceType=3)
-					'+@SQL+'	
-					ORDER BY WEF DESC)'
-					
-					EXEC sp_executesql @Query,N'@ReorderLevel FLOAT OUTPUT',@ReorderLevel OUTPUT
-			
+					SET @ReorderLevel=(SELECT TOP 1 ReorderLevel FROM COM_CCPrices with(nolock)
+					WHERE WEF<=@EDATE and ProductID=@PID AND ReorderLevel>0 AND (PriceType=0 or PriceType=3)
+						AND CCNID1=0 AND CCNID2=0 AND CCNID3=0 AND CCNID4=0 AND CCNID5=0 AND CCNID6=0 AND CCNID7=0 AND CCNID8=0 AND CCNID9=0 AND CCNID10=0 AND CCNID11=0 AND CCNID12=0 AND CCNID13=0 AND CCNID14=0 AND CCNID15=0 AND CCNID16=0 AND CCNID17=0 AND CCNID18=0 AND CCNID19=0 AND CCNID20=0 AND CCNID21=0 AND CCNID22=0 AND CCNID23=0 AND CCNID24=0 AND CCNID25=0 AND CCNID26=0 AND CCNID27=0 AND CCNID28=0 AND CCNID29=0 AND CCNID30=0 AND CCNID31=0 AND CCNID32=0 AND CCNID33=0 AND CCNID34=0 AND CCNID35=0 AND CCNID36=0 AND CCNID37=0 AND CCNID38=0 AND CCNID39=0 AND CCNID40=0 AND CCNID41=0 AND CCNID42=0 AND CCNID43=0 AND CCNID44=0 AND CCNID45=0 AND CCNID46=0 AND CCNID47=0 AND CCNID48=0 AND CCNID49=0 AND CCNID50=0
+					ORDER BY WEF DESC)
 					IF @ReorderLevel IS NULL
 						SELECT @ReorderLevel=ReorderLevel FROM INV_Product with(nolock) WHERE ProductID=@PID 
 				end
 				--Reorder Qty
 				if @CalcReOrderQty=0
 				begin
-					SET @Query='SET @ReorderQty=(SELECT TOP 1 ReorderQty FROM COM_CCPrices with(nolock)
-					WHERE WEF<='+CONVERT(NVARCHAR(MAX),@EDATE)+' and ProductID='+CONVERT(NVARCHAR,@PID)+' AND ReorderQty>0 AND (PriceType=0 or PriceType=3)
-					'+@SQL+'	
-					ORDER BY WEF DESC)'
-					
-					EXEC sp_executesql @Query,N'@ReorderQty FLOAT OUTPUT',@ReorderQty OUTPUT
-			
+					SET @ReorderQty=(SELECT TOP 1 ReorderQty FROM COM_CCPrices with(nolock)
+					WHERE WEF<=@EDATE and ProductID=@PID AND ReorderQty>0 AND (PriceType=0 or PriceType=3)
+						AND CCNID1=0 AND CCNID2=0 AND CCNID3=0 AND CCNID4=0 AND CCNID5=0 AND CCNID6=0 AND CCNID7=0 AND CCNID8=0 AND CCNID9=0 AND CCNID10=0 AND CCNID11=0 AND CCNID12=0 AND CCNID13=0 AND CCNID14=0 AND CCNID15=0 AND CCNID16=0 AND CCNID17=0 AND CCNID18=0 AND CCNID19=0 AND CCNID20=0 AND CCNID21=0 AND CCNID22=0 AND CCNID23=0 AND CCNID24=0 AND CCNID25=0 AND CCNID26=0 AND CCNID27=0 AND CCNID28=0 AND CCNID29=0 AND CCNID30=0 AND CCNID31=0 AND CCNID32=0 AND CCNID33=0 AND CCNID34=0 AND CCNID35=0 AND CCNID36=0 AND CCNID37=0 AND CCNID38=0 AND CCNID39=0 AND CCNID40=0 AND CCNID41=0 AND CCNID42=0 AND CCNID43=0 AND CCNID44=0 AND CCNID45=0 AND CCNID46=0 AND CCNID47=0 AND CCNID48=0 AND CCNID49=0 AND CCNID50=0 
+					ORDER BY WEF DESC)
 					IF @ReorderQty IS NULL
 						SELECT @ReorderQty=ReorderQty FROM INV_Product with(nolock) WHERE ProductID=@PID
 				end
 				--Selling Price
 				if @CalcSellingPrice=0
 				begin
-					SET @Query='SET @SellingPrice=(SELECT TOP 1 SellingRate FROM COM_CCPrices with(nolock)
-					WHERE WEF<='+CONVERT(NVARCHAR(MAX),@EDATE)+' and ProductID='+CONVERT(NVARCHAR,@PID)+' AND SellingRate>0 AND (PriceType=0 or PriceType=1)
-					'+@SQL+'	
-					ORDER BY WEF DESC)'
-					
-					EXEC sp_executesql @Query,N'@SellingPrice FLOAT OUTPUT',@SellingPrice OUTPUT
-					
+					SET @SellingPrice=(SELECT TOP 1 SellingRate FROM COM_CCPrices with(nolock)
+					WHERE WEF<=@EDATE and ProductID=@PID AND SellingRate>0 AND (PriceType=0 or PriceType=1)
+						AND CCNID1=0 AND CCNID2=0 AND CCNID3=0 AND CCNID4=0 AND CCNID5=0 AND CCNID6=0 AND CCNID7=0 AND CCNID8=0 AND CCNID9=0 AND CCNID10=0 AND CCNID11=0 AND CCNID12=0 AND CCNID13=0 AND CCNID14=0 AND CCNID15=0 AND CCNID16=0 AND CCNID17=0 AND CCNID18=0 AND CCNID19=0 AND CCNID20=0 AND CCNID21=0 AND CCNID22=0 AND CCNID23=0 AND CCNID24=0 AND CCNID25=0 AND CCNID26=0 AND CCNID27=0 AND CCNID28=0 AND CCNID29=0 AND CCNID30=0 AND CCNID31=0 AND CCNID32=0 AND CCNID33=0 AND CCNID34=0 AND CCNID35=0 AND CCNID36=0 AND CCNID37=0 AND CCNID38=0 AND CCNID39=0 AND CCNID40=0 AND CCNID41=0 AND CCNID42=0 AND CCNID43=0 AND CCNID44=0 AND CCNID45=0 AND CCNID46=0 AND CCNID47=0 AND CCNID48=0 AND CCNID49=0 AND CCNID50=0
+					ORDER BY WEF DESC)
 					IF @SellingPrice IS NULL
 						SELECT @SellingPrice=SellingRate FROM INV_Product with(nolock) WHERE ProductID=@PID 
 				end
@@ -682,7 +656,7 @@ IF @ReorderQty IS NULL
 		AVR.AvgRate
 		,P.UOMID UOM_Key,(SELECT TOP 1 UnitName FROM COM_UOM WITH(NOLOCK) WHERE UOMID=P.UOMID) UOM--,P.Description
 		,PO.ExpQty1,PO.ExpQty2,PO.ExpQty3,PO.ComQty1,PO.ComQty2,PO.ComQty3
-		,AVS.CY1,AVS.CY2,AVS.CY3,ISNULL(AVS.CYAvgSale,0) CYAvgSale,AVS.TotalSaleQty
+		,AVS.CY1,AVS.CY2,AVS.CY3,ISNULL(AVS.CYAvgSale,0)/@CurrYearMonths CYAvgSale,AVS.TotalSaleQty
 		,AVS.FC1,AVS.FC2,AVS.FC3,ISNULL(AVS.FCPYAvgSale,0)/12 FCPYAvgSale
 		,SL.SalesQty1,SalesValue1,SalesCost1,SL.SalesQty2,SalesValue2,SalesCost2,SL.SalesQty3,SalesValue3,SalesCost3
 		,BEx0,BE.BEx1,BE.BEx2,BE.BExGreater
@@ -722,7 +696,7 @@ IF @ReorderQty IS NULL
 		AVR.AvgRate
 		,P.UOMID UOM_Key,(SELECT TOP 1 UnitName FROM COM_UOM WITH(NOLOCK) WHERE UOMID=P.UOMID) UOM--,P.Description
 		,PO.ExpQty1,PO.ExpQty2,PO.ExpQty3,PO.ComQty1,PO.ComQty2,PO.ComQty3
-		,AVS.CY1,AVS.CY2,AVS.CY3,ISNULL(AVS.CYAvgSale,0) CYAvgSale,AVS.TotalSaleQty
+		,AVS.CY1,AVS.CY2,AVS.CY3,ISNULL(AVS.CYAvgSale,0)/@CurrYearMonths CYAvgSale,AVS.TotalSaleQty
 		,AVS.FC1,AVS.FC2,AVS.FC3,ISNULL(AVS.FCPYAvgSale,0)/12 FCPYAvgSale
 		,SL.SalesQty1,SalesValue1,SalesCost1,SL.SalesQty2,SalesValue2,SalesCost2,SL.SalesQty3,SalesValue3,SalesCost3
 		,BEx0,BE.BEx1,BE.BEx2,BE.BExGreater
@@ -761,7 +735,7 @@ IF @ReorderQty IS NULL
 		SET @Query=@Query+'#TblProducts TP'
 	SET @Query=@Query+' ON TP.ProductID=P.ProductID'+@FROM
 	EXEC(@Query)
-	print @Query
+	
 	/******* PRODUCT WISE VENDORS DATA *******/
 	IF @IsGroupWise=1
 		SELECT TP.ParentID ProductID,V.AccountID VendorID,(SELECT TOP 1 AccountName FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=V.AccountID) VendorName
@@ -799,5 +773,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

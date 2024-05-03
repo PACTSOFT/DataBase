@@ -5,7 +5,7 @@ GO
 CREATE PROCEDURE [dbo].[spCOM_GetScheduleEvents]
 	@DimWhere [nvarchar](max) = '',
 	@RoleID [int],
-	@UserID [int] = 0,
+	@UserID [bigint] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -13,7 +13,7 @@ BEGIN TRY
 SET NOCOUNT ON;
 
 		declare @PrefValue NVARCHAR(MAX)='',@SQL NVARCHAR(MAX)
-		declare @Users table(UserID INT)
+		declare @Users table(UserID BIGINT)
 		select  @PrefValue = Value from COM_CostCenterPreferences with(nolock)  
 		where CostCenterID=95 and  Name = 'DistributeAssignedUsers' 
 		if(@PrefValue is not null and @PrefValue<>'')
@@ -28,16 +28,16 @@ SET NOCOUNT ON;
 		if(@nextdays is null or @nextdays=0)
 			set @nextdays=365
 	    
-	    create table #tab(ID INT IDENTITY(1,1) PRIMARY KEY,ScheduleID INT,NodeID INT,VoucherNo NVARCHAR(MAX),EventTime DATETIME,FreqType NVARCHAR(50),
-			[Status] INT,CostCenterID INT,SchEventID INT,SchGUID nvarchar(max),SubCostCenterID INT,TrackingNO INT,AttachmentID INT,RecurMethod TINYINT)
+	    create table #tab(ID INT IDENTITY(1,1) PRIMARY KEY,ScheduleID BIGINT,NodeID BIGINT,VoucherNo NVARCHAR(MAX),EventTime DATETIME,FreqType NVARCHAR(50),
+			[Status] INT,CostCenterID BIGINT,SchEventID BIGINT,SubCostCenterID BIGINT,TrackingNO BIGINT,AttachmentID BIGINT,RecurMethod TINYINT)
 	    
 	    INSERT INTO #tab
 		SELECT S.ScheduleID,CC.NodeID,D.DocNo,CONVERT(DATETIME, E.EventTime) AS EventTime, CONVERT(NVARCHAR, S.FreqType) AS FreqType,
-			E.StatusID AS Status, CC.CostCenterID,E.SchEventID,E.GUID,E.SubCostCenterID,E.NODEID TrackingNO,AttachmentID,S.RecurMethod
+			E.StatusID AS Status, CC.CostCenterID,E.SchEventID,E.SubCostCenterID,E.NODEID TrackingNO,AttachmentID,S.RecurMethod
 		FROM COM_SchEvents E with(nolock)
 		INNER JOIN COM_Schedules S with(nolock) ON E.ScheduleID=S.ScheduleID
 		INNER JOIN COM_CCSchedules CC with(nolock) ON S.ScheduleID=CC.ScheduleID
-		INNER JOIN COM_DocID AS D with(nolock) on D.ID=CC.NodeID
+		INNER JOIN COM_DocID AS D on D.ID=CC.NodeID
 		WHERE E.StatusID=1 AND CC.CostCenterID>=40001 AND CC.CostCenterID<= 50000
 			and (S.FreqType<>0 or (CONVERT(DATETIME, E.EventTime)<=getdate()+@nextdays))
 		AND (@RoleID=1 OR S.ScheduleID IN (select ScheduleID from COM_UserSchedules with(nolock) WHERE UserID=@UserID OR RoleID=@RoleID OR GroupID IN (SELECT GID FROM COM_Groups with(nolock) WHERE UserID=@UserID OR RoleID=@RoleID)))
@@ -45,7 +45,7 @@ SET NOCOUNT ON;
 		if @DimWhere!=''
 		begin
 			set @SQL='delete T
-		from #tab T with(nolock)
+		from #tab T
 		join ACC_DocDetails D with(nolock) on D.VoucherNo=T.VoucherNo
 		join ADM_DocumentTypes DT with(nolock) on D.CostCenterID=DT.CostCenterID
 		left join COM_DocCCData DCC with(nolock) on DCC.AccDocDetailsID=D.AccDocDetailsID'+@DimWhere+'
@@ -53,7 +53,7 @@ SET NOCOUNT ON;
 			exec(@SQL)
 			
 			set @SQL='delete T
-		from #tab T with(nolock)
+		from #tab T
 		join INV_DocDetails D with(nolock) on D.VoucherNo=T.VoucherNo
 		join ADM_DocumentTypes DT with(nolock) on D.CostCenterID=DT.CostCenterID
 		left join COM_DocCCData DCC with(nolock) on DCC.InvDocDetailsID=D.InvDocDetailsID'+@DimWhere+'
@@ -64,11 +64,11 @@ SET NOCOUNT ON;
 		
 		IF EXISTS (SELECT * FROM @Users WHERE UserID=@UserID)
 		BEGIN
-			SELECT ScheduleID,NodeID,VoucherNo,EventTime,FreqType,[Status],CostCenterID,SchEventID,SchGUID,SubCostCenterID,TrackingNO,AttachmentID,RecurMethod
-			FROM #tab with(nolock)
+			SELECT ScheduleID,NodeID,VoucherNo,EventTime,FreqType,[Status],CostCenterID,SchEventID,SubCostCenterID,TrackingNO,AttachmentID,RecurMethod
+			FROM #tab
 			UNION
 			SELECT S.ScheduleID,CC.NodeID,D.VoucherNo,CONVERT(DATETIME, E.EventTime) AS EventTime, CONVERT(NVARCHAR, S.FreqType) AS FreqType,
-				E.StatusID AS Status, D.CostCenterID,E.SchEventID,E.GUID,E.SubCostCenterID,E.NODEID TrackingNO,AttachmentID,S.RecurMethod
+				E.StatusID AS Status, D.CostCenterID,E.SchEventID,E.SubCostCenterID,E.NODEID TrackingNO,AttachmentID,S.RecurMethod
 			FROM COM_SchEvents E with(nolock)
 			INNER JOIN COM_Schedules S with(nolock) ON E.ScheduleID=S.ScheduleID
 			INNER JOIN COM_CCSchedules CC with(nolock) ON S.ScheduleID=CC.ScheduleID
@@ -88,8 +88,8 @@ SET NOCOUNT ON;
 		END
 		ELSE
 		BEGIN
-			SELECT ScheduleID,NodeID,VoucherNo,EventTime,FreqType,[Status],CostCenterID,SchEventID,SchGUID,SubCostCenterID,TrackingNO,AttachmentID,RecurMethod 
-			FROM #tab with(nolock)
+			SELECT ScheduleID,NodeID,VoucherNo,EventTime,FreqType,[Status],CostCenterID,SchEventID,SubCostCenterID,TrackingNO,AttachmentID,RecurMethod 
+			FROM #tab
 			ORDER BY EventTime DESC
 		END
 		drop table #tab

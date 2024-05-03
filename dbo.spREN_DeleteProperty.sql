@@ -49,7 +49,6 @@ DECLARE @lft bigint,@rgt bigint ,@Width bigint
 					@UserID = @UserID,
 					@LangID = @LangID,
 					@CheckLink = 0
-					
 				--Deleting from Mapping Table
 				Delete from com_docbridge WHERE CostCenterID = 92 AND RefDimensionNodeID = @NodeID AND RefDimensionID = @Dimesion				
 			end
@@ -60,17 +59,7 @@ DECLARE @lft bigint,@rgt bigint ,@Width bigint
 		delete from REN_PropertyUnits where PropertyID=@PropertyID
 		delete from REN_PropertyExtended where NodeID=@PropertyID
 		delete from com_ccccdata where costcenterid=92 and NodeID=@PropertyID
-		delete from [ADM_PropertyUserRoleMap] where [PropertyID]=@PropertyID
-		delete from [REN_PropertyShareHolder] where PropertyID=@PropertyID
-		
-		--Delete from Notes
-		DELETE FROM  COM_Notes 
-		WHERE FeatureID=92 and  FeaturePK=@PropertyID
-
-		--Delete from Files
-		DELETE FROM  COM_Files  
-		WHERE FeatureID=92 and  FeaturePK=@PropertyID
-		
+	
 		delete from REN_Property where  NodeID=@PropertyID
 		
 		--Update left and right extent to set the tree
@@ -85,8 +74,6 @@ WHERE ErrorNumber=102 AND LanguageID=@LangID
 RETURN 1
 END TRY
 BEGIN CATCH  
-		if(@return_value=-999)
-			return -999
 	--Return exception info [Message,Number,ProcedureName,LineNumber]  
 	IF ERROR_NUMBER()=50000
 	BEGIN
@@ -106,4 +93,13 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
+
+
+
+
+
+
+
+
 GO

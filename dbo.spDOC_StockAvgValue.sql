@@ -3,12 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_StockAvgValue]
-	@ProductID [int],
+	@ProductID [bigint],
 	@CCXML [nvarchar](max),
 	@DocDate [datetime],
 	@DocQty [float],
 	@CalcAvgrate [bit] = 0,
-	@DocDetailsID [int] = 0,
+	@DocDetailsID [bigint] = 0,
 	@CalcQOH [bit] = 0,
 	@CalcBalQOH [bit] = 0,
 	@CalcHOLDQTY [bit] = 0,
@@ -23,23 +23,19 @@ CREATE PROCEDURE [dbo].[spDOC_StockAvgValue]
 	@TotalReserve [float] = 0 OUTPUT,
 	@AvgRate [float] = 0 OUTPUT,
 	@BalQOH [float] = 0 OUTPUT,
-	@UserID [int] = 0,
-	@RoleID [int] = 0
+	@UserID [bigint] = 0,
+	@RoleID [bigint] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 SET NOCOUNT ON;          
         
 	DECLARE @SQL NVARCHAR(MAX),@RecQty FLOAT,@RecRate FLOAT,@RecValue FLOAT,@VoucherType INT,@docType int,@WHERE NVARCHAR(MAX),@PrefValue nvarchar(50)
-	DECLARE @I INT,@COUNT INT,@NID INT,@valuation int,@TotalSaleQty float,@TotalPurQty float,@Qty  Float,@StockValue Float,@XML XML,@tempQty float        
+	DECLARE @I INT,@COUNT INT,@NID bigint,@valuation int,@TotalSaleQty float,@TotalPurQty float,@Qty  Float,@StockValue Float,@XML XML,@tempQty float        
 	DECLARE @Tbl AS TABLE(ID INT IDENTITY(1,1) NOT NULL,Date FLOAT,Qty FLOAT,RecRate FLOAT,RecValue FLOAT,VoucherType INT,DocType int)        
-	DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID INT,NodeId INT)        
-	DECLARE @AvgWHERE NVARCHAR(MAX),@Rate float,@BalQOHWHere NVARCHAR(MAX),@AssignedBal BIT,@DocID INT,@ProductIDS nvarchar(max),@holdDocs nvarchar(Max)
+	DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID bigint,NodeId BIGINT)        
+	DECLARE @AvgWHERE NVARCHAR(MAX),@Rate float,@BalQOHWHere NVARCHAR(MAX),@AssignedBal BIT,@DocID BIGINT,@ProductIDS nvarchar(max)
 	SELECT @AvgRate=0, @Qty=0,@StockValue=0        
 	
-	set @holdDocs=''
-	select @holdDocs= Value from ADM_GlobalPreferences with(nolock) 
-	where Name='HoldResCancelledDocs' and value is not null and value<>''
-
 	SET @AssignedBal=dbo.fnCOM_HasAccess(@RoleID,43,208) 
 			
 	set @DocID=0		        
@@ -47,7 +43,7 @@ SET NOCOUNT ON;
 
 	select @valuation=ValuationID from INV_Product with(nolock) where ProductID=@ProductID        
 	INSERT INTO @tblCC(CostCenterID,NodeId)        
-	SELECT X.value('@CostCenterID','int'),X.value('@NODEID','INT')        
+	SELECT X.value('@CostCenterID','int'),X.value('@NODEID','BIGINT')        
 	FROM @XML.nodes('/XML/Row') as Data(X)    
 	
 	    
@@ -129,34 +125,34 @@ SET NOCOUNT ON;
 	set @PrefValue=''      
 	select @PrefValue= isnull(Value,'') from ADM_GlobalPreferences with(nolock) where Name='Maintain Dimensionwise stock'        
 
-	if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)
+	if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)
 	begin 
 	
-		if(exists (select NodeId from @tblCC where CostCenterID=convert(INT,@PrefValue)))
+		if(exists (select NodeId from @tblCC where CostCenterID=convert(bigint,@PrefValue)))
 		BEGIN               
-			select @NID=NodeId from @tblCC where CostCenterID=convert(INT,@PrefValue)        
+			select @NID=NodeId from @tblCC where CostCenterID=convert(bigint,@PrefValue)        
 						    
 			if(@WHERE<>'')        
 				set @WHERE =@WHERE +' and '        
-			set @WHERE =@WHERE+' dcCCNID'+Convert(nvarchar,convert(INT,@PrefValue)-50000) +'='+CONVERT(nvarchar,@NID) 
+			set @WHERE =@WHERE+' dcCCNID'+Convert(nvarchar,convert(bigint,@PrefValue)-50000) +'='+CONVERT(nvarchar,@NID) 
 		END
 		
 		if(@AssignedBal=1 and @RoleID<>1)
-			set @BalQOHWHere =@BalQOHWHere+'  and dcCCNID'+Convert(nvarchar,convert(INT,@PrefValue)-50000)+' in('+(select [dbo].[fnCom_GetAssignedNodesForUser](convert(INT,@PrefValue),@UserID,@RoleID))+')'
+			set @BalQOHWHere =@BalQOHWHere+'  and dcCCNID'+Convert(nvarchar,convert(bigint,@PrefValue)-50000)+' in('+(select [dbo].[fnCom_GetAssignedNodesForUser](convert(bigint,@PrefValue),@UserID,@RoleID))+')'
 			
      end        
 
 	set @PrefValue=''      
 	select @PrefValue= isnull(Value,'') from ADM_GlobalPreferences with(nolock) where Name='Maintain Dimensionwise AverageRate'        
 
-	if(@PrefValue is not null and @PrefValue<>0 and convert(INT,@PrefValue)>0)
+	if(@PrefValue is not null and @PrefValue<>0 and convert(bigint,@PrefValue)>0)
 	begin
-		if exists (select NodeId from @tblCC where CostCenterID=convert(INT,@PrefValue))		
-			select @NID=NodeId from @tblCC where CostCenterID=convert(INT,@PrefValue)        
+		if exists (select NodeId from @tblCC where CostCenterID=convert(bigint,@PrefValue))		
+			select @NID=NodeId from @tblCC where CostCenterID=convert(bigint,@PrefValue)        
 		else
 			select @NID=1
 			
-		set @PrefValue=convert(INT,@PrefValue)-50000        
+		set @PrefValue=convert(bigint,@PrefValue)-50000        
 		if(@AvgWHERE<>'')        
 			set @AvgWHERE =@AvgWHERE +' and '        
 		set @AvgWHERE =@AvgWHERE+' dcCCNID'+@PrefValue+'='+CONVERT(nvarchar,@NID)        
@@ -201,12 +197,7 @@ SET NOCOUNT ON;
     if @CalcHOLDQTY=1--Hold Qty
     begin
 		 set @SQL='set @HOLDQTY=(  select isnull(sum(HoldQuantity-rel),0) from (select HoldQuantity,case when release>HoldQuantity then HoldQuantity else release end rel from
-		 (SELECT D.HoldQuantity,isnull((select sum(case when l.IsQtyIgnored=0 '
-		 
-		  if (@holdDocs<>'')
-                 set @SQL=@SQL+' or l.Costcenterid in(' + @holdDocs+')'
-		 
-		 set @SQL=@SQL+' then l.UOMConvertedQty else l.ReserveQuantity end)
+		 (SELECT D.HoldQuantity,isnull((select sum(case when l.IsQtyIgnored=0 then l.UOMConvertedQty else l.ReserveQuantity end)
 		  from INV_DocDetails l WITH(NOLOCK)  
 		 join COM_DocCCData LDCC WITH(NOLOCK) ON LDCC.InvDocDetailsID=L.InvDocDetailsID 
 		 where  d.InvDocDetailsID=l.LinkedInvDocDetailsID '+REPLACE(@WHERE,'dcCCNID','LDCC.dcCCNID')+'),0) release  
@@ -225,12 +216,7 @@ SET NOCOUNT ON;
 	if @CalcCommittedQTY=1--Committed Qty
     begin
 		set @SQL='set @CommittedQTY=(  select isnull(sum(HoldQuantity-rel),0) from (select HoldQuantity,case when release>HoldQuantity then HoldQuantity else release end rel from   
-		(SELECT D.HoldQuantity,isnull((select sum(case when l.IsQtyIgnored=0 '
-		 
-		  if (@holdDocs<>'')
-                 set @SQL=@SQL+' or l.Costcenterid in(' + @holdDocs+')'
-		 
-		 set @SQL=@SQL+' then l.UOMConvertedQty else l.ReserveQuantity end)
+		(SELECT D.HoldQuantity,isnull((select sum(case when l.IsQtyIgnored=0 then l.UOMConvertedQty else l.ReserveQuantity end)
 		from INV_DocDetails l WITH(NOLOCK)  
 		left join COM_DocCCData LDCC WITH(NOLOCK) ON LDCC.InvDocDetailsID=L.InvDocDetailsID 
 		where d.InvDocDetailsID=l.LinkedInvDocDetailsID '+REPLACE(@WHERE,'dcCCNID','LDCC.dcCCNID')+'),0) release  
@@ -243,12 +229,7 @@ SET NOCOUNT ON;
     if @CalcRESERVEQTY=1--Reserve Qty
     begin
 		set @SQL='set @RESERVEQTY=(  select  isnull(sum(HoldQuantity-rel),0) from (select HoldQuantity,case when release>HoldQuantity then HoldQuantity else release end rel from   
-		(SELECT D.ReserveQuantity HoldQuantity,isnull((select sum(case when l.IsQtyIgnored=0 '
-		 
-		  if (@holdDocs<>'')
-                 set @SQL=@SQL+' or l.Costcenterid in(' + @holdDocs+')'
-		 
-		 set @SQL=@SQL+' then l.UOMConvertedQty else l.ReserveQuantity end)
+		(SELECT D.ReserveQuantity HoldQuantity,isnull((select sum(case when l.IsQtyIgnored=0 then l.UOMConvertedQty else l.ReserveQuantity end)
 	     from INV_DocDetails l  WITH(NOLOCK)   
 		left join COM_DocCCData LDCC WITH(NOLOCK) ON LDCC.InvDocDetailsID=L.InvDocDetailsID 
 		where d.InvDocDetailsID=l.LinkedInvDocDetailsID '+REPLACE(@WHERE,'dcCCNID','LDCC.dcCCNID')+'),0) release  
@@ -287,4 +268,5 @@ SET NOCOUNT ON;
   end  
   
    EXEC  [spDOC_ReconcileAvgValue] @ProductID,@AvgWHERE,@DocDate,@DocQty,@DocDetailsID,0,@DocID,@AvgRate OUTPUT
+
 GO

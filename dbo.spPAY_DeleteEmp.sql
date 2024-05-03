@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_DeleteEmp]
-	@NodeID [int],
+	@NodeID [bigint],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -36,16 +36,16 @@ SET NOCOUNT ON;
 		
 		SET @Table=(SELECT Top 1 SysTableName FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterId)  	
 
-		declare @temptbl table(id int identity(1,1),NodeID INT)
+		declare @temptbl table(id int identity(1,1),NodeID bigint)
 		 
 		if @NodeID>0
 		begin
-			SET @SQL=' DECLARE @lft INT,@rgt INT,@Width INT
+			SET @SQL=' DECLARE @lft BIGINT,@rgt BIGINT,@Width BIGINT
 			 SELECT @lft = lft, @rgt = rgt, @Width = rgt - lft + 1  
 		FROM '+@Table+' WITH(NOLOCK) WHERE NodeID='+convert(nvarchar,@NodeID)+'		
 		select NodeID from '+@Table+' WITH(NOLOCK) WHERE lft >= @lft AND rgt <= @rgt'
 			insert into @temptbl
-			EXEC sp_executesql @SQL
+			EXEC(@SQL)
 		end
 		else
 		begin
@@ -74,7 +74,7 @@ SET NOCOUNT ON;
 					JOIN COM_DocCCData CC on CC.InvDocDetailsID=I.InvDocDetailsID
 					WHERE I.CostCenterID<>40081 AND CC.dcCCNID51 IN(select NodeID from @temptbl))
 		BEGIN
-			DECLARE @TblDeleteRows AS Table(idid INT identity(1,1), ID INT)
+			DECLARE @TblDeleteRows AS Table(idid bigint identity(1,1), ID BIGINT)
 
 			INSERT INTO @TblDeleteRows
 			SELECT I.InvDocDetailsID FROM INV_DocDetails I
@@ -98,7 +98,7 @@ SET NOCOUNT ON;
 		--Delete CostCenter Hisory
 		DELETE FROM COM_HistoryDetails where CostCenterID=@CostCenterID and NodeID in (select NodeID from @temptbl)
 		
-		SET @SQL=' DECLARE @lft INT,@rgt INT,@Width INT '  
+		SET @SQL=' DECLARE @lft BIGINT,@rgt BIGINT,@Width BIGINT '  
 		 
 		--Fetch left, right extent of Node along with width.  
 		SET @SQL=@SQL+' SELECT @lft = lft, @rgt = rgt, @Width = rgt - lft + 1  
@@ -117,7 +117,7 @@ SET NOCOUNT ON;
 		--Update left and right extent to set the tree  
 		SET @SQL=@SQL+' UPDATE '+@Table+' SET rgt = rgt - @Width WHERE rgt > @rgt;   
 		  UPDATE '+@Table+' SET lft = lft - @Width WHERE lft > @rgt;'  
-		EXEC sp_executesql @SQL  		
+		EXEC(@SQL)  		
 		
 		DELETE FROM  COM_ContactsExtended
 		WHERE ContactID IN (SELECT CONTACTID FROM COM_CONTACTS WITH(NOLOCK) WHERE FeatureID=@CostCenterID and  FeaturePK in (select NodeID from @temptbl))
@@ -167,5 +167,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH    
 GO

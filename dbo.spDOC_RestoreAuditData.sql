@@ -130,9 +130,9 @@ BEGIN TRY
 			select @cols=substring(@cols,2,len(@cols)-1), @hcols=substring(@hcols,2,len(@hcols)-1)
 			set @sql='set identity_insert COM_DocCCData_History ON
 INSERT INTO COM_DocCCData_History('+@cols+')
-SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocCCData_History CC WITH(nolock)
-INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV WITH(nolock) ON CC.ModifiedDate=INV.ModifiedDate and CC.INVDocDetailsID=INV.INVDocDetailsID
-INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID
+SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocCCData_History CC
+INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV ON CC.ModifiedDate=INV.ModifiedDate and CC.INVDocDetailsID=INV.INVDocDetailsID
+INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID
 WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar+'
 set identity_insert COM_DocCCData_History OFF'
 		--print(@sql)
@@ -143,9 +143,9 @@ set identity_insert COM_DocCCData_History OFF'
 			select @cols=substring(@cols,2,len(@cols)-1), @hcols=substring(@hcols,2,len(@hcols)-1)
 			set @sql='set identity_insert COM_DocNumData_History ON
 INSERT INTO COM_DocNumData_History('+@cols+')
-SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocNumData_History NUM WITH(nolock)
-INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV WITH(nolock) ON NUM.ModifiedDate=INV.ModifiedDate and NUM.INVDocDetailsID=INV.INVDocDetailsID
-INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID
+SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocNumData_History NUM
+INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV ON NUM.ModifiedDate=INV.ModifiedDate and NUM.INVDocDetailsID=INV.INVDocDetailsID
+INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID
 WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar+'
 set identity_insert COM_DocNumData_History OFF'
 			exec(@sql)
@@ -155,9 +155,9 @@ set identity_insert COM_DocNumData_History OFF'
 			select @cols=substring(@cols,2,len(@cols)-1), @hcols=substring(@hcols,2,len(@hcols)-1)
 			set @sql='set identity_insert COM_DocTextData_History ON
 INSERT INTO COM_DocTextData_History('+@cols+')
-SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocTextData_History TXT WITH(nolock)
-INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV WITH(nolock) ON TXT.ModifiedDate=INV.ModifiedDate and TXT.INVDocDetailsID=INV.INVDocDetailsID
-INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID
+SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocTextData_History TXT
+INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV ON TXT.ModifiedDate=INV.ModifiedDate and TXT.INVDocDetailsID=INV.INVDocDetailsID
+INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID
 WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar+'
 set identity_insert COM_DocTextData_History OFF'
 			exec(@sql)
@@ -167,37 +167,37 @@ set identity_insert COM_DocTextData_History OFF'
 			select @cols=substring(@cols,2,len(@cols)-1), @hcols=substring(@hcols,2,len(@hcols)-1)
 			set @sql='set identity_insert INV_DocDetails_History ON
 INSERT INTO INV_DocDetails_History('+@cols+')		
-SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.INV_DocDetails_History INV WITH(nolock)
-INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID
+SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.INV_DocDetails_History INV
+INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID
 WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar+'
 set identity_insert INV_DocDetails_History OFF'
 			exec(@sql)
 			
-			set @sql='SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.INV_DocDetails_History INV WITH(nolock)
-INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID
+			set @sql='SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.INV_DocDetails_History INV
+INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID
 WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar
 			exec(@sql)
 		
-			set @sql='DELETE CC FROM '+@ArchDbName+'.dbo.COM_DocCCData_History CC WITH(nolock)
-			INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV WITH(nolock) ON CC.ModifiedDate=INV.ModifiedDate and CC.INVDocDetailsID=INV.INVDocDetailsID
-			INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID
+			set @sql='DELETE CC FROM '+@ArchDbName+'.dbo.COM_DocCCData_History CC
+			INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV ON CC.ModifiedDate=INV.ModifiedDate and CC.INVDocDetailsID=INV.INVDocDetailsID
+			INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID
 			WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar
 			exec(@sql)
 		
-			set @sql='DELETE NUM FROM '+@ArchDbName+'.dbo.COM_DocNumData_History NUM WITH(nolock)
-			INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV WITH(nolock) ON NUM.ModifiedDate=INV.ModifiedDate and NUM.INVDocDetailsID=INV.INVDocDetailsID
-			INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID
+			set @sql='DELETE NUM FROM '+@ArchDbName+'.dbo.COM_DocNumData_History NUM
+			INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV ON NUM.ModifiedDate=INV.ModifiedDate and NUM.INVDocDetailsID=INV.INVDocDetailsID
+			INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID
 			WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar
 			exec(@sql)
 		
-			set @sql='DELETE TXT FROM '+@ArchDbName+'.dbo.COM_DocTextData_History TXT WITH(nolock)
-			INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV WITH(nolock) ON TXT.ModifiedDate=INV.ModifiedDate and TXT.INVDocDetailsID=INV.INVDocDetailsID
-			INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID
+			set @sql='DELETE TXT FROM '+@ArchDbName+'.dbo.COM_DocTextData_History TXT
+			INNER JOIN '+@ArchDbName+'.dbo.INV_DocDetails_History INV ON TXT.ModifiedDate=INV.ModifiedDate and TXT.INVDocDetailsID=INV.INVDocDetailsID
+			INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID
 			WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar
 			exec(@sql)
 		
-			set @sql='DELETE INV FROM '+@ArchDbName+'.dbo.INV_DocDetails_History INV WITH(nolock)
-			INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID
+			set @sql='DELETE INV FROM '+@ArchDbName+'.dbo.INV_DocDetails_History INV
+			INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID
 			WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar
 			exec(@sql)
 		
@@ -211,9 +211,9 @@ WHERE isnull(INV.ModifiedDate,INV.CreatedDate)>='+@DtChar
 			select @cols=substring(@cols,2,len(@cols)-1), @hcols=substring(@hcols,2,len(@hcols)-1)
 			set @sql='set identity_insert COM_DocCCData_History ON
 INSERT INTO COM_DocCCData_History('+@cols+')
-SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocCCData_History CC WITH(nolock)
-INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC WITH(nolock) ON CC.ModifiedDate=ACC.ModifiedDate and CC.ACCDocDetailsID=ACC.ACCDocDetailsID
-INNER JOIN #TblACC I WITH(nolock) ON I.FeatureID=ACC.CostCenterID
+SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocCCData_History CC
+INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC ON CC.ModifiedDate=ACC.ModifiedDate and CC.ACCDocDetailsID=ACC.ACCDocDetailsID
+INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID
 WHERE isnull(ACC.ModifiedDate,ACC.CreatedDate)>='+@DtChar+'
 set identity_insert COM_DocCCData_History OFF'
 				exec(@sql)
@@ -223,9 +223,9 @@ set identity_insert COM_DocCCData_History OFF'
 			select @cols=substring(@cols,2,len(@cols)-1), @hcols=substring(@hcols,2,len(@hcols)-1)
 			set @sql='set identity_insert COM_DocNumData_History ON
 INSERT INTO COM_DocNumData_History('+@cols+')
-SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocNumData_History NUM WITH(nolock)
-INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC WITH(nolock) ON NUM.ModifiedDate=ACC.ModifiedDate and NUM.ACCDocDetailsID=ACC.ACCDocDetailsID
-INNER JOIN #TblACC I WITH(nolock) ON I.FeatureID=ACC.CostCenterID
+SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocNumData_History NUM
+INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC ON NUM.ModifiedDate=ACC.ModifiedDate and NUM.ACCDocDetailsID=ACC.ACCDocDetailsID
+INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID
 WHERE isnull(ACC.ModifiedDate,ACC.CreatedDate)>='+@DtChar+'
 set identity_insert COM_DocNumData_History OFF'
 			exec(@sql)
@@ -236,9 +236,9 @@ set identity_insert COM_DocNumData_History OFF'
 			set @sql='
 set identity_insert COM_DocTextData_History ON
 INSERT INTO COM_DocTextData_History('+@cols+')
-SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocTextData_History TXT WITH(nolock)
-INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC WITH(nolock) ON TXT.ModifiedDate=ACC.ModifiedDate and TXT.ACCDocDetailsID=ACC.ACCDocDetailsID
-INNER JOIN #TblACC I WITH(nolock) ON I.FeatureID=ACC.CostCenterID
+SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.COM_DocTextData_History TXT
+INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC ON TXT.ModifiedDate=ACC.ModifiedDate and TXT.ACCDocDetailsID=ACC.ACCDocDetailsID
+INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID
 WHERE isnull(ACC.ModifiedDate,ACC.CreatedDate)>='+@DtChar+'
 set identity_insert COM_DocTextData_History OFF'
 			exec(@sql)
@@ -249,33 +249,33 @@ set identity_insert COM_DocTextData_History OFF'
 			set @sql='
 set identity_insert ACC_DocDetails_History ON
 INSERT INTO ACC_DocDetails_History('+@cols+')
-SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC WITH(nolock)
-INNER JOIN #TblACC I WITH(nolock) ON I.FeatureID=ACC.CostCenterID
+SELECT '+@hcols+' FROM '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC
+INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID
 WHERE isnull(ACC.ModifiedDate,ACC.CreatedDate)>='+@DtChar+'
 set identity_insert ACC_DocDetails_History OFF'
 			exec(@sql)
 
 
-			set @sql='DELETE CC FROM '+@ArchDbName+'.dbo.COM_DocCCData_History CC WITH(nolock)
-			INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC WITH(nolock) ON CC.ModifiedDate=ACC.ModifiedDate and CC.ACCDocDetailsID=ACC.ACCDocDetailsID
-			INNER JOIN #TblACC I WITH(nolock) ON I.FeatureID=ACC.CostCenterID
+			set @sql='DELETE CC FROM '+@ArchDbName+'.dbo.COM_DocCCData_History CC
+			INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC ON CC.ModifiedDate=ACC.ModifiedDate and CC.ACCDocDetailsID=ACC.ACCDocDetailsID
+			INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID
 			WHERE isnull(ACC.ModifiedDate,ACC.CreatedDate)>='+@DtChar
 			exec(@sql)
 			
-			set @sql='DELETE NUM FROM '+@ArchDbName+'.dbo.COM_DocNumData_History NUM WITH(nolock)
-			INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC WITH(nolock) ON NUM.ModifiedDate=ACC.ModifiedDate and NUM.ACCDocDetailsID=ACC.ACCDocDetailsID
-			INNER JOIN #TblACC I WITH(nolock) ON I.FeatureID=ACC.CostCenterID
+			set @sql='DELETE NUM FROM '+@ArchDbName+'.dbo.COM_DocNumData_History NUM
+			INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC ON NUM.ModifiedDate=ACC.ModifiedDate and NUM.ACCDocDetailsID=ACC.ACCDocDetailsID
+			INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID
 			WHERE isnull(ACC.ModifiedDate,ACC.CreatedDate)>='+@DtChar
 			exec(@sql)
 			
-			set @sql='DELETE TXT FROM '+@ArchDbName+'.dbo.COM_DocTextData_History TXT WITH(nolock)
-			INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC WITH(nolock) ON TXT.ModifiedDate=ACC.ModifiedDate and TXT.ACCDocDetailsID=ACC.ACCDocDetailsID
-			INNER JOIN #TblACC I WITH(nolock) ON I.FeatureID=ACC.CostCenterID
+			set @sql='DELETE TXT FROM '+@ArchDbName+'.dbo.COM_DocTextData_History TXT
+			INNER JOIN '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC ON TXT.ModifiedDate=ACC.ModifiedDate and TXT.ACCDocDetailsID=ACC.ACCDocDetailsID
+			INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID
 			WHERE isnull(ACC.ModifiedDate,ACC.CreatedDate)>='+@DtChar
 			exec(@sql)
 			
-			set @sql='DELETE ACC FROM '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC WITH(nolock)
-			INNER JOIN #TblACC I WITH(nolock) ON I.FeatureID=ACC.CostCenterID
+			set @sql='DELETE ACC FROM '+@ArchDbName+'.dbo.ACC_DocDetails_History ACC
+			INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID
 			WHERE isnull(ACC.ModifiedDate,ACC.CreatedDate)>='+@DtChar
 			exec(@sql)
 		END
@@ -290,10 +290,10 @@ set identity_insert ACC_DocDetails_History OFF'
 		--SELECT @DimensionsList
 		declare @featureid bigint
 		set @I=1
-		select @CNT=COUNT(*) from #Tbl WITH(nolock)
+		select @CNT=COUNT(*) from #Tbl
 		while @I<=@CNT
 		BEGIN
-			select @featureid=FeatureID from #Tbl WITH(nolock) where ID=@I
+			select @featureid=FeatureID from #Tbl where ID=@I
 			IF (@featureid=2)
 			BEGIN
 				select @cols=''
@@ -349,8 +349,7 @@ set identity_insert ACC_DocDetails_History OFF'
 			END
 			ELSE IF (@featureid=93 OR @featureid=94 OR @featureid=95)
 			BEGIN
-				set @sql='EXEC [spREN_RestoreAuditData] '''+@ArchDbName+''','+CONVERT(NVARCHAR,@featureid)+','''+@DtChar+''','+CONVERT(NVARCHAR,@UserID)+','+CONVERT(NVARCHAR,@LangID)
-				exec(@sql)
+				EXEC [spREN_RestoreAuditData] @ArchDbName,@featureid,@DtChar,@UserID,@LangID
 			END
 			set @I=@I+1
 		END

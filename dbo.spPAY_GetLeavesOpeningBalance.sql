@@ -5,7 +5,7 @@ GO
 CREATE PROCEDURE [dbo].[spPAY_GetLeavesOpeningBalance]
 	@EmpIDs [nvarchar](max),
 	@PayrollMonth [nvarchar](100),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -14,9 +14,9 @@ SET NOCOUNT ON;
 
 DECLARE @ALStartMonthYear DATETIME,@ALEndMonthYear DATETIME,@Date datetime,@Grade INT,@CarryforwardLeaves FLOAT,@MaxCarryForwardDays FLOAT,@Payrolltype VARCHAR(50)
 DECLARE @PrevYearNOOFHOLIDAYS INT,@PrevYearWEEKLYOFFCOUNT INT,@PrevYearLeavestaken float,@PrevYearExstAppliedEncashdays float,@PayrollDate DATETIME,@OPBal FLOAT
-DECLARE @R INT,@TRC INT,@PrevYearLeaveBalance FLOAT,@FDYear DateTime,@TDYear DateTime,@EmployeeID INT,@LeaveType INT,@SQL NVARCHAR(MAX),@DocType INT,@Remarks NVARCHAR(MAX)
+DECLARE @R INT,@TRC INT,@PrevYearLeaveBalance FLOAT,@FDYear DateTime,@TDYear DateTime,@EmployeeID INT,@LeaveType INT,@SQL NVARCHAR(MAX),@DocType BIGINT,@Remarks NVARCHAR(MAX)
 
-CREATE TABLE #TABALOP (ID INT IDENTITY(1,1),EMPSEQNO INT,Grade INT,LeaveTypeId INT,LeaveType VARCHAR(100),Total FLOAT,Deducted FLOAT,Balance FLOAT)
+CREATE TABLE #TABALOP (ID BIGINT IDENTITY(1,1),EMPSEQNO INT,Grade INT,LeaveTypeId INT,LeaveType VARCHAR(100),Total FLOAT,Deducted FLOAT,Balance FLOAT)
 
 --SET TO FIRST DAY FOR THE GIVEN DATE
 SET @PayrollDate=DATEADD(MONTH,DATEDIFF(MONTH,0,CONVERT(DATETIME,@PayrollMonth)),0)
@@ -36,7 +36,7 @@ SET @SQL='INSERT INTO #TABALOP
 	AND CONVERT(DATETIME,TD.dcAlpha3) between CONVERT(DATETIME,DATEADD(year,-1,'''+CONVERT(NVARCHAR,@ALStartMonthYear)+''')) and  CONVERT(DATETIME,DATEADD(year,-1,'''+CONVERT(NVARCHAR,@ALEndMonthYear)+'''))
 	GROUP BY B.dcCCNID51,B.dcCCNID53,B.dcCCNID52,D.Name'
 	--print (@SQL)
-	EXEC sp_executesql @SQL
+	exec (@SQL)
 	--READING LEAVES TAKEN PREVIOUS YEAR AND UPDATING TOTAL COLUMN BASED ON PAYROLL TYPE (YEARLY/MONTHLYYEARY)
 	set @FDYear=DATEADD("YY",-1,@ALStartMonthYear)
 	set @TDYear=DATEADD("YY",-1,@ALEndMonthYear)

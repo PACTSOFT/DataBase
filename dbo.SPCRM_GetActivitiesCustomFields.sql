@@ -3,10 +3,10 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[SPCRM_GetActivitiesCustomFields]
-	@ParentCCCID [int],
-	@NodeID [int],
+	@ParentCCCID [bigint],
+	@NodeID [bigint],
 	@UserName [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -19,7 +19,7 @@ SET NOCOUNT ON;
 	C.IsCostCenterUserDefined,C.IsColumnUserDefined,C.ColumnCostCenterID,C.FetchMaxRows,C.SectionID,C.SectionName , C.RowNo,C.ColumnNo, C.ColumnSpan,C.TextFormat,C.Iscolumninuse   
 	FROM ADM_CostCenterDef C WITH(NOLOCK)      
 	LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID  
-	WHERE  C.IsVisible=1 AND C.CostCenterID = 144 and C.localreference = @ParentCCCID and C.IsColumnUserDefined=1
+	WHERE C.CostCenterID = 144 and C.localreference = @ParentCCCID and C.IsColumnUserDefined=1
 	AND (((C.IsColumnUserDefined=1 OR C.IsCostCenterUserDefined=1) AND C.IsColumnInUse=1 AND C.ISCOLUMNDELETED=0) OR C.IsColumnUserDefined=0)  
 	ORDER BY C.SectionID,C.SectionSeqNumber   
 
@@ -33,14 +33,8 @@ SET NOCOUNT ON;
 	WHERE CostCenterIDLinked=@ParentCCCID AND CostCenterIDBase=144)   
 
 	if(@ParentCCCID>0)
-	BEGIN
-		if(@ParentCCCID between 40000 and 50000)
-			select prefvalue Value,prefname Name from com_Documentpreferences  WITH(NOLOCK)
-			where prefname in ('ActivityAsPopup','ActivityFields')  and costcenterid=@ParentCCCID
-		else
-			select Value,Name from com_costcenterpreferences  WITH(NOLOCK)
-			where name in ('ActivityAsPopup','DisableDimensionsatActivities','UseActivityQuickAdd')  and costcenterid=@ParentCCCID
-	END	
+		select Value,Name from com_costcenterpreferences  WITH(NOLOCK)
+		where name in ('ActivityAsPopup','DisableDimensionsatActivities','UseActivityQuickAdd')  and costcenterid=@ParentCCCID
 	else
 		select '' Value,'' Name
 	
@@ -75,5 +69,6 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
+
 GO

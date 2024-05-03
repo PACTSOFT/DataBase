@@ -64,22 +64,25 @@ SET NOCOUNT ON;
 			RAISERROR('-110',16,1)
 		END
 		
-		IF(EXISTS(SELECT VALUE FROM COM_COSTCENTERPREFERENCES WITH(NOLOCK) WHERE COSTCENTERID=86 AND NAME='LinkDimension'))
-		BEGIN
-			DECLARE @DIMID BIGINT=0,@CCID BIGINT
-			SELECT @DIMID=VALUE FROM COM_COSTCENTERPREFERENCES WITH(NOLOCK) WHERE COSTCENTERID=86 AND NAME='LinkDimension'
+		 IF(EXISTS(SELECT VALUE FROM COM_COSTCENTERPREFERENCES WITH(NOLOCK) WHERE COSTCENTERID=86 AND NAME='LEADLINKDIMENSION'))
+		 BEGIN
+			DECLARE @DIMID BIGINT,@CCID BIGINT
+			SET @DIMID=0
+			SELECT @DIMID=VALUE FROM COM_COSTCENTERPREFERENCES WITH(NOLOCK) WHERE COSTCENTERID=86 AND NAME='LEADLINKDIMENSION'
 			IF(@DIMID>=50000)
 			BEGIN
 				SELECT @CCID=CCLEADID FROM CRM_LEADS WITH(NOLOCK) WHERE LEADID=@LeadID	
-				IF @CCID>1	 
-					EXEC [spCOM_DeleteCostCenter] @DIMID,@CCID,1,1,1,0
+				IF 	@CCID>0	 
+				EXEC [spCOM_DeleteCostCenter] @DIMID,@CCID,1,1,1,0
 			END
 			
-		END	
+		 END	
 		 
+		
+		  
 		--Delete from exteneded table
 		DELETE FROM CRM_LeadsExtended WHERE LeadID in
-		(select LeadID from CRM_Leads WITH(NOLOCK)  WHERE lft >= @lft AND rgt <= @rgt)
+		(select LeadID from CRM_Leads  WHERE lft >= @lft AND rgt <= @rgt)
 		
 			--Delete from CostCenter Mapping
 		DELETE FROM COM_CCCCDATA WHERE CostCenterID=86 and NodeID=@LeadID
@@ -89,15 +92,18 @@ SET NOCOUNT ON;
 
 		SET @RowsDeleted=@@rowcount
  
+
+	
+
 		--Update left and right extent to set the tree
 		UPDATE CRM_Leads SET rgt = rgt - @Width WHERE rgt > @rgt;
 		UPDATE CRM_Leads SET lft = lft - @Width WHERE lft > @rgt;
 		
 		DELETE FROM crm_assignment WHERE CCID=86 AND CCNODEID IN
-		(select LeadID from CRM_Leads WITH(NOLOCK)  WHERE lft >= @lft AND rgt <= @rgt)
+		(select LeadID from CRM_Leads  WHERE lft >= @lft AND rgt <= @rgt)
 		
 		DELETE FROM CRM_ACTIVITIES WHERE CostCenterID=86 AND NodeID IN 
-		(select LeadID from CRM_Leads WITH(NOLOCK)  WHERE lft >= @lft AND rgt <= @rgt)
+		(select LeadID from CRM_Leads  WHERE lft >= @lft AND rgt <= @rgt)
 		
 		Delete from CRM_Contacts where featurepk=@LeadID and featureid=86
 		Delete From CRM_Leads where LeadID=@LeadID
@@ -107,8 +113,8 @@ SET NOCOUNT ON;
 		Delete From CRM_ProductMapping where costcenterid=86 and ccnodeid=@LeadID
 		Delete From CRM_LeadCVRDetails where CCID=86 and ccnodeid=@LeadID
 		Delete From CRM_Feedback where CCID=86 and ccnodeid=@LeadID
-		update CRM_CampaignResponse set  ConvertedLeadID=0 where ConvertedLeadID=@LeadID
-		update CRM_CampaignInvites set ConvertedLeadID=0 where ConvertedLeadID=@LeadID
+		update   CRM_CampaignResponse set  ConvertedLeadID=0 where ConvertedLeadID=@LeadID
+		update  CRM_CampaignInvites set ConvertedLeadID=0 where ConvertedLeadID=@LeadID
 		
 		
 COMMIT TRANSACTION
@@ -138,4 +144,6 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
+
 GO

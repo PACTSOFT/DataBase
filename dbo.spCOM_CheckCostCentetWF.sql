@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_CheckCostCentetWF]
 	@CostCenterID [int],
-	@NodeID [int],
+	@NodeID [bigint],
 	@WID [int] = 0,
 	@RoleID [int] = 0,
 	@UserID [int] = 0,
@@ -14,7 +14,7 @@ WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 declare @oldStatusID int
 	set @oldStatusID=@StatusID
-	declare @level int,@maxLevel int,@AppStatus int,@ApprovalID INT
+	declare @level int,@maxLevel int,@AppStatus int,@ApprovalID bigint
 
 	if(@WID>0)
 	begin
@@ -38,6 +38,13 @@ declare @oldStatusID int
 		select @level,@maxLevel
 		if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
 		begin
+			--if(@AppRejDate is not null)
+				--select 'App'--set @StatusID=441
+			--else	
+				--select 'UnApproved'--set @StatusID=371
+			--select @StatusID=StatusID from COM_Status with(nolock) where CostCenterID=@CostCenterID and [Status]='UnApproved'
+			--select @StatusID=StatusID from COM_Status with(nolock) where CostCenterID=@CostCenterID and [Status]='In Active'
+			
 			IF(@CostCenterID=50051 AND @level>1)
 			BEGIN
 				set @AppStatus=1002
@@ -117,7 +124,6 @@ declare @oldStatusID int
 		end
 	end*/
 	
-	declare @SQL nvarchar(max)
 	if @oldStatusID!=@StatusID
 	begin
 		if @CostCenterID=2
@@ -125,27 +131,16 @@ declare @oldStatusID int
 		else if @CostCenterID=3
 			update INV_Product set StatusID=@StatusID where ProductID=@NodeID
 		else if @CostCenterID=76
-		begin
-			SET @SQL='update PRD_BillOfMaterial set StatusID='+convert(nvarchar,@StatusID)+' where BOMID='+convert(nvarchar,@NodeID)
-			exec(@SQL)
-		end
-		else if @CostCenterID=93
-		begin
-			SET @SQL='update [REN_Units] set [Status]='+convert(nvarchar,@StatusID)+' where UnitID='+convert(nvarchar,@NodeID)
-			exec(@SQL)
-		end
-		else if @CostCenterID=94
-		begin
-			SET @SQL='update [REN_Tenant] set StatusID='+convert(nvarchar,@StatusID)+' where TenantID='+convert(nvarchar,@NodeID)
-			exec(@SQL)
-		end
+			update [PRD_BillOfMaterial] set StatusID=@StatusID where BOMID=@NodeID
 		else if @CostCenterID=92
+			update REN_PROPERTY set StatusID=@StatusID where NodeID=@NodeID
+		else if @CostCenterID=93
+			update [REN_Units] set [Status]=@StatusID where UnitID=@NodeID
+		else if @CostCenterID=94
+			update [REN_Tenant] set StatusID=@StatusID where TenantID=@NodeID
+		else if @CostCenterID>=50001 and @CostCenterID<=50054 
 		begin
-			SET @SQL='update [REN_Property] set StatusID='+convert(nvarchar,@StatusID)+' where NOdeid='+convert(nvarchar,@NodeID)
-			exec(@SQL)
-		end
-		else if @CostCenterID>=50001 
-		begin
+			declare @SQL nvarchar(max)
 			select @SQL='update '+TableName+' set StatusID='+convert(nvarchar,@StatusID)+' where NodeID='+convert(nvarchar,@NodeID)
 			from ADM_Features with(nolock) where FeatureID=@CostCenterID
 			exec(@SQL)
@@ -161,7 +156,7 @@ declare @oldStatusID int
 			SELECT @CostCenterID=RefDimensionID,@NodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK) 
 			WHERE CostCenterID=@CostCenterID AND NodeID=@NodeID
 			
-			if @CostCenterID>=50001
+			if @CostCenterID>=50001 and @CostCenterID<=50054 
 			begin
 				IF(@StatusID<>1001 AND @StatusID<>1002 AND @StatusID<>1003)
 					select @StatusID=StatusID from COM_Status with(nolock) where CostCenterID=@CostCenterID and [Status]='Active'

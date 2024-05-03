@@ -69,7 +69,7 @@ BEGIN TRY
 			IF(@strQry<>'')
 			BEGIN
 				print (@strQry)
-				EXEC sp_executesql @strQry
+				EXEC(@strQry)
 			END
 		SET @J=@J+1
 		END
@@ -163,19 +163,19 @@ SELECT * FROM @TAB1
 				IF(@strQry<>'')
 				BEGIN
 					print (@strQry)
-					EXEC sp_executesql @strQry
+					EXEC(@strQry)
 					PRINT (@strUQry)
-					EXEC sp_executesql @strUQry
+					EXEC (@strUQry)
 				END
 				IF(@strEQry<>'')
 				BEGIN
 				print (@strEQry)
-					EXEC sp_executesql @strEQry
+					EXEC(@strEQry)
 				END
 				IF(@strDQry<>'')
 				BEGIN
 				--print (@strDQry)
-					EXEC sp_executesql @strDQry
+					EXEC(@strDQry)
 				END
 		SET @K=@K+1
 		END
@@ -196,5 +196,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH
+END CATCH   
 GO

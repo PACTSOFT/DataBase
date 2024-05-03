@@ -8,28 +8,28 @@ CREATE PROCEDURE [dbo].[spDoc_SetChequeDiscDocuments]
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@RoleID [int],
+	@RoleID [bigint],
 	@UserID [int],
 	@LangID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION  
 DECLARE  @CNT INT ,  @ICNT INT  , @StatusValue int,@Prefix nvarchar(500),@Action int,@PrefValue nvarchar(50)
-Declare @tempdr INT,@tempbid INT,@Adb INT
+Declare @tempdr bigint,@tempbid bigint,@Adb bigint
 BEGIN TRY    
 SET NOCOUNT ON;   
 select @PrefValue=value from adm_globalpreferences with(nolock) where name='Intermediate PDC'
  IF(@PDRcptXML is not null and @PDRcptXML<>'')  
   BEGIN  
-    DECLARE  @XML xml,@LocationID INT,@prefVal nvarchar(50)   
+    DECLARE  @XML xml,@LocationID bigint,@prefVal nvarchar(50)   
 	DECLARE @DDValue nvarchar(max) , @DDXML nvarchar(max)   
-	 DECLARE @return_value int,@accID INT  
-     DECLARE   @AccountType xml, @AccValue nvarchar(100) , @Documents xml , @DocIDValue nvarchar(100) ,@CostcenterID INT , @PostCCID INT
+	 DECLARE @return_value int,@accID bigint  
+     DECLARE   @AccountType xml, @AccValue nvarchar(100) , @Documents xml , @DocIDValue nvarchar(100) ,@CostcenterID BIGINT , @PostCCID Bigint
  	
 	DECLARE @AA XML  , @DateXML XML   
 	DECLARE @DocXml nvarchar(max)     
 	   set @LocationID=0
-	   select @prefVal =value from ADM_GlobalPreferences with(nolock)
+	   select @prefVal =value from ADM_GlobalPreferences
 	   where name='EnableLocationWise'
 	   
 	  SET @XML =   @PDRcptXML   
@@ -47,7 +47,7 @@ select @PrefValue=value from adm_globalpreferences with(nolock) where name='Inte
 
 		SELECT @AA = TRANSXML ,  @Documents = Documents  FROM @tblListPDR WHERE  ID = @ICNT  
 		 
-		SELECT  @Action=ISNULL(X.value ('@Action', 'INT'),0),@accID=ISNULL(X.value ('@AccID', 'BIGINT'),0),  @DocIDValue =  ISNULL(X.value ('@DocID', 'NVARCHAR(100)'),0), @CostcenterID = ISNULL(X.value ('@CostcenterID', 'INT'),0)
+		SELECT  @Action=ISNULL(X.value ('@Action', 'INT'),0),  @DocIDValue =  ISNULL(X.value ('@DocID', 'NVARCHAR(100)'),0), @CostcenterID = ISNULL(X.value ('@CostcenterID', 'BIGINT'),0)
 		FROM @Documents.nodes('/Documents') as Data(X)  
 		
 		if(@Action=0)
@@ -56,7 +56,7 @@ select @PrefValue=value from adm_globalpreferences with(nolock) where name='Inte
 			WHERE CostCenterID= @CostcenterID  
 			
 			if(@prefVal is not null and @prefVal='true')
-				select @LocationID=ISNULL(X.value('@dcCCNID2','INT'),1) 
+				select @LocationID=ISNULL(X.value('@dcCCNID2','bigint'),1) 
 				 from @AA.nodes('/DocumentXML/Row/CostCenters') as Data(X)
 			
 			Set @DocXml = convert(nvarchar(max), @AA)  
@@ -64,9 +64,12 @@ select @PrefValue=value from adm_globalpreferences with(nolock) where name='Inte
 			BEGIN
 				UPDATE ACC_DOCDETAILS
 				SET STATUSID = 439 ,IsDiscounted=1
-				WHERE ACCDOCDETAILSID=@accID
-			
-				select @Adb=ISNULL(X.value('@DebitAccount','INT'),1) 
+				WHERE DOCID = @DocIDValue AND COSTCENTERID = @CostcenterID
+				
+				select @accID=ACCDOCDETAILSID  From ACC_DOCDETAILS WITH(NOLOCK)
+ 				WHERE DOCID = @DocIDValue AND COSTCENTERID = @CostcenterID
+				
+				select @Adb=ISNULL(X.value('@DebitAccount','bigint'),1) 
 				 from @AA.nodes('/DocumentXML/Row/Transactions') as Data(X)
 			
 				select @tempdr=DebitAccount,@tempbid=BankAccountID from ACC_DocDetails with(nolock) 
@@ -127,11 +130,14 @@ select @PrefValue=value from adm_globalpreferences with(nolock) where name='Inte
 		END	 
 		ELSE if(@Action=1)
 		BEGIN
-					DECLARE @DELDocid INT  ,@DELETECCID int
+					DECLARE @DELDocid bigint  ,@DELETECCID int
 					
 					UPDATE ACC_DOCDETAILS
 					SET STATUSID = 370 ,IsDiscounted=0
-					WHERE ACCDOCDETAILSID=@accID
+					WHERE DOCID = @DocIDValue AND COSTCENTERID = @CostcenterID
+
+					select @accID=ACCDOCDETAILSID  From ACC_DOCDETAILS WITH(NOLOCK)
+ 			    	WHERE DOCID = @DocIDValue AND COSTCENTERID = @CostcenterID			
 					
 					SELECT @DELDocid = DOCID, @DELETECCID = COSTCENTERID FROM ACC_DocDetails with(nolock)   
 					where RefCCID = 109 and RefNodeid=@accID	
@@ -178,5 +184,6 @@ if(@return_value=-999)
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH
+END CATCH   
+
 GO

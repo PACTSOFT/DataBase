@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCRM_GetActvities]
-	@NodeID [int] = 0,
-	@CostCenterID [int] = 0,
-	@Status [int] = 0,
-	@Type [int] = 0,
-	@ActID [int] = 0,
+	@NodeID [bigint] = 0,
+	@CostCenterID [bigint] = 0,
+	@Status [bigint] = 0,
+	@Type [bigint] = 0,
+	@ActID [bigint] = 0,
 	@UserID [nvarchar](300) = NULL,
 	@Userseqno [nvarchar](300) = NULL,
 	@Date [datetime] = NULL,
@@ -16,7 +16,6 @@ CREATE PROCEDURE [dbo].[spCRM_GetActvities]
 	@Subject [nvarchar](max),
 	@LangID [int] = 1,
 	@roleid [nvarchar](300),
-	@DimWhere [nvarchar](max),
 	@IsInvite [bit] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -25,9 +24,7 @@ BEGIN TRY
 SET NOCOUNT ON  
 DECLARE @SQL NVARCHAR(MAX),@WHERE NVARCHAR(MAX), @tablejoin nvarchar(300),@SelectedColumn nvarchar(MAX)
  Declare @CustomQuery1 nvarchar(max),@FeatureName nvarchar(100),@CustomQuery2 nvarchar(max),@CustomQuery3 nvarchar(max),@i int ,@CNT int,
-@Table nvarchar(100),@TabRef nvarchar(5),@CCID int,@prefVal nvarchar(10)
-
-select @prefVal=value from [com_Costcenterpreferences] with(nolock) where CostCenterID=1000 and Name='EnableStart'
+@Table nvarchar(100),@TabRef nvarchar(5),@CCID int
 
 if(@CostCenterID=-100 and @ActID>0)
 	select @CostCenterID=costcenterid from CRM_Activities where ActivityID=@ActID  
@@ -54,8 +51,8 @@ END
 	ELSE
 		SET @InventoryTable='ACC_DOCDETAILS'
 		
-	SET @tablejoin='LEFT JOIN  (SELECT DISTINCT DOCID,CostCenterID,VoucherNo,DocPrefix,DocNumber FROM '+@InventoryTable+' with(nolock) WHERE CostCenterID= '+CONVERT(VARCHAR,@CostCenterID)+')  AS O  ON O.DOCID = A.NodeID '
-	SET @tablejoin =@tablejoin  + ' LEFT JOIN  ADM_DocumentTypes AS D with(nolock) ON O.CostCenterID = D.CostCenterID '
+	SET @tablejoin='LEFT JOIN  (SELECT DISTINCT DOCID,DocumentTypeID,VoucherNo,DocPrefix,DocNumber FROM '+@InventoryTable+' with(nolock) WHERE CostCenterID= '+CONVERT(VARCHAR,@CostCenterID)+')  AS O  ON O.DOCID = A.NodeID '
+	SET @tablejoin =@tablejoin  + ' LEFT JOIN  ADM_DocumentTypes AS D with(nolock) ON O.DocumentTypeID = D.DocumentTypeID '
 
 	SET @SelectedColumn='O.VoucherNo DocNo,D.DocumentName, O.DocPrefix, O.DocNumber,'
  END
@@ -63,8 +60,7 @@ END
  BEGIN
 	SET @SelectedColumn='CASE'+(select DISTINCT ' WHEN A.CostCenterID='+CONVERT(NVARCHAR,f.featureid)+' THEN (SELECT CONVERT(NVARCHAR(MAX),O.'+(CASE WHEN f.featureid=2 THEN 'AccountCode' WHEN f.featureid=73 THEN 'CaseNumber' WHEN f.featureid=83 THEN 'CustomerCode' WHEN f.featureid in (65,94) THEN 'FirstName' WHEN f.featureid=122 THEN 'ServiceTicketID' WHEN f.featureid=128 THEN 'Customer' WHEN f.featureid=95 THEN 'ContractNumber' ELSE 'Code' END)+') FROM '+f.TableName+' O WITH(NOLOCK) WHERE O.'+f.PrimaryKey+'=A.NodeID)' 
 	from adm_features f with(nolock) where f.PrimaryKey IS NOT NULL AND f.featureid in (select distinct costcenterid FROM CRM_Activities AS A with(nolock)) 
-	FOR XML PATH(''))+'
-	WHEN A.CostCenterID BETWEEN 40000 AND 50000 THEN (SELECT DocNo FROM COM_DocID WITH(NOLOCK) WHERE ID=A.NodeID) ELSE '''' END DocNo,'
+	FOR XML PATH(''))+' ELSE '''' END DocNo,'
  END
  
  IF(@SelectedColumn IS NULL)
@@ -129,16 +125,10 @@ SET @CustomQuery2=' '
 		drop table #CustomTable
  END
  
- SET @SQL=''
-select @SQL=@SQL+',A.'+name 
-from sys.columns WITH(NOLOCK)
-where object_id=object_id('CRM_Activities') and name LIKE 'Alpha%'
  
  SET @SQL='  
-	SELECT  '+@SelectedColumn+'  A.ActivityID,CONVERT(datetime, A.ActStartDate) AS StartDateTime,CONVERT(datetime, A.ActEndDate) AS EndDateTime,TotalDuration, 
-	convert(datetime,(select max(startdate)  from CRM_ActivityLog WITH(NOLOCK) where ActivityID=A.ActivityID)) LastStartDate ,
+	SELECT  '+@SelectedColumn+'  A.ActivityID, 
 	dbo.[fnGet_GetContactPersonForCalendar] (A.CostCenterID,A.NodeID,A.ContactID) CRMContactPerson,
-	case when a.CostCenterID between 40000 and 50000 then (select Prefvalue from [com_documentpreferences] WITH(NOLOCK) where Prefname=''EnableStart'' and [CostCenterID]=a.CostCenterID) else '''+@prefVal+''' end as PrefVal,
 	A.ActivityTypeID, Isnull(A.ScheduleID,0) as ScheduleID, A.CostCenterID, A.NodeID, A.StatusID AS ActStatus, A.Subject AS ActSubject, A.Priority,   
 	A.PctComplete, A.Location, A.IsAllDayActivity,  CONVERT(datetime, A.ActualCloseDate) AS ActualCloseDate, A.ActualCloseTime, A.CustomerID,   
 	A.Remarks, A.AssignUserID, A.AssignRoleID, A.AssignGroupID,CONVERT(datetime, A.StartDate) AS ActStartDate,  dbo.fnGet_GetAssignedListForActivity (A.ActivityID,1) AssignedList,
@@ -148,7 +138,10 @@ where object_id=object_id('CRM_Activities') and name LIKE 'Alpha%'
 	S.Message,case when A.ActivityTypeID=1 then ''AppointmentRegular''   
 	when A.ActivityTypeID=2 then ''TaskRegular''   
 	when A.ActivityTypeID=3 then ''ApptRecurring''   
-	when A.ActivityTypeID=4 then ''TaskRecur'' end as Activity,A.AccountID,A.CustomerType,A.ContactID, A.CreatedBy UserName '+@SQL
+	when A.ActivityTypeID=4 then ''TaskRecur'' end as Activity,A.AccountID,A.CustomerType,[Alpha1],[Alpha2],[Alpha3],[Alpha4],[Alpha5],[Alpha6],[Alpha7],[Alpha8],[Alpha9],[Alpha10],[Alpha11],[Alpha12],[Alpha13],[Alpha14][Alpha15],[Alpha16],[Alpha17]  
+	,[Alpha18],[Alpha19],[Alpha20],[Alpha21],[Alpha22],[Alpha23],[Alpha24],[Alpha25],[Alpha26],[Alpha27],[Alpha28],[Alpha29],[Alpha30],[Alpha31]  
+	,[Alpha32],[Alpha33],[Alpha34],[Alpha35],[Alpha36],[Alpha37],[Alpha38],[Alpha39],[Alpha40],[Alpha41],[Alpha42]  
+	,[Alpha43],[Alpha44],[Alpha45],[Alpha46],[Alpha47],[Alpha48],[Alpha49],[Alpha50]   ,A.ContactID, A.CreatedBy UserName '
 	if(@IsInvite=1)
 		set @SQL=@SQL+ ', convert(datetime, A.CreatedDate) CreatedDate, A.InviteComments, A.InviteStatus ' +@CustomQuery2+' '+@CustomQuery3+' '
 	else
@@ -162,11 +155,8 @@ where object_id=object_id('CRM_Activities') and name LIKE 'Alpha%'
  
  
  SET @WHERE=''
-if(@DimWhere is not null and @DimWhere<>'')
-BEGIN
-	SET  @WHERE=' WHERE '+@DimWhere
-END
-ELSE IF @CostCenterID<>-100--bind status
+--bind status
+IF @CostCenterID<>-100
 BEGIN
  SET @WHERE=' WHERE  (A.CostCenterID = '+CONVERT(VARCHAR,@CostCenterID)+') '   
   

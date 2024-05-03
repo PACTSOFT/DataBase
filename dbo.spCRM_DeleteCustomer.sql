@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCRM_DeleteCustomer]
-	@CustomerID [int] = 0,
+	@CustomerID [bigint] = 0,
 	@IsContactDelete [bit] = 1,
-	@RoleID [int],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -13,7 +13,7 @@ BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;  
 		--Declaration Section
-		DECLARE @HasAccess bit,@RowsDeleted INT,@lft INT,@rgt INT,@Width INT,@SQL NVARCHAR(MAX)
+		DECLARE @HasAccess bit,@RowsDeleted bigint,@lft bigint,@rgt bigint,@Width bigint
 
 		--SP Required Parameters Check
 		if(@CustomerID=0)
@@ -34,26 +34,29 @@ SET NOCOUNT ON;
 			RAISERROR('-115',16,1)
 		END
 		
-		IF EXISTS(SELECT * FROM sys.columns WITH(NOLOCK) WHERE name='CustomerID' AND object_id=OBJECT_ID('COM_DocCCData'))
+		IF EXISTS(SELECT CustomerID FROM COM_DocCCData WITH(NOLOCK) WHERE CustomerID=@CustomerID)
 		BEGIN
-			SET @SQL='SELECT @RowsDeleted=COUNT(CustomerID) FROM COM_DocCCData WITH(NOLOCK) WHERE CustomerID='+CONVERT(NVARCHAR,@CustomerID)
-			EXEC sp_executesql @SQL,N'@RowsDeleted INT OUTPUT',@RowsDeleted OUTPUT
-			
-			IF (@RowsDeleted>0)
-			BEGIN
-				RAISERROR('-379',16,1)
-			END
+			RAISERROR('-379',16,1)
 		END
+
 	
 		--Fetch left, right extent of Node along with width.
 		SELECT @lft = lft, @rgt = rgt, @Width = rgt - lft + 1
 		FROM CRM_Customer WITH(NOLOCK) WHERE CustomerID=@CustomerID
 
+	 
+		 
 		--Delete from exteneded table
 		DELETE FROM CRM_CustomerExtended WHERE CustomerID in
 		(select CustomerID from CRM_Customer  WHERE lft >= @lft AND rgt <= @rgt)
 
-	 --Delete from main table
+	 
+
+		--Delete from CustomerCostCenter
+	--	DELETE FROM SVC_CustomerCostCenterMap WHERE CustomerID=@CustomerID
+
+
+		--Delete from main table
 		DELETE FROM CRM_Customer WHERE lft >= @lft AND rgt <= @rgt
 
 		SET @RowsDeleted=@@rowcount 
@@ -82,6 +85,14 @@ SET NOCOUNT ON;
 
 		DELETE FROM  COM_Address  
 		WHERE FEATUREID=83 and  FeaturePK=@CustomerID
+
+
+		--Delete from Schemes Mapping
+		--DELETE FROM INV_CostCenterSchemes WHERE CostCenterID=51 and NodeID=@CustomerID
+
+		--Delete from CostCenter Mapping
+	--	DELETE FROM SVC_CustomerCostCenterMap WHERE CostCenterID=51 and NodeID=@CustomerID
+
 
 		--Update left and right extent to set the tree
 		UPDATE CRM_Customer SET rgt = rgt - @Width WHERE rgt > @rgt;
@@ -115,4 +126,5 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
 GO

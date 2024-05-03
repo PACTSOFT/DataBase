@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCRM_CheckWarranty]
-	@SVCCONTRACTID [int] = 0,
-	@PRODUCTID [int] = 0,
+	@SVCCONTRACTID [bigint] = 0,
+	@PRODUCTID [bigint] = 0,
 	@SERIALNO [nvarchar](300) = 0,
-	@CASEID [int] = 0,
-	@UserID [int],
+	@CASEID [bigint] = 0,
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -53,5 +53,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

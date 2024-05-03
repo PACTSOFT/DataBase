@@ -3,16 +3,15 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetLinkDetails]
-	@DocumentLinkDefID [int],
-	@LocationID [int] = 0,
-	@DivisionID [int] = 0,
+	@DocumentLinkDefID [bigint],
+	@LocationID [bigint] = 0,
+	@DivisionID [bigint] = 0,
 	@DocDate [datetime] = null,
 	@DueDate [datetime] = null,
-	@DocID [int] = 0,
-	@DbAcc [int] = 0,
-	@CrAcc [int] = 0,
+	@DocID [bigint] = 0,
+	@DbAcc [bigint] = 0,
+	@CrAcc [bigint] = 0,
 	@DimWhere [nvarchar](max) = '',
-	@LinkDocsDateFilter [datetime] = null,
 	@UserID [int] = 0,
 	@LangID [int] = 1,
 	@RoleID [int] = 0
@@ -23,7 +22,7 @@ SET NOCOUNT ON
       
 	--Declaration Section      
 	DECLARE @Tolerance nvarchar(50),@CostCenterID int,@ColumnName nvarchar(50),@lINKColumnName nvarchar(50),@ProductColName  nvarchar(50),@LinkdocType int         
-	DECLARE @Query nvarchar(max),@Vouchers nvarchar(max),@LinkCostCenterID int,@ColID INT,@lINKColID INT,@PrefValue nvarchar(50),@docType int,@UserWise bit
+	DECLARE @Query nvarchar(max),@Vouchers nvarchar(max),@LinkCostCenterID int,@ColID bigint,@lINKColID bigint,@PrefValue nvarchar(50),@docType int,@UserWise bit
 
 	--SP Required Parameters Check      
 	IF (@DocumentLinkDefID <1)      
@@ -133,7 +132,7 @@ print @Query
     where CostCenterID=@CostCenterID and PrefName='Enabletolerance'          
 
 	--Create temporary table       
-	CREATE TABLE #tblList(ID int identity(1,1) PRIMARY KEY,DocDetailsID INT,Val float,LinkStatusID INT,VoucherType int,DocSeqNo int,Voucherno nvarchar(200))
+	CREATE TABLE #tblList(ID int identity(1,1) PRIMARY KEY,DocDetailsID bigint,Val float,LinkStatusID BIGINT,VoucherType int,DocSeqNo int,Voucherno nvarchar(200))
 	     
 	set @Query=''
 
@@ -238,7 +237,7 @@ print @Query
 	where CostCenterID=@LinkCostCenterID and PrefName='Allowlinkingonce'        
 	if(@PrefValue is not null and @PrefValue='True')--FOr Linking only once      
 	begin      
-		SET @Query=@Query+' and (b.InvDocDetailsID is null or b.DocID='+convert(nvarchar,@DocID)+')'
+		SET @Query=@Query+' and b.InvDocDetailsID is null '      
 	end  
 
 	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)      
@@ -386,23 +385,22 @@ print @Query
 
 	set @PrefValue=''      
 	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)      
-	where CostCenterID=@CostCenterID and PrefName='LinkZeroQty'    
-	
-	if(@PrefValue='true')--FOr Link Zero Qty no validation        
-		SET @Query=@Query+') as t'
-	ELSE
-	begin     
-		if(@Tolerance is not null and @Tolerance='True'    )   
-			SET @Query=@Query+') as t
-			where ( (TPercentage =0 and thp=0 and THV=0 and TValue=0 and value<>0)
+	where CostCenterID=@CostCenterID and PrefName='LinkZeroQty'        
+	if(@PrefValue<>'true')--FOr Link Zero Qty no validation      
+	begin   
+  		if(@Tolerance is not null and @Tolerance='True'    )   
+			  SET @Query=@Query+') as t
+			where ( (TPercentage =0 and thp=0 and THV=0 and TValue=0 and value>0)
 			or (THV >0 and TValue=0 and TPercentage=0 and value>0)
 			or (thp >0 and TValue=0 and TPercentage=0 and value>0)
 			or (TPercentage >0 and value<>0 and round((value),2)>per )
 			or (TValue >0 and value<>0 and round((value),2)>TValue))'
-		else
-			SET @Query=@Query+' ) as t where cast(value as numeric(36,5)) >0 '    
-	end	
-	
+		else	
+			SET @Query=@Query+' )as t where cast(value as numeric(36,5)) >0  '      
+	end      
+	else if(@Tolerance is not null and @Tolerance='True')
+		 SET @Query=@Query+') as t'
+	 
 	--Read XML data into temporary table only to delete records      
 	print @Query      
 	INSERT INTO #tblList      
@@ -412,14 +410,14 @@ print @Query
 	BEGIN
 		delete from #tblList
 		where DocDetailsID in(
-		select min(DocDetailsID)  from #tblList WITH(NOLOCK)
+		select min(DocDetailsID)  from #tblList
 		group by  Voucherno,DocSeqNo
 		having COUNT(*)=1)
 	END    
 
 	delete from #tblList where ID in (
 	select c.id from inv_docdetails a with(nolock)
-	inner join #tblList c WITH(NOLOCK) on a.InvDocDetailsID=c.DocDetailsID   
+	inner join #tblList c on a.InvDocDetailsID=c.DocDetailsID   
 	left join inv_docdetails b with(nolock) on b.LinkedInvDocDetailsID=a.InvDocDetailsID
 	where isnull(b.docid,-123)<>@docid and a.linkstatusid=445 )
    --select * from #tblList
@@ -435,7 +433,7 @@ print @Query
 	select @ProductColName=SysColumnName from ADM_COSTCENTERDEF WITH(NOLOCK) 
 	where COSTCENTERID=@LinkCostCenterID and SysColumnName like 'dcalpha%' and ColumnCostCenterID=3
    
-	SET @Query=' SELECT   DISTINCT  a.voucherno  , Convert(datetime, a.DocDate) DocDate,convert(INT,DOcNUmber) docnumber    
+	SET @Query=' SELECT   DISTINCT  a.voucherno  , Convert(datetime, a.DocDate) DocDate,convert(bigint,DOcNUmber) docnumber    
 	,a.[DocID],a.DocAbbr,a.DocPrefix,CASE WHEN A.MODIFIEDDATE IS NULL THEN A.CREATEDDATE else A.MODIFIEDDATE END MODDATE'
 	
 	if exists(select PrefValue from COM_DocumentPreferences WITH(NOLOCK)
@@ -443,12 +441,9 @@ print @Query
 		SET @Query=@Query+',a.COstcenterid into #tempTble '
 
 	SET @Query=@Query+' from [INV_DocDetails] a WITH(NOLOCK)      
-	join #tblList c WITH(NOLOCK) on a.InvDocDetailsID=c.DocDetailsID      
+	join #tblList c on a.InvDocDetailsID=c.DocDetailsID      
 	join COM_DocCCData CC  WITH(NOLOCK) on a.InvDocDetailsID=CC.InvDocDetailsID
 	join [COM_DocTextData] dT  WITH(NOLOCK) on a.InvDocDetailsID=dT.InvDocDetailsID '
-	
-	if((@LinkCostCenterID>40000 and @LinkCostCenterID<50000) and @LinkDocsDateFilter is not null and @LinkDocsDateFilter <> '' and @LinkDocsDateFilter <>'1900-01-02 00:00:00.000')
-		SET @Query=@Query+' and convert(datetime, a.DocDate) <= '''+convert(nvarchar(20),@LinkDocsDateFilter)+''''  
 	 
 	set @PrefValue=''
 	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)    
@@ -462,22 +457,19 @@ print @Query
 	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)
 	where CostCenterID=@CostCenterID and PrefName='SortDesc'        
 	if(@PrefValue ='true')
-		SET @Query=@Query+' order by     MODDATE DESC,convert(INT,DOcNUmber) DESC, a.[DocID] DESC  '
+		SET @Query=@Query+' order by     MODDATE DESC,convert(bigint,DOcNUmber) DESC, a.[DocID] DESC  '
 	else
-		SET @Query=@Query+' order by a.DocAbbr DESC ,a.DocPrefix DESC,convert(INT,DOcNUmber) DESC'
+		SET @Query=@Query+' order by a.DocAbbr DESC ,a.DocPrefix DESC,convert(bigint,DOcNUmber) DESC'
 	
 	if exists(select PrefValue from COM_DocumentPreferences WITH(NOLOCK)
 	where CostCenterID=@CostCenterID and PrefName ='Linkallprodspacked' and PrefValue ='true')
 	BEGIN
-		SET @Query=@Query+' select * from #tempTble WITH(NOLOCK) where [dbo].[fnDoc_IsFullyPacked](CostCenterid,DocID)=1 '
+		SET @Query=@Query+' select * from #tempTble where [dbo].[fnDoc_IsFullyPacked](CostCenterid,DocID)=1 '
 		if(@PrefValue ='true')
-			SET @Query=@Query+' order by MODDATE DESC,convert(INT,DOcNUmber) DESC, [DocID] DESC  '
+			SET @Query=@Query+' order by MODDATE DESC,convert(bigint,DOcNUmber) DESC, [DocID] DESC  '
 		else
-			SET @Query=@Query+' order by DocAbbr DESC ,DocPrefix DESC,convert(INT,DOcNUmber) DESC '
-		
-		SET @Query=@Query+' DROP TABLE #tempTble'
+			SET @Query=@Query+' order by DocAbbr DESC ,DocPrefix DESC,convert(bigint,DOcNUmber) DESC'
 	END
-	
 	print(@Query)
 	exec(@Query)
 	DROP TABLE #tblList    
@@ -498,5 +490,5 @@ BEGIN CATCH
 	END      
 	SET NOCOUNT OFF        
 	RETURN -999         
-END CATCH
+END CATCH        
 GO

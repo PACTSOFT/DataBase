@@ -4,7 +4,6 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_GetNextContractNo]
 	@CostCenterID [int],
-	@parContractID [bigint],
 	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -14,10 +13,9 @@ BEGIN TRY
 SET NOCOUNT ON      
 	declare @SNO bigint
 		
-			
 	IF (@CostCenterID=95 OR  @CostCenterID=104)
 		select @SNO=isnull(Max(SNO),0)+1  
-		from  REN_Contract WITH(NOLOCK)   WHERE   CostCenterID = @CostCenterID  and parentContractID=@parContractID 
+		from  REN_Contract WITH(NOLOCK)   WHERE   CostCenterID = @CostCenterID  
 	else IF (@CostCenterID=103 OR @CostCenterID=129)
 		select @SNO=isnull(Max(SNO),0)+1  
 		from  REN_Quotation WITH(NOLOCK)   WHERE   CostCenterID = @CostCenterID  AND StatusID<>430    

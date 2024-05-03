@@ -76,7 +76,7 @@ END
 END
 
 PRINT @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 SELECT @SQL
 GO

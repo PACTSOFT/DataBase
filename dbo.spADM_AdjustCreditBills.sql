@@ -9,7 +9,6 @@ CREATE PROCEDURE [dbo].[spADM_AdjustCreditBills]
 	@locID [bigint],
 	@DivID [bigint],
 	@DimensionID [bigint],
-	@where [nvarchar](max),
 	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -25,13 +24,13 @@ declare @tabTrans table(id bigint identity(1,1),AccDocDetailsID bigint,docd floa
 declare @tabbill table(id bigint identity(1,1),docno nvarchar(50),SeqNo int,amount float,docdate float,duedate float,statusid int)
 declare @Di int,@Dcnt int,@Divisionid bigint,@Divpref nvarchar(50),@CurrID BIGINT,@ExchRt Float,@ExchRtBC Float,@amtfc float,@DimCurrencyID BIGINT
 declare @Dimi int,@Dimcnt int,@Dimid bigint,@DimCCID INT,@DimTable nvarchar(50),@dec int,@DimCurrTable nvarchar(max),@DimExchCCID int,@DocCC nvarchar(max)
-declare @tabDim table(id bigint identity(1,1),Dimid bigint)
+
 set @DocCC=''
 select @DocCC =@DocCC +','+a.name from sys.columns a
 join sys.tables b on a.object_id=b.object_id
 where b.name='COM_DocCCData' and a.name like 'dcCCNID%'
 
-SELECT @dec=isnull(Value,2) FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='DecimalsinAmount' and ISNUMERIC(Value)=1
+SELECT @dec=isnull(Value,2) FROM ADM_GlobalPreferences WHERE Name='DecimalsinAmount' and ISNUMERIC(Value)=1
 
 set @DimExchCCID=0
 select @DimExchCCID=value from adm_globalpreferences WITH(NOLOCK)
@@ -45,17 +44,17 @@ BEGIN
 END
 
 set @prefValue=''
-select @prefValue=value from adm_globalpreferences WITH(NOLOCK)
+select @prefValue=value from adm_globalpreferences
 where name='EnableLocationWise'
 if(@prefValue='true')
 begin
 	set @prefValue=''
-	select @prefValue=value from adm_globalpreferences WITH(NOLOCK)
+	select @prefValue=value from adm_globalpreferences
 	where name='LW Bills'
 end
 if(@prefValue='true' and @locID=0)
 begin
-	select @lcnt=count(NodeID) from COM_Location WITH(NOLOCK)	
+	select @lcnt=count(NodeID) from COM_Location	
 	Where IsGroup=0
 end
 else
@@ -66,33 +65,19 @@ end
 
 
 set @DimCCID=0
-select @DimCCID=value from adm_globalpreferences WITH(NOLOCK)
+select @DimCCID=value from adm_globalpreferences
 where name='Maintain Dimensionwise Bills' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>50000
 
 if(@DimCCID>0 and @DimensionID=0)
 begin
-		select @DimTable=TableName from ADM_Features WITH(NOLOCK)
+	select @DimTable=TableName from ADM_Features
 	where FeatureID=@DimCCID
+	
+	set @sql='select @Dimcnt=count(NodeID) from '+@DimTable	+'
+	Where IsGroup=0'
+	
+	exec sp_executesql @sql,N'@Dimcnt int OUTPUT',@Dimcnt OUTPUT
 	set @DimCCID=@DimCCID-50000
-	
-	set @sql='select b.Dcccnid'+convert(nvarchar,@DimCCID)+' from acc_docdetails a WITH(NOLOCK)
-		join COM_DocCCData b WITH(NOLOCK) on a.AccDocDetailsID=b.AccDocDetailsID
-		where (CreditAccount  in('+@accids+') or DebitAccount  in('+@accids+')) and docdate>='+convert(nvarchar,convert(float,@frmdate))+
-		' and docdate<='+convert(nvarchar,convert(float,@todate))
-		set @sql=@sql+@where	
-		set @sql=@sql+' and ((DocumentType not in (14,19) and StatusID not in(376,447,448,449)) or (DocumentType in (14,19) and statusid=370))		
-		union
-		select b.Dcccnid'+convert(nvarchar,@DimCCID)+' from acc_docdetails a WITH(NOLOCK)
-		join COM_DocCCData b WITH(NOLOCK) on a.InvDocDetailsID=b.InvDocDetailsID
-		where (CreditAccount  in('+@accids+') or DebitAccount  in('+@accids+')) and docdate>='+convert(nvarchar,convert(float,@frmdate))+
-		' and docdate<='+convert(nvarchar,convert(float,@todate))
-		set @sql=@sql+@where	
-		set @sql=@sql+' and ((DocumentType not in (14,19) and StatusID not in(376,447,448,449)) or (DocumentType in (14,19) and statusid=370))		'
-	print @sql
-	insert into @tabDim
-	exec (@sql)
-	
-	select @Dimcnt=count(Dimid) from @tabDim
 end
 else
 begin
@@ -102,17 +87,17 @@ end
 
 
 set @Divpref=''
-select @Divpref=value from adm_globalpreferences WITH(NOLOCK)
+select @Divpref=value from adm_globalpreferences
 where name='EnableDivisionWise'
 if(@Divpref='true')
 begin
 	set @Divpref=''
-	select @Divpref=value from adm_globalpreferences WITH(NOLOCK)
+	select @Divpref=value from adm_globalpreferences
 	where name='DW Bills'
 end
 if(@Divpref='true' and @DivID=0)
 begin
-	select @Dcnt=count(NodeID) from COM_Division WITH(NOLOCK)	
+	select @Dcnt=count(NodeID) from COM_Division	
 	Where IsGroup=0
 end
 else
@@ -120,7 +105,7 @@ begin
 	set @Dcnt=1
 end
 
-set @sql='Delete b from [COM_Billwise] b  WITH(NOLOCK)   
+set @sql='Delete from [COM_Billwise]    
 where AccountID in('+@accids+') and docdate>='+convert(nvarchar,convert(float,@frmdate))+
 ' and docdate<='+convert(nvarchar,convert(float,@todate))
 
@@ -132,7 +117,6 @@ if(@Divpref='true' and @DivID>0)
 
 if(@DimCCID>0 and @DimensionID>0)
 	set @sql=@sql+'  and dcCCNID'+convert(nvarchar,@DimCCID)+'='+convert(nvarchar,@DimensionID)
-set @sql=@sql+@where	
 print @sql
 exec(@sql)
 
@@ -147,7 +131,7 @@ begin
 		if(@locID>0)
 			set @Locationid=@locID
 		ELSE	
-			 select top 1  @Locationid=NodeID from COM_Location WITH(NOLOCK)
+			 select top 1  @Locationid=NodeID from COM_Location
 			 where NodeID>@Locationid and IsGroup=0
 			order by NodeID 
      end
@@ -167,7 +151,7 @@ begin
 			if(@DivID>0)
 				set @Divisionid=@DivID
 			ELSE
-				 select top 1  @Divisionid=NodeID from COM_Division WITH(NOLOCK)
+				 select top 1  @Divisionid=NodeID from COM_Division
 				 where NodeID>@Divisionid and IsGroup=0
 				order by NodeID 
 		end
@@ -184,10 +168,14 @@ begin
 			  set @Dimi=@Dimi+1 
 			if(@DimCCID>0)
 			begin
+				 set @sql='select top 1  @Dimid=NodeID from '+@DimTable	+'
+				 where NodeID>'+CONVERT(nvarchar,@Dimid)+' and IsGroup=0
+				 order by NodeID' 
+				
 				if(@DimensionID>0)
 					set @Dimid=@DimensionID
 				ELSE	
-					select @Dimid=Dimid from @tabDim where id=@Dimi
+					exec sp_executesql @sql,N'@Dimid int OUTPUT',@Dimid OUTPUT
 			end
 			
 			if(@DimExchCCID=@DimCCID)	
@@ -199,9 +187,10 @@ begin
 			END
 		
        
-			 
-				set @sql='select a.AccDocDetailsID,DocDate from acc_docdetails a WITH(NOLOCK)
-				join COM_DocCCData b WITH(NOLOCK) on a.AccDocDetailsID=b.AccDocDetailsID
+			if(@Locationid>0 or @Dimid>0 or @Divisionid>0)
+			begin
+				set @sql='select a.AccDocDetailsID,DocDate from acc_docdetails a
+				join COM_DocCCData b on a.AccDocDetailsID=b.AccDocDetailsID
 				where CreditAccount  in('+@accids+') and (LinkedAccDocDetailsID is null or LinkedAccDocDetailsID=0) and docdate>='+convert(nvarchar,convert(float,@frmdate))+
 				' and docdate<='+convert(nvarchar,convert(float,@todate))
 				
@@ -216,8 +205,8 @@ begin
 				
 				set @sql=@sql+' and ((DocumentType not in (14,19) and StatusID not in(376,447,448,449)) or (DocumentType in (14,19) and statusid=370))
 				union all
-				select a.AccDocDetailsID,DocDate from acc_docdetails a WITH(NOLOCK)
-				join COM_DocCCData b WITH(NOLOCK) on a.InvDocDetailsID=b.InvDocDetailsID
+				select a.AccDocDetailsID,DocDate from acc_docdetails a
+				join COM_DocCCData b on a.InvDocDetailsID=b.InvDocDetailsID
 				where CreditAccount  in('+@accids+') and docdate>='+convert(nvarchar,convert(float,@frmdate))+
 				' and docdate<='+convert(nvarchar,convert(float,@todate))
 				
@@ -229,11 +218,19 @@ begin
 
 				if(@Dimid>0)
 					set @sql=@sql+'  and dcCCNID'+convert(nvarchar,@DimCCID)+'='+convert(nvarchar,@Dimid)
-				set @sql=@sql+@where
+				
 				set @sql=@sql+' and ((DocumentType not in (14,19) and StatusID not in(376,447,448,449)) or (DocumentType in (14,19) and statusid=370))
 				order by DocDate'
 			 
-			 
+			end
+			else
+			begin
+				set @sql='select AccDocDetailsID,DocDate from acc_docdetails a
+				where CreditAccount  in('+@accids+') and (LinkedAccDocDetailsID is null or LinkedAccDocDetailsID=0) and docdate>='+convert(nvarchar,convert(float,@frmdate))+
+				' and docdate<='+convert(nvarchar,convert(float,@todate))+'
+				and ((DocumentType not in (14,19) and StatusID not in(376,447,448,449)) or (DocumentType in (14,19) and statusid=370))
+				order by DocDate'
+			end
 
 	print @sql
 
@@ -252,12 +249,12 @@ begin
       where id=@i
       
        set @invID=0
-      select @CreditAccount=CreditAccount,@VoucherNo=VoucherNo,@invID=InvDocDetailsID,@DocSeqNo=DocSeqNo,@status=StatusID from acc_docdetails WITH(NOLOCK)
+      select @CreditAccount=CreditAccount,@VoucherNo=VoucherNo,@invID=InvDocDetailsID,@DocSeqNo=DocSeqNo,@status=StatusID from acc_docdetails
       where AccDocDetailsID=@docdetalid
        
-      if exists(select accountid from ACC_Accounts WITH(NOLOCK) where AccountID=@CreditAccount and IsBillwise=1)
+      if exists(select accountid from ACC_Accounts where AccountID=@CreditAccount and IsBillwise=1)
       begin
-			if((@invID is null or @invID=0) and not exists(select BillwiseID from com_billwise WITH(NOLOCK) where AccountID=@CreditAccount and [DocNo]=@VoucherNo and DocSeqNo=@DocSeqNo))
+			if((@invID is null or @invID=0) and not exists(select BillwiseID from com_billwise where AccountID=@CreditAccount and [DocNo]=@VoucherNo and DocSeqNo=@DocSeqNo))
             begin
 				   if(@DimExchCCID>50000)
 				   BEGIN	
@@ -266,7 +263,7 @@ begin
 						exec sp_executesql @sql,N'@ExchRtBC float OUTPUT',@ExchRtBC output
 					END	
 						
-				  if exists(select CurrencyID from acc_docdetails WITH(NOLOCK)
+				  if exists(select CurrencyID from acc_docdetails
 				  where (DebitAccount=@CreditAccount or CreditAccount=@CreditAccount) and (AccDocDetailsID=@docdetalid or LinkedAccDocDetailsID=@docdetalid)
 				  group by CurrencyID
 				  having COUNT(distinct CurrencyID)>1)
@@ -328,8 +325,8 @@ begin
                    , NULL    
                    ,NULL    
                      , ''''    
-                     , 0    '+@DocCC+'   from acc_docdetails a WITH(NOLOCK)
-                  join [COM_DocCCData] d WITH(NOLOCK) on a.AccDocDetailsID=d.AccDocDetailsID 
+                     , 0    '+@DocCC+'   from acc_docdetails a
+                  join [COM_DocCCData] d on a.AccDocDetailsID=d.AccDocDetailsID 
                   where a.AccDocDetailsID='+convert(nvarchar(max),@docdetalid)
                   EXEC sp_executesql @sql,N'@Amount Float,@ExchRt float,@amtfc float',@Amount,@ExchRt,@amtfc
                   
@@ -343,8 +340,8 @@ begin
    
                 
             end
-            else if(@invID>0 and ((@Locationid>0 and not exists(select BillwiseID from com_billwise WITH(NOLOCK) where AccountID=@CreditAccount and [DocNo]=@VoucherNo and dcCCNID2=@Locationid))
-             or (@Locationid=0 and not exists(select BillwiseID from com_billwise WITH(NOLOCK) where AccountID=@CreditAccount and [DocNo]=@VoucherNo))))
+            else if(@invID>0 and ((@Locationid>0 and not exists(select BillwiseID from com_billwise where AccountID=@CreditAccount and [DocNo]=@VoucherNo and dcCCNID2=@Locationid))
+             or (@Locationid=0 and not exists(select BillwiseID from com_billwise where AccountID=@CreditAccount and [DocNo]=@VoucherNo))))
             begin
 				   if(@DimExchCCID>50000)
 				   BEGIN	
@@ -420,8 +417,8 @@ begin
                    ,NULL    
                      , ''''    
                      , 0    
-                     '+@DocCC+'  from acc_docdetails a WITH(NOLOCK)
-                  join [COM_DocCCData] d  WITH(NOLOCK) on a.InvDocDetailsID=d.InvDocDetailsID 
+                     '+@DocCC+'  from acc_docdetails a
+                  join [COM_DocCCData] d on a.InvDocDetailsID=d.InvDocDetailsID 
                   where a.AccDocDetailsID='+convert(nvarchar(max),@docdetalid)
                   EXEC sp_executesql @sql,N'@Amount Float,@ExchRt float,@amtfc Float,@billno nvarchar(200),@billdate float',@Amount,@ExchRt,@amtfc,@billno,@billdate 
                   
@@ -439,9 +436,10 @@ begin
       
 end 
 
-    
-		set @sql='select a.AccDocDetailsID,DocDate from acc_docdetails a WITH(NOLOCK)
-				join COM_DocCCData b WITH(NOLOCK) on a.AccDocDetailsID=b.AccDocDetailsID
+    if(@Locationid>0 or @Divisionid>0 or @Dimid>0)
+	begin
+		set @sql='select a.AccDocDetailsID,DocDate from acc_docdetails a
+				join COM_DocCCData b on a.AccDocDetailsID=b.AccDocDetailsID
 		where DebitAccount  in('+@accids+') and (LinkedAccDocDetailsID is null or LinkedAccDocDetailsID=0) and docdate>='+convert(nvarchar,convert(float,@frmdate))+
 		' and docdate<='+convert(nvarchar,convert(float,@todate))
 		if(@Locationid>0)
@@ -452,11 +450,11 @@ end
 
 		if(@Dimid>0)
 			set @sql=@sql+'  and dcCCNID'+convert(nvarchar,@DimCCID)+'='+convert(nvarchar,@Dimid)
-		set @sql=@sql+@where
+		
 		set @sql=@sql+' and ((DocumentType not in (14,19) and StatusID not in(376,447,448,449)) or (DocumentType in (14,19) and statusid=370))
 		union all
-		select a.AccDocDetailsID,DocDate from acc_docdetails a WITH(NOLOCK)
-		join COM_DocCCData b WITH(NOLOCK) on a.InvDocDetailsID=b.InvDocDetailsID
+		select a.AccDocDetailsID,DocDate from acc_docdetails a
+		join COM_DocCCData b on a.InvDocDetailsID=b.InvDocDetailsID
 		where DebitAccount  in('+@accids+')and docdate>='+convert(nvarchar,convert(float,@frmdate))+
 		' and docdate<='+convert(nvarchar,convert(float,@todate))
 		if(@Locationid>0)
@@ -467,11 +465,19 @@ end
 
 		if(@Dimid>0)
 			set @sql=@sql+'  and dcCCNID'+convert(nvarchar,@DimCCID)+'='+convert(nvarchar,@Dimid)
-		set @sql=@sql+@where
+		
 		set @sql=@sql+' and ((DocumentType not in (14,19) and StatusID not in(376,447,448,449)) or (DocumentType in (14,19) and statusid=370))
 		order by DocDate'
 	 
-	 	
+	end
+	else
+	begin
+		set @sql='select AccDocDetailsID,DocDate from acc_docdetails
+		where DebitAccount  in('+@accids+') and (LinkedAccDocDetailsID is null or LinkedAccDocDetailsID=0) and docdate>='+convert(nvarchar,convert(float,@frmdate))+
+		' and docdate<='+convert(nvarchar,convert(float,@todate))+'
+		and ((DocumentType not in (14,19) and StatusID not in(376,447,448,449)) or (DocumentType in (14,19) and statusid=370))
+		order by DocDate'
+	end	
 	
 delete from @tabTrans
 insert into @tabTrans
@@ -487,13 +493,13 @@ begin
       select @docdetalid=AccDocDetailsID from @tabTrans
       where id=@i
        set @invID=0
-      select @DDate=Docdate,@Amount=Amount,@DebitAccount=DebitAccount,@VoucherNo=VoucherNo,@DocSeqNo=DocSeqNo,@invID=InvDocDetailsID,@status=StatusID,@RefNid=RefNodeid  from acc_docdetails WITH(NOLOCK)
+      select @DDate=Docdate,@Amount=Amount,@DebitAccount=DebitAccount,@VoucherNo=VoucherNo,@DocSeqNo=DocSeqNo,@invID=InvDocDetailsID,@status=StatusID,@RefNid=RefNodeid  from acc_docdetails
       where AccDocDetailsID=@docdetalid
        
       
-      if exists(select accountid from ACC_Accounts WITH(NOLOCK) where AccountID=@DebitAccount and IsBillwise=1)
+      if exists(select accountid from ACC_Accounts where AccountID=@DebitAccount and IsBillwise=1)
       begin
-            if((@invID is null or @invID=0) and not exists(select BillwiseID from com_billwise WITH(NOLOCK) where AccountID=@DebitAccount and [DocNo]=@VoucherNo and DocSeqNo=@DocSeqNo))
+            if((@invID is null or @invID=0) and not exists(select BillwiseID from com_billwise where AccountID=@DebitAccount and [DocNo]=@VoucherNo and DocSeqNo=@DocSeqNo))
             begin  
 				   if(@DimExchCCID>50000)
 				   BEGIN	
@@ -542,8 +548,8 @@ begin
 				   begin
 						  
 						  set @sql='select DocNo,DocSeqNo,(amt-paid) bal,DocDate,DocDueDate,statusid From (
-						  SELECT DocNo,statusid,DocSeqNo,abs(sum(AdjAmount)) amt,ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ WITH(NOLOCK) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) paid,
-						  DocDate,DocDueDate FROM COM_Billwise B WITH(NOLOCK)  
+						  SELECT DocNo,statusid,DocSeqNo,abs(sum(AdjAmount)) amt,ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) paid,
+						  DocDate,DocDueDate FROM COM_Billwise B  
 			 			  WHERE  AccountID='+convert(nvarchar,@DebitAccount)+' and AdjAmount<0 and DocDate<='+convert(nvarchar,@DDate)
 			 			  
 			 			 if(@Locationid>0)
@@ -567,8 +573,8 @@ begin
 				   begin
 					  insert into @tabbill
 					  select DocNo,DocSeqNo,(amt-paid) bal,DocDate,DocDueDate,statusid From (
-					  SELECT DocNo,DocSeqNo,statusid,abs(sum(AdjAmount)) amt,ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ WITH(NOLOCK) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) paid,
-					  DocDate,DocDueDate FROM COM_Billwise B WITH(NOLOCK)  
+					  SELECT DocNo,DocSeqNo,statusid,abs(sum(AdjAmount)) amt,ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) paid,
+					  DocDate,DocDueDate FROM COM_Billwise B  
 			 		  WHERE  AccountID=@DebitAccount and AdjAmount<0  and statusid=369 and DocDate<=@DDate
 			 		  group by DocNo,DocDate,DocDueDate,statusid,DocSeqNo) as t
 			 		  where (amt-paid)>0
@@ -634,8 +640,8 @@ begin
                      set @sql=@sql+' 
                      , ''''    
                      , 0    
-                     '+@DocCC+'  from acc_docdetails a WITH(NOLOCK)
-                  join [COM_DocCCData] d WITH(NOLOCK) on a.AccDocDetailsID=d.AccDocDetailsID 
+                     '+@DocCC+'  from acc_docdetails a
+                  join [COM_DocCCData] d on a.AccDocDetailsID=d.AccDocDetailsID 
                   where a.AccDocDetailsID='+convert(nvarchar(max),@docdetalid)
                   EXEC sp_executesql @sql,N'@Amount Float,@ExchRt float,@dec float',@Amount,@ExchRt,@dec
 			 	  
@@ -676,15 +682,15 @@ begin
                    ,NULL    
                      , ''''    
                      , 0    
-                     '+@DocCC+'  from acc_docdetails a WITH(NOLOCK)
-                  join [COM_DocCCData] d WITH(NOLOCK) on a.AccDocDetailsID=d.AccDocDetailsID 
+                     '+@DocCC+'  from acc_docdetails a
+                  join [COM_DocCCData] d on a.AccDocDetailsID=d.AccDocDetailsID 
                   where a.AccDocDetailsID='+convert(nvarchar(max),@docdetalid)
                   EXEC sp_executesql @sql,N'@AdjAmt Float,@ExchRt float,@dec int',@AdjAmt,@ExchRt,@dec
                   END   
                   
                   if(@DimExchCCID>50000)
 				  BEGIN	
-						select @VoucherNo=VoucherNo,@DocSeqNo=DocSeqNo from acc_docdetails WITH(NOLOCK)
+						select @VoucherNo=VoucherNo,@DocSeqNo=DocSeqNo from acc_docdetails
 						where AccDocDetailsID=@docdetalid
 
 						set @sql='update COM_Billwise 
@@ -694,8 +700,8 @@ begin
 				  END	
 
             end
-            else if(@invID>0 and ((@Locationid>0 and not exists(select BillwiseID from com_billwise WITH(NOLOCK) where AccountID=@DebitAccount and [DocNo]=@VoucherNo and dcCCNID2=@Locationid))
-             or (@Locationid=0 and not exists(select BillwiseID from com_billwise WITH(NOLOCK) where AccountID=@DebitAccount and [DocNo]=@VoucherNo))))
+            else if(@invID>0 and ((@Locationid>0 and not exists(select BillwiseID from com_billwise where AccountID=@DebitAccount and [DocNo]=@VoucherNo and dcCCNID2=@Locationid))
+             or (@Locationid=0 and not exists(select BillwiseID from com_billwise where AccountID=@DebitAccount and [DocNo]=@VoucherNo))))
             begin
 				   if(@DimExchCCID>50000)
 				   BEGIN	
@@ -738,8 +744,8 @@ begin
 				   begin
 					 
 						  set @sql='select DocNo,DocSeqNo,(amt-paid) bal,DocDate,DocDueDate,StatusID From (
-						  SELECT DocNo,DocSeqNo,StatusID,abs(sum(AdjAmount)) amt,ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ WITH(NOLOCK) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) paid,
-						  DocDate,DocDueDate FROM COM_Billwise B WITH(NOLOCK)  
+						  SELECT DocNo,DocSeqNo,StatusID,abs(sum(AdjAmount)) amt,ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) paid,
+						  DocDate,DocDueDate FROM COM_Billwise B  
 			 			  WHERE  AccountID='+convert(nvarchar,@DebitAccount)+' and AdjAmount<0 and DocDate<='+convert(nvarchar,@DDate)
 			 			  
 			 			 if(@Locationid>0)
@@ -763,8 +769,8 @@ begin
 				   begin
 						insert into @tabbill
 					  select DocNo,DocSeqNo,(amt-paid) bal,DocDate,DocDueDate,StatusID From (
-					  SELECT DocNo,DocSeqNo,StatusID,abs(sum(AdjAmount)) amt,ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ WITH(NOLOCK) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) paid,
-					  DocDate,DocDueDate FROM COM_Billwise B WITH(NOLOCK)  
+					  SELECT DocNo,DocSeqNo,StatusID,abs(sum(AdjAmount)) amt,ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) paid,
+					  DocDate,DocDueDate FROM COM_Billwise B  
 			 		  WHERE  AccountID=@DebitAccount and AdjAmount<0  and statusid=369 and DocDate<=@DDate
 			 		  group by DocNo,DocDate,StatusID,DocDueDate,DocSeqNo) as t
 			 		  where (amt-paid)>0
@@ -772,7 +778,7 @@ begin
 				   end
 				 
 			 	   
-				  select @billno=BillNo,@billdate=BillDate from INV_DocDetails WITH(NOLOCK)
+				  select @billno=BillNo,@billdate=BillDate from INV_DocDetails
 				  where InvDocDetailsID=@invID
                  
 			 	  set @AdjAmt=@Amount
@@ -834,8 +840,8 @@ begin
                      set @sql=@sql+'   
                      , ''''    
                      , 0    
-                     '+@DocCC+'  from acc_docdetails a WITH(NOLOCK)
-                  join [COM_DocCCData] d WITH(NOLOCK) on a.InvDocDetailsID=d.InvDocDetailsID 
+                     '+@DocCC+'  from acc_docdetails a
+                  join [COM_DocCCData] d on a.InvDocDetailsID=d.InvDocDetailsID 
                   where a.AccDocDetailsID='+convert(nvarchar(max),@docdetalid)
                   EXEC sp_executesql @sql,N'@Amount Float,@ExchRt float,@dec float,@billno nvarchar(200),@billdate float',@Amount,@ExchRt,@dec,@billno,@billdate 
 			 	  
@@ -877,8 +883,8 @@ begin
                    ,NULL    
                      , ''''    
                      , 0    
-                     '+@DocCC+'  from acc_docdetails a WITH(NOLOCK)
-                  join [COM_DocCCData] d  WITH(NOLOCK) on a.InvDocDetailsID=d.InvDocDetailsID 
+                     '+@DocCC+'  from acc_docdetails a
+                  join [COM_DocCCData] d on a.InvDocDetailsID=d.InvDocDetailsID 
                   where a.AccDocDetailsID='+convert(nvarchar(max),@docdetalid)
                   EXEC sp_executesql @sql,N'@AdjAmt Float,@ExchRt float,@dec int,@billno nvarchar(200),@billdate float',@AdjAmt,@ExchRt,@dec,@billno,@billdate 
                   END   

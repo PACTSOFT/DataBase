@@ -59,9 +59,9 @@ SET NOCOUNT ON
 
 		--Getting Contacts
 		EXEC [spCom_GetFeatureWiseContacts] 83,@CustomerID,1,1,1				 
-		
 		--Getting Files
-		EXEC [spCOM_GetAttachments] 83,@CustomerID,@UserID
+		SELECT * FROM  COM_Files WITH(NOLOCK) 
+		WHERE FeatureID=83 and  FeaturePK=@CustomerID
 
 			--Getting CostCenterMap
 		SELECT * FROM  COM_CCCCData WITH(NOLOCK) 

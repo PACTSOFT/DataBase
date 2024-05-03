@@ -11,33 +11,38 @@ AS
 BEGIN TRY	
 SET NOCOUNT ON;
 
-	declare @Value nvarchar(500) 
-	select @Value=Value from Com_CostCenterPreferences with(nolock) 
-	where name='ProductValueMapping' and CostCenterID=@CostCenterID
+	 
+		declare @Value nvarchar(500) 
+		set @Value=(select Value from Com_CostCenterPreferences with(nolock) where name='ProductValueMapping' and CostCenterID=@CostCenterID)
+  
+		if(@Value is not null)
+		  begin
+			  declare @table1 table(ColID nvarchar(50))
+			  DECLARE @DATA NVARCHAR(MAX)  
+			  insert into @table1
+			  exec SPSplitString @Value,';'
 
-	if(@Value is not null and @Value<>'')
-	begin
-		declare @table1 table(ColID nvarchar(50))
-		DECLARE @DATA NVARCHAR(MAX)  
-		insert into @table1
-		exec SPSplitString @Value,';'
+				--select reverse(parsename(replace(reverse(ColID),'-','.'),1)) as [SOURCE],
+				--reverse(parsename(replace(reverse(ColID),'-','.'),2)) as DESTINATION from (select ColID from @table1) as [Table]
+				--UNION	   
+				IF @CostCenterID=86
+				BEGIN
+					select (SELECT SYSCOLUMNNAME FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=115 AND  CostCenterColID= reverse(parsename(replace(reverse(ColID),'-','.'),1)))
+					as SOURCE,
+					(SELECT SYSCOLUMNNAME FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND  CostCenterColID=reverse(parsename(replace(reverse(ColID),'-','.'),2))) 
+					 AS DESTINATION from (select ColID from @table1) as [Table]
+				 END
+				 ELSE IF @CostCenterID=89
+				 BEGIN
+					select (SELECT SYSCOLUMNNAME FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=154 AND  CostCenterColID= reverse(parsename(replace(reverse(ColID),'-','.'),1)))
+					as SOURCE,
+					(SELECT SYSCOLUMNNAME FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND  CostCenterColID=reverse(parsename(replace(reverse(ColID),'-','.'),2))) 
+					 AS DESTINATION from (select ColID from @table1) as [Table]
+				 END
 
-		IF @CostCenterID=86
-		BEGIN
-			select (SELECT SYSCOLUMNNAME FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=115 AND  CostCenterColID= reverse(parsename(replace(reverse(ColID),'-','.'),1)))
-			as SOURCE,
-			(SELECT SYSCOLUMNNAME FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND  CostCenterColID=reverse(parsename(replace(reverse(ColID),'-','.'),2))) 
-			AS DESTINATION from (select ColID from @table1) as [Table]
-		END
-		ELSE IF @CostCenterID=89
-		BEGIN
-			select (SELECT SYSCOLUMNNAME FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=154 AND  CostCenterColID= reverse(parsename(replace(reverse(ColID),'-','.'),1)))
-			as SOURCE,
-			(SELECT SYSCOLUMNNAME FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND  CostCenterColID=reverse(parsename(replace(reverse(ColID),'-','.'),2))) 
-			AS DESTINATION from (select ColID from @table1) as [Table]
-		END
-	end
-
+		  end
+			
+		
 SET NOCOUNT OFF;
 RETURN 1
 END TRY
@@ -54,4 +59,5 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
 GO

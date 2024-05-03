@@ -4,18 +4,18 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SetBouncePosting]
 	@CostCenterID [int],
-	@DocID [int],
+	@DocID [bigint],
 	@DocDate [datetime],
 	@DueDate [datetime] = NULL,
 	@BillNo [nvarchar](500),
 	@InvDocXML [nvarchar](max),
 	@NotesXML [nvarchar](max),
 	@AttachmentsXML [nvarchar](max),
-	@LocationID [int],
-	@DivisionID [int],
+	@LocationID [bigint],
+	@DivisionID [bigint],
 	@WID [int],
 	@RoleID [int],
-	@SCCID [int],
+	@SCCID [bigint],
 	@SDocType [int],
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
@@ -24,13 +24,13 @@ CREATE PROCEDURE [dbo].[spDOC_SetBouncePosting]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION  
-DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE NVARCHAR(100) , @DocIDChild INT  ,@Dt float
+DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE NVARCHAR(100) , @DocIDChild BIGINT  ,@Dt float
 DECLARE @PrefValue NVARCHAR(100),@DocPrefix nvarchar(200),@DocNumber NVARCHAR(500)  
     
 BEGIN TRY      
 SET NOCOUNT ON;    
- DECLARE @VoucherNo NVARCHAR(500),@temp varchar(100),@StatusID INT ,@DocumentType INT ,@AccDocDetailsID INT 
-DECLARE @amt float,@accid INT,@IsNewReference bit,@RefDocNo nvarchar(200), @RefDocSeqNo int,@RefDocDate FLOAT,@RefDueDate FLOAT   
+ DECLARE @VoucherNo NVARCHAR(500),@temp varchar(100),@StatusID INT ,@DocumentType INT ,@AccDocDetailsID bigint 
+DECLARE @amt float,@accid bigint,@IsNewReference bit,@RefDocNo nvarchar(200), @RefDocSeqNo int,@RefDocDate FLOAT,@RefDueDate FLOAT   
 DECLARE	@return_value int
    SET @Dt=convert(float,getdate())--Setting Current Date  
 	
@@ -162,12 +162,10 @@ EXEC	@return_value = [dbo].spDOC_SetTempAccDocument
 	 begin
 		declare @DocCC nvarchar(max),@Sql nvarchar(max)
 		set @DocCC=''
-		select @DocCC =@DocCC +','+a.name from sys.columns a with(nolock)
-		join sys.tables b with(nolock) on a.object_id=b.object_id
-		join sys.columns c with(nolock) on c.name like 'dcCCNID%'
-		join sys.tables d with(nolock) on c.object_id=d.object_id
-		where b.name='COM_ChequeReturn' and d.name='COM_DocCCData'
-		and a.name like 'dcCCNID%' and a.name=c.name
+		select @DocCC =@DocCC +','+a.name from sys.columns a
+		join sys.tables b on a.object_id=b.object_id
+		where b.name='COM_DocCCData' and a.name like 'dcCCNID%'
+		
 		
 		set @Sql='insert into COM_ChequeReturn(DocNo,DocSeqNo,AccountID,AdjAmount,AdjCurrID,AdjExchRT,AmountFC,
 		DocDate,DocDueDate,DocType,IsNewReference,Narration,IsDocPDC,CompanyGUID,GUID,CreatedBy,CreatedDate'+@DocCC+')
@@ -178,8 +176,8 @@ EXEC	@return_value = [dbo].spDOC_SetTempAccDocument
 		,case when (IsNegative is null or IsNegative=0) and DocumentType in(14,15,23) THEN Amount 
 									   when (IsNegative is null or IsNegative=0) and DocumentType in(18,19,22) THEN (Amount*-1) 
 									   when IsNegative is not null and IsNegative=1 and DocumentType in(14,15,23) THEN (Amount*-1)
-									   when IsNegative is not null and IsNegative=1 and DocumentType in(18,19,22) THEN  Amount end,CurrencyID,ExchangeRate,AmountFC,DocDate,DueDate,DocumentType,1,'''',0
-									   ,'''+convert(nvarchar(max),@CompanyGUID)+''',newid(),'''+convert(nvarchar(max),@UserName)+''',convert(float,getdate())
+									   when IsNegative is not null and IsNegative=1 and DocumentType in(18,19,22) THEN  Amount end,CurrencyID,ExchangeRate,AmountFC,DocDate,DueDate,DocumentType,1,'',0
+									   ,'+convert(nvarchar(max),@CompanyGUID)+',newid(),'+convert(nvarchar(max),@UserName)+',convert(float,getdate())
 		'+@DocCC+'
 		from ACC_DocDetails a WITH(nolock)
 		join dbo.COM_DocCCData b WITH(nolock) on a.AccDocDetailsID=b.AccDocDetailsID
@@ -217,5 +215,8 @@ BEGIN CATCH
  ROLLBACK TRANSACTION    
  SET NOCOUNT OFF      
  RETURN -999       
-END CATCH
+END CATCH 
+ 
+ 
+ 
 GO

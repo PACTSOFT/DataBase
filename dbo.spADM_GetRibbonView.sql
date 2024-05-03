@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetRibbonView]
-	@UserID [int],
+	@UserID [bigint],
 	@RoleID [int],
 	@LangID [int] = 1,
 	@IsWebCall [int] = 0,
@@ -16,7 +16,7 @@ SET NOCOUNT ON
 	
 	--Declaration Section
 	DECLARE @HasAccess BIT
-	declare @TblScreens as Table(ID INT IDENTITY(1,1),IsReport INT,FAID INT,IsDefault BIT)
+	declare @TblScreens as Table(ID INT IDENTITY(1,1),IsReport INT,FAID BIGINT,IsDefault BIT)
 	declare @DefaultScreenXML nvarchar(max),@XML xml,@LXML xml,@AllowPOS bit,@str nvarchar(max)
 	declare @TblRestrictCC as Table(CCID int)
 
@@ -73,7 +73,7 @@ SET NOCOUNT ON
 						,TabOrder,ISNULL(ADM_FeatureAction.FeatureActionTypeID,0)FeatureActionTypeID
 						,TabKeyTip,DrpKeyTip,ButtonKeyTip,GroupKeyTip,DN.Resourcedata as RDrpName
 						,(select count(*) from ADM_RibbonView RB WITH(NOLOCK) where RB.DrpID=ADM_RibbonView.DrpID) [ItemCount],
-						ISNULL(ADM_FeatureActionRoleMap.FeatureActionID,0) FARMID, ColumnOrder,IsMobile,DCT.DocumentType,IsOffLine,ADM_RibbonView.LicSIMPLE
+						ISNULL(ADM_FeatureActionRoleMap.FeatureActionID,0) FARMID, ColumnOrder,IsMobile,DCT.DocumentType,IsOffLine
 		FROM ADM_RibbonView WITH(NOLOCK)
 		inner JOIN ADM_FeatureActionRoleMap WITH(NOLOCK) ON ADM_FeatureActionRoleMap.FeatureActionID=ADM_RibbonView.FeatureActionID AND ADM_FeatureActionRoleMap.RoleID=@RoleID 
 		left join @TblRestrictCC TR on TR.CCID=ADM_RibbonView.FeatureID
@@ -87,7 +87,7 @@ SET NOCOUNT ON
 		LEFT JOIN COM_LanguageResources DN WITH(NOLOCK) ON DN.ResourceID=ADM_RibbonView.DisplaynameResourceID AND DN.LanguageID=@LangID
 		LEFT JOIN ADM_FeatureAction  WITH(NOLOCK) ON ADM_FeatureAction.FeatureActionID=ADM_RibbonView.FeatureActionID
 		LEFT JOIN ADM_DocumentTypes DCT WITH(NOLOCK) ON DCT.CostcenterID=ADM_RibbonView.FeatureID
-		WHERE   ADM_RibbonView.IsMobile=@IsMobile and TR.CCID is null and ADM_RibbonView.FeatureID not in (494,498,499,40088,267)
+		WHERE   ADM_RibbonView.IsMobile=@IsMobile and TR.CCID is null and ADM_RibbonView.FeatureID not in (494,498,499,40088)
 		UNION
 		SELECT DISTINCT  RibbonViewID ,GroupOrder
 						,ISNULL(TabID,0) TabID
@@ -112,7 +112,7 @@ SET NOCOUNT ON
 						,TabKeyTip,DrpKeyTip,ButtonKeyTip,GroupKeyTip
 						,DN.Resourcedata as RDrpName
 						,(select count(*) from ADM_RibbonView RB WITH(NOLOCK)  where RB.DrpID=ADM_RibbonView.DrpID) [ItemCount]
-						,ADM_RibbonView.FeatureActionID FARMID, ColumnOrder,IsMobile,NULL,IsOffLine,ADM_RibbonView.LicSIMPLE
+						,ADM_RibbonView.FeatureActionID FARMID, ColumnOrder,IsMobile,NULL,IsOffLine
 		FROM ADM_RibbonView WITH(NOLOCK)
 		LEFT JOIN COM_LanguageResources T WITH(NOLOCK) ON T.ResourceID=ADM_RibbonView.TabResourceID AND T.LanguageID=@LangID
 		LEFT JOIN COM_LanguageResources G WITH(NOLOCK) ON G.ResourceID=ADM_RibbonView.GroupResourceID AND G.LanguageID=@LangID
@@ -133,9 +133,8 @@ SET NOCOUNT ON
 					WHERE (ActionType=1 or ActionType=0) AND UserID=@UserID or RoleID=@RoleID or GroupID IN (SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)					
 				)						
 			)--AND ADM_RibbonView.IsMobile=@IsMobile
-		OR (ADM_RibbonView.FeatureID=499 and ADM_RibbonView.IsMobile=1 AND ADM_RibbonView.FeatureActionID IN (SELECT DISTINCT DRP.DashBoardID FROM ADM_DashBoardUserRoleMap DRP with(nolock)
-	JOIN ADM_DashBoard DB with(nolock) ON DB.DashBoardID=DRP.DashBoardID AND DB.Mode IN (0,3,4)
-		WHERE DRP.UserID=@UserID or DRP.RoleID=@RoleID or DRP.GroupID IN (SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)))
+		OR (ADM_RibbonView.FeatureID=499 and ADM_RibbonView.IsMobile=1 AND ADM_RibbonView.FeatureActionID IN (SELECT DISTINCT DashBoardID FROM ADM_DashBoardUserRoleMap with(nolock)
+		WHERE UserID=@UserID or RoleID=@RoleID or GroupID IN (SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)))
 		ORDER BY TabOrder,GroupOrder,groupid,Columnorder,RibbonViewID 
 		
 		SELECT [Name],[Value] FROM ADM_GlobalPreferences WITH(NOLOCK)
@@ -145,51 +144,6 @@ SET NOCOUNT ON
 		INNER JOIN ADM_FeatureAction FA WITH(NOLOCK) ON FA.FeatureActionID=M.FeatureActionID
 		WHERE M.RoleID=@RoleID
 		ORDER BY FA.FeatureID,FA.FeatureActionTypeID
-		
-		select  ISNULL(ADM_RibbonView.FeatureID,0) FeatureID
-						,ISNULL(ADM_RibbonView.FeatureActionID,0) FeatureActionID 
-						,S.ResourceData ScreenName	  
-						,ISNULL(ADM_RibbonView.FeatureActionID,0)FeatureActionTypeID
-		from ADM_RibbonView WITH(NOLOCK)
-		LEFT JOIN COM_LanguageResources S WITH(NOLOCK) ON S.ResourceID=ADM_RibbonView.ScreenResourceID AND S.LanguageID=@LangID
-		where ADM_RibbonView.FeatureID=499 AND ADM_RibbonView.FeatureActionID in 
-		(SELECT DashBoardID FROM ADM_DashBoardUserRoleMap with(nolock)
-		WHERE IsDefault=1 and (UserID=@UserID or RoleID=@RoleID or GroupID IN 
-		(SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)))
-		
-		--User Default Screens
-		select @DefaultScreenXML=DefaultScreenXML from ADM_Users with(nolock) WHERE UserID=@UserID
-		if(@DefaultScreenXML is not null and @DefaultScreenXML!='')
-		begin
-			set @XML=@DefaultScreenXML
-			
-			INSERT INTO @TblScreens
-			select X.value('@isReport','int'),X.value('@FeatureActionID','INT'),X.value('@Default','bit')
-			from @XML.nodes('/XML/Row') as Data(X)
-			--where X.value('@isReport','int')=0
-			
-			select  ISNULL(R.FeatureID,0) FeatureID
-						,ISNULL(R.FeatureActionID,0) FeatureActionID 
-						,S.ResourceData ScreenName	  
-						,ISNULL(FA.FeatureActionTypeID,0)FeatureActionTypeID,Tbl.IsDefault,Tbl.ID
-			from ADM_RibbonView R WITH(NOLOCK)
-			inner JOIN ADM_FeatureActionRoleMap FARM WITH(NOLOCK) ON FARM.FeatureActionID=R.FeatureActionID AND FARM.RoleID=@RoleID 
-			INNER JOIN ADM_FeatureAction FA  WITH(NOLOCK) ON FA.FeatureActionID=R.FeatureActionID
-			INNER JOIN @TblScreens Tbl ON Tbl.FAID=FA.FeatureActionID
-			LEFT JOIN COM_LanguageResources S WITH(NOLOCK) ON S.ResourceID=R.ScreenResourceID  AND S.LanguageID=@LangID
-			where Tbl.IsReport=0
-			UNION
-			select  50 FeatureID
-						,R.ReportID FeatureActionID 
-						,R.ReportName ScreenName	  
-						,R.ReportID FeatureActionTypeID,Tbl.IsDefault,Tbl.ID
-			from ADM_RevenUReports R WITH(NOLOCK)
-			INNER JOIN @TblScreens Tbl ON Tbl.FAID=R.ReportID
-			where Tbl.IsReport=1
-			order by Tbl.IsDefault desc,Tbl.ID
-		end
-		else
-			select 0 DefaultScreen where 1<>1
  	END
 	end 
 	else if @IsWebCall=1
@@ -220,7 +174,7 @@ SET NOCOUNT ON
 						,TabKeyTip,DrpKeyTip,ButtonKeyTip,GroupKeyTip
 						,DN.Resourcedata as RDrpName
 						,(select count(*) from ADM_RibbonView RB WITH(NOLOCK) where RB.DrpID=ADM_RibbonView.DrpID) [ItemCount],
-						ISNULL(ADM_FeatureActionRoleMap.FeatureActionID,0) FARMID, ColumnOrder,IsMobile,DCT.DocumentType,WebIcon,ADM_RibbonView.LicSIMPLE
+						ISNULL(ADM_FeatureActionRoleMap.FeatureActionID,0) FARMID, ColumnOrder,IsMobile,DCT.DocumentType
 		FROM ADM_RibbonView WITH(NOLOCK)
 		inner JOIN ADM_FeatureActionRoleMap WITH(NOLOCK) ON ADM_FeatureActionRoleMap.FeatureActionID=ADM_RibbonView.FeatureActionID AND ADM_FeatureActionRoleMap.RoleID=@RoleID 
 		left join @TblRestrictCC TR on TR.CCID=ADM_RibbonView.FeatureID
@@ -234,7 +188,7 @@ SET NOCOUNT ON
 		LEFT JOIN COM_LanguageResources DN WITH(NOLOCK) ON DN.ResourceID=ADM_RibbonView.DisplaynameResourceID AND DN.LanguageID=@LangID
 		LEFT JOIN ADM_FeatureAction  WITH(NOLOCK) ON ADM_FeatureAction.FeatureActionID=ADM_RibbonView.FeatureActionID
 		LEFT JOIN ADM_DocumentTypes DCT WITH(NOLOCK) ON DCT.CostcenterID=ADM_RibbonView.FeatureID
-		WHERE ADM_RibbonView.FeatureID NOT IN (494,498,499,40088,267) AND ADM_RibbonView.ShowInWeb=1 and TR.CCID is null
+		WHERE ADM_RibbonView.FeatureID NOT IN (494,498,499,40088) AND ADM_RibbonView.ShowInWeb=1 and TR.CCID is null
 		UNION
 		SELECT DISTINCT  RibbonViewID ,GroupOrder
 						,ISNULL(TabID,0) TabID
@@ -259,7 +213,7 @@ SET NOCOUNT ON
 						,TabKeyTip,DrpKeyTip,ButtonKeyTip,GroupKeyTip
 						,DN.Resourcedata as RDrpName
 						,(select count(*) from ADM_RibbonView RB WITH(NOLOCK)  where RB.DrpID=ADM_RibbonView.DrpID) [ItemCount]
-						,ADM_RibbonView.FeatureActionID FARMID, ColumnOrder,IsMobile,NULL,WebIcon,ADM_RibbonView.LicSIMPLE
+						,ADM_RibbonView.FeatureActionID FARMID, ColumnOrder,IsMobile,NULL
 		FROM ADM_RibbonView WITH(NOLOCK)
 		LEFT JOIN COM_LanguageResources T WITH(NOLOCK) ON T.ResourceID=ADM_RibbonView.TabResourceID AND T.LanguageID=@LangID
 		LEFT JOIN COM_LanguageResources G WITH(NOLOCK) ON G.ResourceID=ADM_RibbonView.GroupResourceID AND G.LanguageID=@LangID
@@ -280,9 +234,8 @@ SET NOCOUNT ON
 					WHERE (ActionType=1 or ActionType=0) AND UserID=@UserID or RoleID=@RoleID or GroupID IN (SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)					
 				)						
 			)
-		OR (ADM_RibbonView.FeatureID=499 AND ADM_RibbonView.ShowInWeb=1 AND ADM_RibbonView.FeatureActionID IN (SELECT DISTINCT DRP.DashBoardID FROM ADM_DashBoardUserRoleMap DRP with(nolock)
-	JOIN ADM_DashBoard DB with(nolock) ON DB.DashBoardID=DRP.DashBoardID AND DB.Mode IN (0,2)	
-		WHERE DRP.UserID=@UserID or DRP.RoleID=@RoleID or DRP.GroupID IN (SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)))
+		OR (ADM_RibbonView.FeatureID=499 AND ADM_RibbonView.ShowInWeb=1 AND ADM_RibbonView.FeatureActionID IN (SELECT DISTINCT DashBoardID FROM ADM_DashBoardUserRoleMap with(nolock)
+		WHERE UserID=@UserID or RoleID=@RoleID or GroupID IN (SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)))
 		ORDER BY TabOrder,GroupOrder,groupid,Columnorder,RibbonViewID
 
 
@@ -313,7 +266,7 @@ SET NOCOUNT ON
 			set @XML=@DefaultScreenXML
 			
 			INSERT INTO @TblScreens
-			select X.value('@isReport','int'),X.value('@FeatureActionID','INT'),X.value('@Default','bit')
+			select X.value('@isReport','int'),X.value('@FeatureActionID','bigint'),X.value('@Default','bit')
 			from @XML.nodes('/XML/Row') as Data(X)
 			--where X.value('@isReport','int')=0
 			
@@ -353,7 +306,7 @@ SET NOCOUNT ON
 			,ISNULL(ADM_FeatureAction.FeatureActionTypeID,0)FeatureActionTypeID
 			,TabKeyTip,DrpKeyTip,ButtonKeyTip,GroupKeyTip,DN.Resourcedata as RDrpName
 			,(select count(*) from ADM_RibbonView RB WITH(NOLOCK) where RB.DrpID=ADM_RibbonView.DrpID) [ItemCount],
-			ISNULL(ADM_RibbonView.FeatureActionID,0) FARMID, ColumnOrder,AppPath,DCT.DocumentType,ADM_RibbonView.LicSIMPLE
+			ISNULL(ADM_RibbonView.FeatureActionID,0) FARMID, ColumnOrder,AppPath,DCT.DocumentType
 		FROM ADM_RibbonView WITH(NOLOCK)
 			inner JOIN ADM_FeatureActionRoleMap WITH(NOLOCK) ON ADM_FeatureActionRoleMap.FeatureActionID=ADM_RibbonView.FeatureActionID AND ADM_FeatureActionRoleMap.RoleID=@RoleID
 			left join @TblRestrictCC TR on TR.CCID=ADM_RibbonView.FeatureID
@@ -367,7 +320,7 @@ SET NOCOUNT ON
 			LEFT JOIN COM_LanguageResources DN WITH(NOLOCK) ON DN.ResourceID=ADM_RibbonView.DisplaynameResourceID AND DN.LanguageID=@LangID
 			LEFT JOIN ADM_FeatureAction  WITH(NOLOCK) ON ADM_FeatureAction.FeatureActionID=ADM_RibbonView.FeatureActionID
 			LEFT JOIN ADM_DocumentTypes DCT WITH(NOLOCK) ON DCT.CostcenterID=ADM_RibbonView.FeatureID
-		WHERE ADM_RibbonView.FeatureID NOT IN (494,498,499,40088,267) and ADM_RibbonView.RibbonViewID<>213 and TR.CCID is null
+		WHERE ADM_RibbonView.FeatureID NOT IN (494,498,499,40088) and TR.CCID is null
 		UNION
 		SELECT  RibbonViewID,GroupOrder,ISNULL(TabID,0) TabID,ISNULL(GroupID,0) GroupID
 			,DrpID,DrpImage,T.ResourceData TabName,G.ResourceData GroupName,D.ResourceData DrpName 
@@ -378,7 +331,7 @@ SET NOCOUNT ON
 			,ISNULL(ADM_FeatureAction.FeatureActionTypeID,0)FeatureActionTypeID
 			,TabKeyTip,DrpKeyTip,ButtonKeyTip,GroupKeyTip,DN.Resourcedata as RDrpName
 			,(select count(*) from ADM_RibbonView RB WITH(NOLOCK) where RB.DrpID=ADM_RibbonView.DrpID) [ItemCount],
-			ISNULL(ADM_RibbonView.FeatureActionID,0) FARMID, ColumnOrder,AppPath,DCT.DocumentType,ADM_RibbonView.LicSIMPLE
+			ISNULL(ADM_RibbonView.FeatureActionID,0) FARMID, ColumnOrder,AppPath,DCT.DocumentType
 		FROM ADM_RibbonView WITH(NOLOCK)
 			inner JOIN ADM_FeatureAction FA  WITH(NOLOCK) ON FA.FeatureID=ADM_RibbonView.FeatureID AND FA.FeatureActionTypeID=2 
 			inner JOIN ADM_FeatureActionRoleMap RM WITH(NOLOCK) ON RM.FeatureActionID=FA.FeatureActionID AND RM.RoleID=@RoleID 
@@ -394,7 +347,7 @@ SET NOCOUNT ON
 			LEFT JOIN ADM_FeatureAction  WITH(NOLOCK) ON ADM_FeatureAction.FeatureActionID=ADM_RibbonView.FeatureActionID
 			LEFT JOIN ADM_DocumentTypes DCT WITH(NOLOCK) ON DCT.CostcenterID=ADM_RibbonView.FeatureID
 		WHERE ADM_RibbonView.FeatureID between 40000 and 50000 and TR.CCID is null 
-		AND ADM_RibbonView.FeatureID NOT IN (40088,267)
+		AND ADM_RibbonView.FeatureID NOT IN (40088)
 		UNION
 		SELECT   RibbonViewID ,GroupOrder,ISNULL(TabID,0) TabID,ISNULL(GroupID,0) GroupID
 			,DrpID,DrpImage,T.ResourceData TabName,G.ResourceData GroupName,D.ResourceData DrpName 
@@ -405,7 +358,7 @@ SET NOCOUNT ON
 			,ISNULL(ADM_RibbonView.FeatureActionID,0)FeatureActionTypeID
 			,TabKeyTip,DrpKeyTip,ButtonKeyTip,GroupKeyTip,DN.Resourcedata as RDrpName
 			,(select count(*) from ADM_RibbonView RB WITH(NOLOCK)  where RB.DrpID=ADM_RibbonView.DrpID) [ItemCount]
-			,ADM_RibbonView.FeatureActionID FARMID, ColumnOrder,AppPath,NULL,ADM_RibbonView.LicSIMPLE
+			,ADM_RibbonView.FeatureActionID FARMID, ColumnOrder,AppPath,NULL
 		FROM ADM_RibbonView WITH(NOLOCK)
 			LEFT JOIN COM_LanguageResources T WITH(NOLOCK) ON T.ResourceID=ADM_RibbonView.TabResourceID AND T.LanguageID=@LangID
 			LEFT JOIN COM_LanguageResources G WITH(NOLOCK) ON G.ResourceID=ADM_RibbonView.GroupResourceID AND G.LanguageID=@LangID
@@ -426,9 +379,8 @@ SET NOCOUNT ON
 					WHERE ActionType=1 AND UserID=@UserID or RoleID=@RoleID or GroupID IN (SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)					
 				)						
 			)
-		OR (ADM_RibbonView.FeatureID=499 AND ADM_RibbonView.FeatureActionID IN (SELECT DISTINCT DRP.DashBoardID FROM ADM_DashBoardUserRoleMap DRP with(nolock)
-	JOIN ADM_DashBoard DB with(nolock) ON DB.DashBoardID=DRP.DashBoardID AND DB.Mode IN (0,1)		
-		WHERE DRP.UserID=@UserID or DRP.RoleID=@RoleID or DRP.GroupID IN (SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)))
+		OR (ADM_RibbonView.FeatureID=499 AND ADM_RibbonView.FeatureActionID IN (SELECT DISTINCT DashBoardID FROM ADM_DashBoardUserRoleMap with(nolock)
+		WHERE UserID=@UserID or RoleID=@RoleID or GroupID IN (SELECT G.GID FROM COM_Groups G with(nolock) WHERE G.UserID=@UserID or G.RoleID=@RoleID)))
 		UNION
 		SELECT   RibbonViewID ,GroupOrder,ISNULL(TabID,0) TabID,ISNULL(GroupID,0) GroupID
 			,DrpID,DrpImage,T.ResourceData TabName,G.ResourceData GroupName,D.ResourceData DrpName 
@@ -439,7 +391,7 @@ SET NOCOUNT ON
 			,ISNULL(ADM_RibbonView.FeatureActionID,0)FeatureActionTypeID
 			,TabKeyTip,DrpKeyTip,ButtonKeyTip,GroupKeyTip,DN.Resourcedata as RDrpName
 			,(select count(*) from ADM_RibbonView RB WITH(NOLOCK)  where RB.DrpID=ADM_RibbonView.DrpID) [ItemCount]
-			,ADM_RibbonView.FeatureActionID FARMID, ColumnOrder,AppPath,NULL,ADM_RibbonView.LicSIMPLE
+			,ADM_RibbonView.FeatureActionID FARMID, ColumnOrder,AppPath,NULL
 		FROM ADM_RibbonView WITH(NOLOCK)
 			LEFT JOIN COM_LanguageResources T WITH(NOLOCK) ON T.ResourceID=ADM_RibbonView.TabResourceID AND T.LanguageID=@LangID
 			LEFT JOIN COM_LanguageResources G WITH(NOLOCK) ON G.ResourceID=ADM_RibbonView.GroupResourceID AND G.LanguageID=@LangID
@@ -490,7 +442,7 @@ SET NOCOUNT ON
 			set @XML=@DefaultScreenXML
 			
 			INSERT INTO @TblScreens
-			select X.value('@isReport','int'),X.value('@FeatureActionID','INT'),X.value('@Default','bit')
+			select X.value('@isReport','int'),X.value('@FeatureActionID','bigint'),X.value('@Default','bit')
 			from @XML.nodes('/XML/Row') as Data(X)
 			--where X.value('@isReport','int')=0
 			
@@ -518,7 +470,7 @@ SET NOCOUNT ON
 		else
 			select 0 DefaultScreen where 1<>1
 			
-		select * from [ADM_HijriCalender] WITH(NOLOCK)
+		select * from [ADM_HijriCalender]
  	END
  	
 	 	
@@ -538,6 +490,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
-
+END CATCH  
 GO

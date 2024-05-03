@@ -16,7 +16,7 @@ SET NOCOUNT ON;
 
 	SET @SQL='SELECT FeatureID, Name, 0 SortOrd   FROM ADM_Features F with(nolock)
 	WHERE (FeatureID IN (2,3,7,11,16,40,45,51,55,56,61,65,70,72,73,74,75,76,77,80,83,86,92,93,94,95,99,101,114,151,153,251,252,253,254,255) or FeatureID between  40000 and 50000 or (IsEnabled=1  and FeatureID>50000))
-	and ( FeatureID=70 or '+CONVERT(NVARCHAR,@RoleID)+'=1 or '+CONVERT(NVARCHAR,@UserID)+'=1 or FeatureID IN( select FA.FeatureID from adm_featureactionrolemap FAR with(nolock)
+	and ('+CONVERT(NVARCHAR,@RoleID)+'=1 or '+CONVERT(NVARCHAR,@UserID)+'=1 or FeatureID IN( select FA.FeatureID from adm_featureactionrolemap FAR with(nolock)
 			inner join adm_featureaction FA with(nolock) on FAR.FeatureActionID=FA.FeatureActionID
 			where FAR.RoleID='+CONVERT(NVARCHAR,@RoleID)+' and (FA.FeatureActionTypeID=2 or FA.FeatureActionTypeID=3) 
 			))'
@@ -33,12 +33,6 @@ SET NOCOUNT ON;
 	BEGIN
 		SET @SQL=@SQL+' UNION  
 		SELECT 2,''Account Contacts''  , 0 SortOrd '
-	END
-	
-	IF (dbo.fnCOM_HasAccess(@RoleID,2,32)=1 OR dbo.fnCOM_HasAccess(@RoleID,2,34)=1)
-	BEGIN
-		SET @SQL=@SQL+' UNION  
-		SELECT 2,''Account Address''  , 0 SortOrd '
 	END
 	
 	IF (dbo.fnCOM_HasAccess(@RoleID,3,2)=1 OR dbo.fnCOM_HasAccess(@RoleID,3,3)=1)
@@ -61,8 +55,6 @@ SET NOCOUNT ON;
 		SELECT 3,''Products With Vendor Multiple Barcode''  , 0 SortOrd 
 		UNION 
 		SELECT 3,''Products Wise Bins'' , 0 SortOrd 
-		UNION 
-		SELECT 3,''Products With Substitutes'' , 0 SortOrd 
 		UNION 
 		SELECT 3,''Kit Products'', 0 SortOrd
 		UNION 
@@ -112,17 +104,11 @@ SET NOCOUNT ON;
 		END
 	END
 	
-	IF ((dbo.fnCOM_HasAccess(@RoleID,92,2)=1 OR dbo.fnCOM_HasAccess(@RoleID,92,3)=1) AND (dbo.fnCOM_HasAccess(@RoleID,93,2)=1 OR dbo.fnCOM_HasAccess(@RoleID,93,3)=1))
+	IF (dbo.fnCOM_HasAccess(@RoleID,115,2)=1 OR dbo.fnCOM_HasAccess(@RoleID,115,3)=1)
 	BEGIN
-		SET @SQL=@SQL+' UNION  
-		SELECT 92,''Particulars Import''  , 0 SortOrd'
-	END
-	
-	--IF (dbo.fnCOM_HasAccess(@RoleID,115,2)=1 OR dbo.fnCOM_HasAccess(@RoleID,115,3)=1)
-	--BEGIN
 		SET @SQL=@SQL+' UNION 
 		SELECT 115,''Leads With Products'', 0 SortOrd '  
-	--END
+	END
 	
 	IF (dbo.fnCOM_HasAccess(@RoleID,151,1)=1 OR dbo.fnCOM_HasAccess(@RoleID,151,3)=1)
 	BEGIN
@@ -155,11 +141,6 @@ SET NOCOUNT ON;
 	SET @SQL=@SQL+' UNION  
 		SELECT 2,''Account Contacts''  , 0 SortOrd '
 		
-	DECLARE @JobDimension BIGINT
-	SELECT @JobDimension=Value FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE CostCenterID=76 AND Name='JobDimension'
-	SET @SQL=@SQL+' UNION  
-		SELECT '+CONVERT(NVARCHAR,@JobDimension)+',''Job Output''  , 0 SortOrd ' 
-			
 	SET @SQL=@SQL+' UNION
 	select 44, l.LookupName+'' (Lookup)'' as Name, 1 SortOrd  from com_lookuptypes L with(nolock)
 	inner join adm_featureaction FA with(nolock) on FA.FeatureActionTypeID=(NodeID*5)+100

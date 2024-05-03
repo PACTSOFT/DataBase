@@ -13,8 +13,8 @@ AS
 BEGIN
 SET NOCOUNT ON;
 DECLARE @Year INT,@ALStartMonth INT,@ALStartMonthYear DATETIME,@ALEndMonthYear DATETIME,@strQuery NVARCHAR(MAX)
-CREATE TABLE #TAB (ID INT IDENTITY(1,1),dcID INT,EmployeeID INT,GradeID INT,LeaveTypeID INT,
-				   PrevYearAlloted INT,Leaves float,PrevYearBalanceOB INT,CurrYearConsumed DECIMAL(9,2),Balance DECIMAL(9,2),Location INT)	
+CREATE TABLE #TAB (ID INT IDENTITY(1,1),dcID INT,EmployeeID BIGINT,GradeID BIGINT,LeaveTypeID BIGINT,
+				   PrevYearAlloted BIGINT,Leaves float,PrevYearBalanceOB INT,CurrYearConsumed DECIMAL(9,2),Balance DECIMAL(9,2),Location INT)	
 				   
 --FOR START DATE AND END DATE OF LEAVE YEAR
 EXEC [spPAY_EXTGetLeaveyearDates] @Date,@ALStartMonthYear OUTPUT,@ALEndMonthYear OUTPUT
@@ -72,7 +72,7 @@ BEGIN
 	SET @strQuery='DELETE FROM #TAB WHERE EmployeeID<>1 AND EmployeeID NOT IN (Select a.NodeID From COM_CC50051 a WITH(NOLOCK) WHERE '+ CONVERT(NVARCHAR(MAX),@EmpIDs) +')'
 	SET @strQuery=@strQuery + ' SELECT DISTINCT ISNULL(GradeID,0) as GradeID INTO #TGR FROM #TAB WHERE EmployeeID>1
 								DELETE FROM #TAB WHERE ISNULL(GRADEID,0) NOT IN (SELECT GRADEID FROM #TGR)'
-	EXEC sp_executesql @STRQUERY
+	EXEC (@strQuery)
 END
 
 IF((SELECT COUNT(*) FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=50051 and SysColumnName ='CCNID2' and IsColumnInUse=1 and UserProbableValues='H')>0)

@@ -5,7 +5,7 @@ GO
 CREATE PROCEDURE [dbo].[spADM_GetCostCenterDetails]
 	@CostCenterID [int] = 0,
 	@FieldName [nvarchar](max),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -14,7 +14,7 @@ BEGIN TRY
 SET NOCOUNT ON;
 		 
 		--Declaration Section
-		DECLARE @Table nvarchar(50),@SQL nvarchar(max) 
+		DECLARE @HasAccess BIT,@Table nvarchar(50),@SQL nvarchar(max) 
 
 		--SP Required Parameters Check
 		IF @CostCenterID=0 
@@ -51,12 +51,6 @@ SET NOCOUNT ON;
 			SET @SQL='SELECT FeatureID NodeID,Name,Name Code FROM '+@Table+' WITH(nolock) '
 		ELSE IF @CostCenterId=7
 			SET @SQL='SELECT UserID NodeID,UserName Name,UserName Code FROM '+@Table+' WITH(nolock) '
-		ELSE IF @CostCenterId=92
-			SET @SQL='SELECT NodeID,Name,Code FROM '+@Table+' WITH(nolock) '
-		ELSE IF @CostCenterId=93
-			SET @SQL='SELECT UnitID NodeID,Name,Code FROM '+@Table+' WITH(nolock) '
-		ELSE IF @CostCenterId=94
-			SET @SQL='SELECT TenantID NodeID,FirstName Name,TenantCode Code FROM '+@Table+' WITH(nolock) '
 		ELSE IF @CostCenterId=11
 			SET @SQL='SELECT U.UOMID NodeID,U.UnitName Name, U.UnitName Code, P.ProductCode, P.ProductName FROM Com_UOM U WITH(nolock) 
 			LEFT JOIN INV_PRODUCT P WITH (NOLOCK) ON U.PRODUCTID=P.PRODUCTID'
@@ -72,8 +66,6 @@ SET NOCOUNT ON;
 			SET @SQL='SELECT BOMID NodeID,BOMName Name,BOMCode Code FROM '+@Table+' WITH(nolock) '
 		ELSE IF @CostCenterId=83
 			SET @SQL='SELECT CustomerID NodeID,CustomerName Name,CustomerCode Code FROM '+@Table+' WITH(nolock) '
-		ELSE IF @CostCenterId=95
-			SET @SQL='SELECT ContractID NodeID,SNO Name,SNO Code FROM '+@Table+' WITH(nolock) '
 		ELSE IF @CostCenterId>=50001
 		BEGIN	
 			IF EXISTS (select Name from sys.columns where Name='CurrencyID' and object_id=object_id(@Table))	

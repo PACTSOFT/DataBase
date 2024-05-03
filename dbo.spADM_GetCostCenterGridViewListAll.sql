@@ -139,10 +139,6 @@ SET NOCOUNT ON
 			WHERE  (IsColumnInUse=1 OR SYSCOLUMNNAME LIKE 'AccountGroup') and CostCenterID=@CostCenterID AND CostCenterColID NOT IN
 			(SELECT COSTCENTERCOLID FROM ADM_GridViewColumns a with(nolock) JOIN ADM_GridView b with(nolock) on b.GridViewID=a.GridViewID AND b.COSTCENTERID=@CostCenterID)
 			AND (ADM_CostCenterDef.COLUMNDATATYPE <>'BIT' OR ADM_CostCenterDef.COLUMNDATATYPE IS NULL  OR SYSCOLUMNNAME LIKE 'IsBillwise' ) 
-			UNION ALL
-			SELECT 'NEW' as 'Link/Delink',SysColumnName,UserColumnName,CostCenterColID,'200' as 'ColumnWidth',D.ResourceID 
-			FROM ADM_CostCenterDef WITH(NOLOCK) JOIN COM_LanguageResources D with(nolock) ON D.ResourceID=ADM_CostCenterDef.ResourceID AND D.LanguageID=@LangID
-			WHERE CostCenterID=3 AND SysColumnName IN ('CreatedDate','ModifiedDate')
 		ELSE 
 			SELECT 'NEW' as 'Link/Delink',SysColumnName,UserColumnName,CostCenterColID,'200' as 'ColumnWidth',D.ResourceID 
 			FROM ADM_CostCenterDef WITH(NOLOCK) JOIN COM_LanguageResources D with(nolock) ON D.ResourceID=ADM_CostCenterDef.ResourceID AND D.LanguageID=@LangID
@@ -155,10 +151,6 @@ SET NOCOUNT ON
 			SELECT 'NEW' as 'Link/Delink',SysColumnName,UserColumnName,CostCenterColID,'200' as 'ColumnWidth',ResourceID 
 			FROM ADM_CostCenterDef WITH(NOLOCK) 
 			WHERE  IsColumnInUse=1 and CostCenterID=@CostCenterID AND SysColumnName='RentAmount'
-			UNION ALL
-			SELECT 'NEW' as 'Link/Delink',SysColumnName,UserColumnName,CostCenterColID,'200' as 'ColumnWidth',D.ResourceID 
-			FROM ADM_CostCenterDef WITH(NOLOCK) JOIN COM_LanguageResources D with(nolock) ON D.ResourceID=ADM_CostCenterDef.ResourceID AND D.LanguageID=@LangID
-			WHERE CostCenterID=3 AND @CostCenterID>50000 AND SysColumnName IN ('ModifiedBy','ModifiedDate')
 			ORDER BY UserColumnName 
 		  
 	if(@costcenterid=99 OR @costcenterid=112 or @costcenterid=159 or @costcenterid=23)

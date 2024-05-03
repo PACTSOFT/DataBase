@@ -5,8 +5,8 @@ GO
 CREATE PROCEDURE [dbo].[spPAY_GetWeeklyOffHoliDay]
 	@FromDate [nvarchar](25) = null,
 	@EmployeeID [int] = 0,
-	@userid [int] = 1,
-	@langid [int] = 1,
+	@userid [bigint] = 1,
+	@langid [bigint] = 1,
 	@DATYPE [nvarchar](100) OUTPUT
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -21,7 +21,7 @@ EXEC spPAY_GetPayrollDate @FROMDATE,@PayrollDate OUTPUT,@STARTDATE OUTPUT, @ToDa
 CREATE TABLE #EMPWEEKLYOFF(Week1_W1 varchar(50),Week1_W2 varchar(50),Week2_W1 varchar(50),Week2_W2 varchar(50), Week3_W1 varchar(50),
 								   Week3_W2 varchar(50),Week4_W1 varchar(50),Week4_W2 varchar(50),Week5_W1 varchar(50),Week5_W2 varchar(50))
 
-DECLARE @EMPMASTWF TABLE(ID INT IDENTITY(1,1),NODEID INT,WeeklyOff1 nvarchar(100),WeeklyOff2 nvarchar(100))
+DECLARE @EMPMASTWF TABLE(ID INT IDENTITY(1,1),NODEID BIGINT,WeeklyOff1 nvarchar(100),WeeklyOff2 nvarchar(100))
 
 DECLARE @WeeklyOffsDefBasedOn NVARCHAR(MAX),@WhereCond NVARCHAR(MAX),@HCCID INT,@CCType NVARCHAR(50),@SQL nvarchar(max)
 SELECT @WeeklyOffsDefBasedOn=ISNULL(Value,'') From ADM_GlobalPreferences WITH(NOLOCK) Where Name='WeeklyOffsDefBasedOn'
@@ -76,7 +76,7 @@ BEGIN
 END
 --PRINT @SQL
 INSERT INTO #EMPWEEKLYOFF
-EXEC sp_executesql @SQL	
+EXEC (@SQL)	
 
 END
 
@@ -136,7 +136,7 @@ END
 
 Declare @TEmp table (ID int Identity(1,1),WEEKDATE Nvarchar(max),Remarks nvarchar(max))
 insert into @TEmp
-EXEC sp_executesql @SQL
+exec(@SQL)
 
 IF(SELECT COUNT(*) FROM @TEmp)>0
 BEGIN
@@ -172,7 +172,7 @@ INSERT INTO @WEEKLYOFF
 			UNION ALL
 				select case isnull(Week5_W2,'') when '' then 0 else 5 end,case isnull(Week5_W2,'') when '' then '' else Week5_W2 end FROM #EMPWEEKLYOFF
 
-DECLARE @WEEKOFFCOUNT TABLE (ID INT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,ISVALIDDAY INT,REMARKS VARCHAR(1000))
+DECLARE @WEEKOFFCOUNT TABLE (ID BIGINT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,ISVALIDDAY INT,REMARKS VARCHAR(1000))
 		DECLARE @STARTDATE1 DATETIME,@ToDate1 DATETIME
 		
 		SET @STARTDATE1=convert(datetime,@STARTDATE)

@@ -3,10 +3,10 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDoc_CreateAssets]
-	@InvDocDetID [int],
-	@CostCenterID [int],
-	@ProductID [int],
-	@DOCID [int],
+	@InvDocDetID [bigint],
+	@CostCenterID [bigint],
+	@ProductID [bigint],
+	@DOCID [bigint],
 	@VNO [varchar](200),
 	@DT [datetime],
 	@XML [nvarchar](max),
@@ -20,10 +20,10 @@ BEGIN TRANSACTION
 BEGIN TRY        
 SET NOCOUNT ON;      
 	
-	declare @retVal INT,@isautocode bit,@Code nvarchar(max),@Prefix nvarchar(200),@num INT,@ASSETQTY FLOAT,@CNT FLOAT,@Prodname NVARCHAR(500),@QTY float
-	,@name nvarchar(max),@PID INT,@gid nvarchar(200),@colName nvarchar(200),@SQL NVARCHAR(MAX),@NUMVALUE FLOAT,@SNO NVARCHAR(MAX),@PrefXml nvarchar(max)
+	declare @retVal bigint,@isautocode bit,@Code nvarchar(max),@Prefix nvarchar(200),@num bigint,@ASSETQTY FLOAT,@CNT FLOAT,@Prodname NVARCHAR(500),@QTY float
+	,@name nvarchar(max),@PID bigint,@gid nvarchar(200),@colName nvarchar(200),@SQL NVARCHAR(MAX),@NUMVALUE FLOAT,@SNO NVARCHAR(MAX),@PrefXml nvarchar(max)
 	
-	declare @Codetemp table (prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200),IsManualCode bit) 	
+	declare @Codetemp table (prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200),IsManualCode bit) 	
 	
 	select @colName=PrefValue from COM_DocumentPreferences WITH(NOLOCK)
 	where CostCenterID=@CostCenterID and PrefName='AssetBasedOn'
@@ -76,9 +76,9 @@ SET NOCOUNT ON;
 		SET @name=@Prodname+ISNULL('-'+@SNO,'')
 				
 		if(@NUMVALUE=3 or @NUMVALUE=4)
-			SET @SQL='TotalQtyPurchase='+CONVERT(nvarchar,@QTY)+', UOM=1,'
+			SET @SQL='<Row TotalQtyPurchase="'+CONVERT(nvarchar,@QTY)+'" UOM="1" />'
 		else	
-			SET @SQL='TotalQtyPurchase=1 ,UOM=1,'
+			SET @SQL='<Row TotalQtyPurchase="1" UOM="1" />'
 		
 		
 		set @Code=@name 
@@ -149,7 +149,7 @@ SET NOCOUNT ON;
            
 			select @num=@retVal
 
-			declare @LocationDimID int,@LocationDimNodeID INT
+			declare @LocationDimID int,@LocationDimNodeID bigint
 			
 			EXEC @retVal = [spDOC_SetLinkDimension]
 				@InvDocDetailsID=@InvDocDetID, 
@@ -273,5 +273,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION      
  SET NOCOUNT OFF        
  RETURN -999         
-END CATCH
+END CATCH      
 GO

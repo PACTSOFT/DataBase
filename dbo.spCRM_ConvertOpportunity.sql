@@ -7,10 +7,10 @@ CREATE PROCEDURE [dbo].[spCRM_ConvertOpportunity]
 	@Customer [bit] = 0,
 	@CustomerContacts [bit] = 0,
 	@AccountContacts [bit] = 0,
-	@OPPORTUNITYID [int],
+	@OPPORTUNITYID [bigint],
 	@CompanyGUID [nvarchar](100),
 	@UserName [nvarchar](100),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -18,34 +18,23 @@ BEGIN TRANSACTION
 BEGIN TRY 
 SET NOCOUNT ON
 
-	DECLARE @Dt float,@ParentCode nvarchar(200),@IsCodeAutoGen bit,@CodePrefix NVARCHAR(300),@CodeNumber INT
-	DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT
-	DECLARE @SelectedIsGroup bit , @SelectedNodeID INT,@IsGroup BIT
-	DECLARE @LeadCode NVARCHAR(300),@Code NVARCHAR(300), @CustomerID INT,@AccountID INT
-	DECLARE @CompanyName nvarchar(500),@Description nvarchar(500)
-	
-	CREATE TABLE #TBLCONTACTS(ID INT IDENTITY(1,1),CONTACTID INT)
-	SELECT @LeadCode=Code, @CompanyName=Company,@Description=Description  FROM CRM_Opportunities WITH(nolock) WHERE OpportunityID=@OPPORTUNITYID
+  DECLARE @Dt float,@ParentCode nvarchar(200),@IsCodeAutoGen bit,@CodePrefix NVARCHAR(300),@CodeNumber BIGINT
+  DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint
+  DECLARE @SelectedIsGroup bit , @DetailContactID bigint,@SelectedNodeID INT,@IsGroup BIT
+  DECLARE @LeadCode NVARCHAR(300),@Code NVARCHAR(300), @CustomerID BIGINT,@DetailContact BIGINT,@AccountID BIGINT
+  DECLARE @CompanyName nvarchar(500),@Description nvarchar(500)
+  	DECLARE @CONTACTSXML NVARCHAR(MAX) 
+  CREATE TABLE #TBLCONTACTS(ID INT IDENTITY(1,1),CONTACTID BIGINT)
+  SELECT @LeadCode=Code, @CompanyName=Company,@Description=Description  FROM CRM_Opportunities WITH(nolock) WHERE OpportunityID=@OPPORTUNITYID
 
-	SET @Dt=convert(float,getdate())--Setting Current Date  
-	DECLARE @return_value int,@LinkCostCenterID INT
-	SET @SelectedNodeID=1
-	CREATE TABLE #TBLTEMP(ID  INT IDENTITY(1,1),BASECOLUMN NVARCHAR(300),LINKCOLUMN NVARCHAR(300))
-	DECLARE @ACOUNT INT,@I INT,@TotalCount INT,@SOURCEDATA NVARCHAR(MAX),@DESTDATA NVARCHAR(MAX),@sData  NVARCHAR(MAX),@dData NVARCHAR(MAX)
- 
-	SET @sData=''
-	select @sData=@sData+','+name
-	from sys.columns WITH(NOLOCK)
-	where object_id=object_id('COM_ContactsExtended') and name LIKE 'Alpha%'
-
-	SET @dData=''
-	select @dData=@dData+','+name
-	from sys.columns WITH(NOLOCK)
-	where object_id=object_id('COM_CCCCData') and name LIKE 'CCNID%'
-							
-							
+ SET @Dt=convert(float,getdate())--Setting Current Date  
+ DECLARE @return_value int,@LinkCostCenterID INT
+ SET @SelectedNodeID=1
+ CREATE TABLE #TBLTEMP(ID  INT IDENTITY(1,1),BASECOLUMN NVARCHAR(300),LINKCOLUMN NVARCHAR(300))
+ DECLARE @ACOUNT INT,@I INT,@TotalCount bigint,@SOURCEDATA NVARCHAR(MAX),@DESTDATA NVARCHAR(MAX)
 -------------INSERT INTO CUSTOMERS TABLE
  IF(@Customer=1)
+	
  BEGIN
     --To Set Left,Right And Depth of Record
     SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth
@@ -90,7 +79,7 @@ SET NOCOUNT ON
     BEGIN   
  
  --CALL AUTOCODEGEN 
-		create table #temp1(prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+		create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
 		if(@SelectedNodeID is null)
 		insert into #temp1
 		EXEC [spCOM_GetCodeData] 83,1,''  
@@ -167,7 +156,7 @@ SET NOCOUNT ON
 	 
 		DECLARE @M INT,@CCOUNT INT,@CONTACTIDENTITY INT
 		SELECT @M=1, @CCOUNT=COUNT(*) FROM #TBLCONTACTS 
-
+		SET @CONTACTSXML=''
 		WHILE @M<=@CCOUNT
 		BEGIN
 				INSERT INTO COM_CONTACTS([AddressTypeID],[FeatureID]        ,[FeaturePK]        ,[ContactName]        ,[Address1]        ,[Address2]        ,[Address3]        ,[City]        ,[State]        ,[Zip]        ,[Country]        ,[Phone1]        ,[Phone2]        ,[Fax]        ,[Email1]        ,[Email2]        ,[URL]        ,[CompanyGUID]        ,[GUID]        ,[Description]        ,[CreatedBy]        ,[CreatedDate]        ,[ModifiedBy]        ,[ModifiedDate]        ,[CostCenterID]        ,[ContactTypeID]        ,[FirstName]        ,[MiddleName]        ,[LastName]        ,[SalutationID]        ,[JobTitle]        ,[Company]        ,[StatusID]        ,[Department]        ,[RoleLookUpID]        ,[Gender]        ,[BirthDay]        ,[Anniversary]        ,[PreferredID]        ,[PreferredName]        ,[IsEmailOn]        ,[IsBulkEmailOn]        ,[IsMailOn]        ,[IsPhoneOn]        ,[IsFaxOn]        ,[IsVisible]        ,[Depth]        ,[ParentID]        ,[lft]        ,[rgt]        ,[IsGroup]        ,[ConvertFromLeadID])
@@ -175,16 +164,15 @@ SET NOCOUNT ON
 				COM_CONTACTS WITH(nolock) WHERE CONTACTID IN (SELECT CONTACTID FROM   #TBLCONTACTS WHERE ID=@M)
 				SET @CONTACTIDENTITY=SCOPE_IDENTITY()
 				
-				set @SOURCEDATA='INSERT INTO [COM_ContactsExtended]([ContactID],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate]'+@sData+')  
-				SELECT @CONTACTIDENTITY,[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate]'+@sData+' 
-				FROM [COM_ContactsExtended] WITH(nolock) WHERE CONTACTID IN (SELECT CONTACTID FROM #TBLCONTACTS WITH(nolock) WHERE ID=@M)'  
-				EXEC sp_executesql @SOURCEDATA,N'@CONTACTIDENTITY INT,@M INT',@CONTACTIDENTITY,@M 
+				INSERT INTO [COM_ContactsExtended]([ContactID],[CreatedBy]        ,[CreatedDate]        ,[ModifiedBy]        ,[ModifiedDate]        ,[acAlpha1]        ,[acAlpha2]        ,[acAlpha3]        ,[acAlpha4]        ,[acAlpha5]        ,[acAlpha6]        ,[acAlpha7]        ,[acAlpha8]        ,[acAlpha9]        ,[acAlpha10]        ,[acAlpha11]        ,[acAlpha12]        ,[acAlpha13]        ,[acAlpha14]        ,[acAlpha15]        ,[acAlpha16]        ,[acAlpha17]        ,[acAlpha18]        ,[acAlpha19]        ,[acAlpha20]        ,[acAlpha21]        ,[acAlpha22]        ,[acAlpha23]        ,[acAlpha24]        ,[acAlpha25]        ,[acAlpha26]        ,[acAlpha27]        ,[acAlpha28]        ,[acAlpha29]        ,[acAlpha30]        ,[acAlpha31]        ,[acAlpha32]        ,[acAlpha33]        ,[acAlpha34]        ,[acAlpha35]        ,[acAlpha36]        ,[acAlpha37]        ,[acAlpha38]        ,[acAlpha39]        ,[acAlpha40]        ,[acAlpha41]        ,[acAlpha42]        ,[acAlpha43]        ,[acAlpha44]        ,[acAlpha45]        ,[acAlpha46]        ,[acAlpha47]        ,[acAlpha48]        ,[acAlpha49]        ,[acAlpha50])
+				SELECT @CONTACTIDENTITY,[CreatedBy]        ,[CreatedDate]        ,[ModifiedBy]        ,[ModifiedDate]        ,[acAlpha1]        ,[acAlpha2]        ,[acAlpha3]        ,[acAlpha4]        ,[acAlpha5]        ,[acAlpha6]        ,[acAlpha7]        ,[acAlpha8]        ,[acAlpha9]        ,[acAlpha10]        ,[acAlpha11]        ,[acAlpha12]        ,[acAlpha13]        ,[acAlpha14]        ,[acAlpha15]        ,[acAlpha16]        ,[acAlpha17]        ,[acAlpha18]        ,[acAlpha19]        ,[acAlpha20]        ,[acAlpha21]        ,[acAlpha22]        ,[acAlpha23]        ,[acAlpha24]        ,[acAlpha25]        ,[acAlpha26]        ,[acAlpha27]        ,[acAlpha28]        ,[acAlpha29]        ,[acAlpha30]        ,[acAlpha31]        ,[acAlpha32]        ,[acAlpha33]        ,[acAlpha34]        ,[acAlpha35]        ,[acAlpha36]        ,[acAlpha37]        ,[acAlpha38]        ,[acAlpha39]        ,[acAlpha40]        ,[acAlpha41]        ,[acAlpha42]        ,[acAlpha43]        ,[acAlpha44]        ,[acAlpha45]        ,[acAlpha46]        ,[acAlpha47]        ,[acAlpha48]        ,[acAlpha49]        ,[acAlpha50]
+				FROM [COM_ContactsExtended] WITH(nolock) WHERE CONTACTID IN (SELECT CONTACTID FROM   #TBLCONTACTS WHERE ID=@M)
 				
-				set @SOURCEDATA='INSERT INTO COM_CCCCData([CostCenterID],[NodeID],[CCNodeID],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[AccountID],[ProductID]'+@dData+')  
-				SELECT 65,@CONTACTIDENTITY,NULL,[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[AccountID],[ProductID]'+@dData+'   
-				FROM COM_CCCCData WITH(nolock) WHERE CostCenterID=65 AND NODEID   IN (SELECT CONTACTID FROM   #TBLCONTACTS WITH(nolock) WHERE ID=@M)'  
-				EXEC sp_executesql @SOURCEDATA,N'@CONTACTIDENTITY INT,@M INT',@CONTACTIDENTITY,@M 
-
+				INSERT INTO COM_CCCCData([CostCenterID]        ,[NodeID]        ,[CCNodeID]        ,[CCNID1]        ,[CCNID2]        ,[CCNID3]        ,[CCNID4]        ,[CCNID5]        ,[CCNID6]        ,[CCNID7]        ,[CCNID8]        ,[CCNID9]        ,[CCNID10]        ,[CCNID11]        ,[CCNID12]        ,[CCNID13]        ,[CCNID14]        ,[CCNID15]        ,[CCNID16]        ,[CCNID17]        ,[CCNID18]        ,[CCNID19]        ,[CCNID20]        ,[CCNID21]        ,[CCNID22]        ,[CCNID23]        ,[CCNID24]        ,[CCNID25]        ,[CCNID26]        ,[CCNID27]        ,[CCNID28]        ,[CCNID29]        ,[CCNID30]        ,[CCNID31]        ,[CCNID32]        ,[CCNID33]        ,[CCNID34]        ,[CCNID35]        ,[CCNID36]        ,[CCNID37]        ,[CCNID38]        ,[CCNID39]        ,[CCNID40]        ,[CCNID41]        ,[CCNID42]        ,[CCNID43]        ,[CCNID44]        ,[CCNID45]        ,[CCNID46]        ,[CCNID47]        ,[CCNID48]        ,[CCNID49]        ,[CCNID50]        ,[CompanyGUID]        ,[GUID]        ,[Description]        ,[CreatedBy]        ,[CreatedDate]        ,[ModifiedBy]        ,[ModifiedDate]        ,[AccountID]        ,[ProductID])
+				SELECT 65,@CONTACTIDENTITY,NULL,[CCNID1]        ,[CCNID2]        ,[CCNID3]        ,[CCNID4]        ,[CCNID5]        ,[CCNID6]        ,[CCNID7]        ,[CCNID8]        ,[CCNID9]        ,[CCNID10]        ,[CCNID11]        ,[CCNID12]        ,[CCNID13]        ,[CCNID14]        ,[CCNID15]        ,[CCNID16]        ,[CCNID17]        ,[CCNID18]        ,[CCNID19]        ,[CCNID20]        ,[CCNID21]        ,[CCNID22]        ,[CCNID23]        ,[CCNID24]        ,[CCNID25]        ,[CCNID26]        ,[CCNID27]        ,[CCNID28]        ,[CCNID29]        ,[CCNID30]        ,[CCNID31]        ,[CCNID32]        ,[CCNID33]        ,[CCNID34]        ,[CCNID35]        ,[CCNID36]        ,[CCNID37]        ,[CCNID38]        ,[CCNID39]        ,[CCNID40]        ,[CCNID41]        ,[CCNID42]        ,[CCNID43]        ,[CCNID44]        ,[CCNID45]        ,[CCNID46]        ,[CCNID47]        ,[CCNID48]        ,[CCNID49]        ,[CCNID50]        ,[CompanyGUID]        ,[GUID]        ,[Description]        ,[CreatedBy]        ,[CreatedDate]        ,[ModifiedBy]        ,[ModifiedDate]        ,[AccountID]        ,[ProductID] 
+				FROM COM_CCCCData WITH(nolock) WHERE CostCenterID=65 AND NODEID   IN (SELECT CONTACTID FROM   #TBLCONTACTS WHERE ID=@M)
+		
+			SET @CONTACTSXML=''
 			SET @M=@M+1
 		END
 	 END 
@@ -208,12 +196,13 @@ SET NOCOUNT ON
 			 select 
 			 l.SysColumnName, b.SysColumnName 
 			 from COM_DocumentLinkDetails dl WITH(nolock)
-			 join ADM_CostCenterDef b WITH(nolock) on dl.CostCenterColIDBase=b.CostCenterColID
-			 join ADM_CostCenterDef l WITH(nolock) on dl.CostCenterColIDLinked=l.CostCenterColID
+			 left join ADM_CostCenterDef b WITH(nolock) on dl.CostCenterColIDBase=b.CostCenterColID
+			 left join Com_LanguageResources C WITH(nolock) on C.ResourceID=b.ResourceID   AND C.LanguageID=1
+			 left join ADM_CostCenterDef l WITH(nolock) on dl.CostCenterColIDLinked=l.CostCenterColID
 			where DocumentLinkDeFID in (select DocumentLinkDeFID from COM_DocumentLinkDef WITH(nolock) where CostCenterIDBase=89   )
 			and l.costcenterid=2
 			
-			 select * from #TBLTEMP
+			 
 			
 			SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTEMP
 			
@@ -269,6 +258,7 @@ SET NOCOUNT ON
 			 
 				WHILE @I<=@ACOUNT
 				BEGIN
+				
 				IF( not exists (SELECT BASECOLUMN FROM #TBLTEMP WHERE ID=@I and BASECOLUMN likE '%acAlpha%'))
 				begin
 					SET @SOURCEDATA= @SOURCEDATA + (SELECT BASECOLUMN FROM #TBLTEMP WHERE ID=@I)+ ',' 
@@ -278,7 +268,11 @@ SET NOCOUNT ON
 					else
 					   SET @DESTDATA= @DESTDATA + (SELECT LINKCOLUMN FROM #TBLTEMP WHERE ID=@I)+ ',' 
 					   
-					
+					IF(@I<>@ACOUNT)
+					BEGIN
+						 SET @SOURCEDATA =@SOURCEDATA + ','
+						 SET @DESTDATA =@DESTDATA + ',' 
+					END
 				end	  
 				SET @I=@I+1
 				END
@@ -307,12 +301,19 @@ SET NOCOUNT ON
 					INSERT INTO [ACC_AccountsExtended]([AccountID],[CreatedBy],[CreatedDate])  
 					VALUES(@AccountID, @UserName, @Dt)  
 
-					--INSERT INTO HISTROY   
-					EXEC [spCOM_SaveHistory]  
-						@CostCenterID =2,    
-						@NodeID =@AccountID,
-						@HistoryStatus ='Update',
-						@UserName=@UserName
+					SET @tempsql=''
+					SELECT @tempsql=@tempsql+','+a.name
+					FROM sys.columns a
+					JOIN sys.columns b on a.name=b.name and b.object_id= object_id('ACC_Accounts')
+					WHERE a.object_id= object_id('ACC_AccountsHistory')
+					
+					set @tempsql= 'insert into [ACC_AccountsHistory] (HistoryStatus'+@tempsql+') select ''Update'''+@tempsql+' from ACC_Accounts with(nolock) WHERE AccountID='+CONVERT(NVARCHAR,@AccountID)     
+					EXEC (@tempsql)
+						  
+					--Insert into Account history  Extended  
+					insert into ACC_AccountsExtendedHistory  
+					select *,'Update' from [ACC_AccountsExtended] WITH(nolock) WHERE AccountID=@AccountID    
+			    
 						    
 				    IF @AccountContacts=1
 					 BEGIN 
@@ -328,16 +329,13 @@ SET NOCOUNT ON
 								SET @CONTACTIDENTITY=SCOPE_IDENTITY()
 								
 								 
-								set @SOURCEDATA='INSERT INTO [COM_ContactsExtended]([ContactID],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate]'+@sData+')  
-								SELECT @CONTACTIDENTITY,[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate]'+@sData+' 
-								FROM [COM_ContactsExtended] WITH(nolock) WHERE CONTACTID IN (SELECT CONTACTID FROM #TBLCONTACTS WITH(nolock) WHERE ID=@M)'  
-								EXEC sp_executesql @SOURCEDATA,N'@CONTACTIDENTITY INT,@M INT',@CONTACTIDENTITY,@M 
+								INSERT INTO [COM_ContactsExtended]([ContactID],[CreatedBy]        ,[CreatedDate]        ,[ModifiedBy]        ,[ModifiedDate]        ,[acAlpha1]        ,[acAlpha2]        ,[acAlpha3]        ,[acAlpha4]        ,[acAlpha5]        ,[acAlpha6]        ,[acAlpha7]        ,[acAlpha8]        ,[acAlpha9]        ,[acAlpha10]        ,[acAlpha11]        ,[acAlpha12]        ,[acAlpha13]        ,[acAlpha14]        ,[acAlpha15]        ,[acAlpha16]        ,[acAlpha17]        ,[acAlpha18]        ,[acAlpha19]        ,[acAlpha20]        ,[acAlpha21]        ,[acAlpha22]        ,[acAlpha23]        ,[acAlpha24]        ,[acAlpha25]        ,[acAlpha26]        ,[acAlpha27]        ,[acAlpha28]        ,[acAlpha29]        ,[acAlpha30]        ,[acAlpha31]        ,[acAlpha32]        ,[acAlpha33]        ,[acAlpha34]        ,[acAlpha35]        ,[acAlpha36]        ,[acAlpha37]        ,[acAlpha38]        ,[acAlpha39]        ,[acAlpha40]        ,[acAlpha41]        ,[acAlpha42]        ,[acAlpha43]        ,[acAlpha44]        ,[acAlpha45]        ,[acAlpha46]        ,[acAlpha47]        ,[acAlpha48]        ,[acAlpha49]        ,[acAlpha50])
+								SELECT @CONTACTIDENTITY,[CreatedBy]        ,[CreatedDate]        ,[ModifiedBy]        ,[ModifiedDate]        ,[acAlpha1]        ,[acAlpha2]        ,[acAlpha3]        ,[acAlpha4]        ,[acAlpha5]        ,[acAlpha6]        ,[acAlpha7]        ,[acAlpha8]        ,[acAlpha9]        ,[acAlpha10]        ,[acAlpha11]        ,[acAlpha12]        ,[acAlpha13]        ,[acAlpha14]        ,[acAlpha15]        ,[acAlpha16]        ,[acAlpha17]        ,[acAlpha18]        ,[acAlpha19]        ,[acAlpha20]        ,[acAlpha21]        ,[acAlpha22]        ,[acAlpha23]        ,[acAlpha24]        ,[acAlpha25]        ,[acAlpha26]        ,[acAlpha27]        ,[acAlpha28]        ,[acAlpha29]        ,[acAlpha30]        ,[acAlpha31]        ,[acAlpha32]        ,[acAlpha33]        ,[acAlpha34]        ,[acAlpha35]        ,[acAlpha36]        ,[acAlpha37]        ,[acAlpha38]        ,[acAlpha39]        ,[acAlpha40]        ,[acAlpha41]        ,[acAlpha42]        ,[acAlpha43]        ,[acAlpha44]        ,[acAlpha45]        ,[acAlpha46]        ,[acAlpha47]        ,[acAlpha48]        ,[acAlpha49]        ,[acAlpha50]
+								FROM [COM_ContactsExtended] WITH(nolock) WHERE CONTACTID IN (SELECT CONTACTID FROM   #TBLCONTACTS WHERE ID=@I)
 								
-								set @SOURCEDATA='INSERT INTO COM_CCCCData([CostCenterID],[NodeID],[CCNodeID],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[AccountID],[ProductID]'+@dData+')  
-								SELECT 65,@CONTACTIDENTITY,NULL,[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[AccountID],[ProductID]'+@dData+'   
-								FROM COM_CCCCData WITH(nolock) WHERE CostCenterID=65 AND NODEID   IN (SELECT CONTACTID FROM   #TBLCONTACTS WITH(nolock) WHERE ID=@M)'  
-								EXEC sp_executesql @SOURCEDATA,N'@CONTACTIDENTITY INT,@M INT',@CONTACTIDENTITY,@M 
-								
+								INSERT INTO COM_CCCCData([CostCenterID]        ,[NodeID]        ,[CCNodeID]        ,[CCNID1]        ,[CCNID2]        ,[CCNID3]        ,[CCNID4]        ,[CCNID5]        ,[CCNID6]        ,[CCNID7]        ,[CCNID8]        ,[CCNID9]        ,[CCNID10]        ,[CCNID11]        ,[CCNID12]        ,[CCNID13]        ,[CCNID14]        ,[CCNID15]        ,[CCNID16]        ,[CCNID17]        ,[CCNID18]        ,[CCNID19]        ,[CCNID20]        ,[CCNID21]        ,[CCNID22]        ,[CCNID23]        ,[CCNID24]        ,[CCNID25]        ,[CCNID26]        ,[CCNID27]        ,[CCNID28]        ,[CCNID29]        ,[CCNID30]        ,[CCNID31]        ,[CCNID32]        ,[CCNID33]        ,[CCNID34]        ,[CCNID35]        ,[CCNID36]        ,[CCNID37]        ,[CCNID38]        ,[CCNID39]        ,[CCNID40]        ,[CCNID41]        ,[CCNID42]        ,[CCNID43]        ,[CCNID44]        ,[CCNID45]        ,[CCNID46]        ,[CCNID47]        ,[CCNID48]        ,[CCNID49]        ,[CCNID50]        ,[CompanyGUID]        ,[GUID]        ,[Description]        ,[CreatedBy]        ,[CreatedDate]        ,[ModifiedBy]        ,[ModifiedDate]        ,[AccountID]        ,[ProductID])
+								SELECT 65,@CONTACTIDENTITY,NULL,[CCNID1]        ,[CCNID2]        ,[CCNID3]        ,[CCNID4]        ,[CCNID5]        ,[CCNID6]        ,[CCNID7]        ,[CCNID8]        ,[CCNID9]        ,[CCNID10]        ,[CCNID11]        ,[CCNID12]        ,[CCNID13]        ,[CCNID14]        ,[CCNID15]        ,[CCNID16]        ,[CCNID17]        ,[CCNID18]        ,[CCNID19]        ,[CCNID20]        ,[CCNID21]        ,[CCNID22]        ,[CCNID23]        ,[CCNID24]        ,[CCNID25]        ,[CCNID26]        ,[CCNID27]        ,[CCNID28]        ,[CCNID29]        ,[CCNID30]        ,[CCNID31]        ,[CCNID32]        ,[CCNID33]        ,[CCNID34]        ,[CCNID35]        ,[CCNID36]        ,[CCNID37]        ,[CCNID38]        ,[CCNID39]        ,[CCNID40]        ,[CCNID41]        ,[CCNID42]        ,[CCNID43]        ,[CCNID44]        ,[CCNID45]        ,[CCNID46]        ,[CCNID47]        ,[CCNID48]        ,[CCNID49]        ,[CCNID50]        ,[CompanyGUID]        ,[GUID]        ,[Description]        ,[CreatedBy]        ,[CreatedDate]        ,[ModifiedBy]        ,[ModifiedDate]        ,[AccountID]        ,[ProductID] 
+								FROM COM_CCCCData WITH(nolock) WHERE CostCenterID=65 AND NODEID   IN (SELECT CONTACTID FROM   #TBLCONTACTS WHERE ID=@I)
 								SET @I=@I+1
 							END
 					 END
@@ -381,5 +379,6 @@ BEGIN CATCH
  ROLLBACK TRANSACTION
  SET NOCOUNT OFF  
  RETURN -999   
-END CATCH
+END CATCH  
+ 
 GO

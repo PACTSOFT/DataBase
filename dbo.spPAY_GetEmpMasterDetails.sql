@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_GetEmpMasterDetails]
-	@NodeID [int] = 0,
-	@UserID [int],
+	@NodeID [bigint] = 0,
+	@UserID [bigint],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -123,11 +123,11 @@ SET NOCOUNT ON;
 	(SELECT ParentID from COM_CC50051 with(nolock) where NodeID=@NodeID)
 		
 	--CCmap display data 
-	CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),COSTCENTERID INT,NODEID INT)
-	CREATE TABLE #TBLTEMP1 (CostCenterId INT,CostCenterName nvarchar(max),NodeID INT,[Value] NVARCHAR(300), Code nvarchar(300))
+	CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),COSTCENTERID BIGINT,NODEID BIGINT)
+	CREATE TABLE #TBLTEMP1 (CostCenterId bigint,CostCenterName nvarchar(max),NodeID BIGINT,[Value] NVARCHAR(300), Code nvarchar(300))
 	INSERT INTO #TBLTEMP
 	SELECT CostCenterID,NODEID  FROM COM_CostCenterCostCenterMap with(nolock) WHERE ParentCostCenterID=@CostCenterId AND ParentNodeID=@NodeID
-	DECLARE @COUNT INT,@I INT,@TABLENAME NVARCHAR(300), @CCID INT,@ccNODEID INT,@FEATURENAME NVARCHAR(300), @IsGroup bit
+	DECLARE @COUNT INT,@I INT,@TABLENAME NVARCHAR(300), @CCID BIGINT,@ccNODEID BIGINT,@FEATURENAME NVARCHAR(300), @IsGroup bit
 	SELECT @I=1,@COUNT=COUNT(*) FROM #TBLTEMP
 	WHILE @I<=@COUNT
 	BEGIN
@@ -142,7 +142,7 @@ SET NOCOUNT ON;
 						INSERT INTO #TBLTEMP1 SELECT '+CONVERT(VARCHAR,@CCID)+','''+@FEATURENAME+''',NODEID,NAME,Code FROM '+@TABLENAME +'  with(nolock)
 						WHERE ParentID='+CONVERT(VARCHAR,@ccNODEID) 
 		-- print(@SQL)
-		 EXEC sp_executesql @SQL
+		 EXEC (@SQL)
 		SET @I=@I+1
 	END
 
@@ -153,8 +153,8 @@ SET NOCOUNT ON;
 	--WorkFlow
 	EXEC spCOM_CheckCostCentetWFApprove @CostCenterID,@NodeID,@UserID,@RoleID
 		
-	declare @rptid INT, @tempsql nvarchar(500)
-	SELECT @rptid=CONVERT(INT,value) from ADM_GlobalPreferences with(nolock) where Name='Report Template Dimension'
+	declare @rptid bigint, @tempsql nvarchar(500)
+	SELECT @rptid=CONVERT(bigint,value) from ADM_GlobalPreferences with(nolock) where Name='Report Template Dimension'
 	if(@rptid=@CostCenterID)
 		SELECT * from ACC_ReportTemplate with(nolock) where drnodeid =@NodeID or crnodeid=@NodeID or templatenodeid =@NodeID
 	else

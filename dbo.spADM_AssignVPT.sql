@@ -38,32 +38,13 @@ SET NOCOUNT ON;
 		WHERE IsGroup=0
 		ORDER BY Name
 		
-		declare @PrefValue nvarchar(max),@CCID BIGINT
-		select top 1 @CCID = DocumentID from ADM_DocPrintLayouts with(nolock) where DocPrintLayoutID=@DocPrintLayoutID
-		
-
-		if(@CCID is not null and (@CCID = 95 or @CCID = 103 or @CCID = 129))
-		begin
-		select @PrefValue=[Value] from COM_CostCenterPreferences with(nolock) where CostCenterID=@CCID
-		    and Name='VPTBasedOnDimension'
-		end
-		else
-		begin 
-			select @PrefValue=PrefValue from com_documentpreferences with(nolock) where CostCenterID=@CCID
-			and prefName='VPTBasedOn'
-		end
-
+		declare @PrefValue nvarchar(max)
+		select @PrefValue=PrefValue from com_documentpreferences with(nolock) where CostCenterID=(select top 1 DocumentID from ADM_DocPrintLayouts with(nolock) where DocPrintLayoutID=@DocPrintLayoutID)
+		and prefName='VPTBasedOn'
 		if @PrefValue is not null and @PrefValue!='' and isnumeric(@PrefValue)=1
 		begin
-		Declare @PrefTable nvarchar(100)
-			select @PrefTable=TableName from ADM_Features with(nolock) where FeatureID=@PrefValue
-			 if @PrefValue = 92
-			   set @PrefValue='select PropertyID NodeID,Name from '+@PrefTable+' with(nolock) where IsGroup=0 ORDER BY Name'
-			 else if @PrefValue = 93
-			   set @PrefValue='select UnitID NodeID, Name from '+@PrefTable+' with(nolock) where IsGroup=0 ORDER BY Name'
-			 else
-			   set @PrefValue='select NodeID,Name from '+@PrefTable+' with(nolock) where IsGroup=0 ORDER BY Name'
-			--print @PrefValue
+			select @PrefValue=TableName from ADM_Features with(nolock) where FeatureID=@PrefValue
+			set @PrefValue='select NodeID,Name from '+@PrefValue+' with(nolock) where IsGroup=0 ORDER BY Name'
 			exec(@PrefValue)
 		end
 		else

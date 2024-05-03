@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SetDynamicSet]
-	@DocID [int],
-	@CostCenterID [int],
-	@DocumentTypeID [int],
-	@DocumentType [int],
-	@DocOrder [int],
+	@DocID [bigint],
+	@CostCenterID [bigint],
+	@DocumentTypeID [bigint],
+	@DocumentType [bigint],
+	@DocOrder [bigint],
 	@VoucherType [int],
 	@VoucherNo [nvarchar](100),
 	@VersionNo [int],
@@ -19,17 +19,16 @@ CREATE PROCEDURE [dbo].[spDOC_SetDynamicSet]
 	@StatusID [int],
 	@BillNo [nvarchar](50),
 	@BILLDate [float],
-	@ACCOUNT1 [int],
-	@ACCOUNT2 [int],
+	@ACCOUNT1 [bigint],
+	@ACCOUNT2 [bigint],
 	@WID [int],
 	@level [int],
 	@CheckHold [bit],
 	@DocXML [nvarchar](max),
-	@DocDetailsID [int],
-	@RefCCID [int],
-	@RefNodeid [int],
+	@DocDetailsID [bigint],
+	@RefCCID [bigint],
+	@RefNodeid [bigint],
 	@chkNeg [bit],
-	@AP [varchar](10),
 	@CompanyGUID [nvarchar](50),
 	@Guid [nvarchar](50),
 	@UserName [nvarchar](50),
@@ -40,47 +39,47 @@ BEGIN TRANSACTION
 BEGIN TRY            
 SET NOCOUNT ON; 
 
-declare @xml xml,@TRANSXML xml,@I int,@Cnt int,@InvDocDetailsID INT,@Dt float,@LinkedID INT,@TotLinkedQty float,@ToTValue float,@sql nvarchar(max),@accxml xml,@Extraxml xml
-declare @ProductID INT,@loc int,@div int,@dim int,@IsQtyIgnored bit,@where nvarchar(max),@HRAsIssue bit,@CommAsRec bit,@SaveUnApp bit,@NID INT
+declare @xml xml,@TRANSXML xml,@I int,@Cnt int,@InvDocDetailsID bigint,@Dt float,@LinkedID bigint,@TotLinkedQty float,@ToTValue float,@sql nvarchar(max),@accxml xml,@Extraxml xml
+declare @ProductID bigint,@loc int,@div int,@dim int,@IsQtyIgnored bit,@where nvarchar(max),@HRAsIssue bit,@CommAsRec bit,@SaveUnApp bit,@NID bigint
 declare @tblList TABLE(ID int identity(1,1),TRANSXML NVARCHAR(MAX),AccXML nvarchar(max))      
 SET @xml=@DocXML
 
 
-DECLARE @TblDelDynRows AS Table(ID INT)
+DECLARE @TblDelDynRows AS Table(ID BIGINT)
 insert into @TblDelDynRows
 SELECT InvDocDetailsID from [INV_DocDetails] with(nolock)
 where DocID=@DocID and DynamicInvDocDetailsID is not null and DynamicInvDocDetailsID= @DocDetailsID   
-and InvDocDetailsID NOT IN  (SELECT X.value('@DocDetailsID','INT')    
-from @xml.nodes('/EXTRAXML/xml/Row/xml') as Data(X) where X.value('@DocDetailsID','INT')>0)
+and InvDocDetailsID NOT IN  (SELECT X.value('@DocDetailsID','bigint')    
+from @xml.nodes('/EXTRAXML/xml/Row/xml') as Data(X) where X.value('@DocDetailsID','BIGINT')>0)
  
 if exists(select ID from @TblDelDynRows)
 begin
-		DELETE T FROM COM_DocCCData t with(nolock)
+		DELETE T FROM COM_DocCCData t
 		join @TblDelDynRows a on t.InvDocDetailsID=a.ID		
 
 		--DELETE DOCUMENT EXTRA NUMERIC FEILD DETAILS      
-		DELETE T FROM [COM_DocNumData] t with(nolock)
+		DELETE T FROM [COM_DocNumData] t
 		join @TblDelDynRows a on t.InvDocDetailsID=a.ID
 			
-		DELETE T FROM [COM_DocTextData] T with(nolock)
+		DELETE T FROM [COM_DocTextData] T
 		join @TblDelDynRows a on t.InvDocDetailsID=a.ID
 
 		--DELETE Accounts DocDetails      
-		DELETE T FROM [ACC_DocDetails] T with(nolock)
+		DELETE T FROM [ACC_DocDetails] T
 		join @TblDelDynRows a on t.InvDocDetailsID=a.ID 
 		
 		--DELETE Accounts DocDetails      
-		DELETE T FROM [INV_DocDetails] T with(nolock)
+		DELETE T FROM [INV_DocDetails] T
 		join @TblDelDynRows a on t.InvDocDetailsID=a.ID 
 end
 
 	delete from @TblDelDynRows
 	
 	insert into @TblDelDynRows
-	SELECT X.value('@DocDetailsID','INT')    
-	from @xml.nodes('/EXTRAXML/xml/Row/xml') as Data(X) where X.value('@DocDetailsID','INT')>0
+	SELECT X.value('@DocDetailsID','bigint')    
+	from @xml.nodes('/EXTRAXML/xml/Row/xml') as Data(X) where X.value('@DocDetailsID','BIGINT')>0
 		
-	DELETE T FROM [ACC_DocDetails] T with(nolock)
+	DELETE T FROM [ACC_DocDetails] T
 	join @TblDelDynRows a on t.InvDocDetailsID=a.ID
 
 	
@@ -130,17 +129,17 @@ BEGIN
    SELECT @TRANSXML=TRANSXML,@accxml=AccXML  FROM @tblList WHERE ID=@I      
  
       
-   SELECT @InvDocDetailsID=ISNULL(X.value('@DocDetailsID','INT'),0)
+   SELECT @InvDocDetailsID=ISNULL(X.value('@DocDetailsID','BIGINT'),0)
    from @TRANSXML.nodes('/xml') as Data(X)    
    
     if(@CheckHold=1)
 	begin
 		declare @hld float,@QOH float,@HOLDQTY float,@RESERVEQTY float
-		select @hld=ISNULL(X.value('@HoldQuantity','float'),0),@ProductID =ISNULL(X.value('@ProductID','INT') ,0)
+		select @hld=ISNULL(X.value('@HoldQuantity','float'),0),@ProductID =ISNULL(X.value('@ProductID','BIGINT') ,0)
 		from @TRANSXML.nodes('/Transactions') as Data(X) 
 
 		set @QOH=(SELECT isnull(sum(Quantity*VoucherType),0) FROM INV_DocDetails D WITH(NOLOCK)      
-		INNER JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID      
+		INNER JOIN COM_DocCCData DCC ON DCC.InvDocDetailsID=D.InvDocDetailsID      
 		WHERE D.ProductID=@ProductID AND IsQtyIgnored=0 AND D.DocDate<=CONVERT(float,@DocDate)      
 		and (VoucherType=-1 or VoucherType=1))       
  
@@ -211,8 +210,8 @@ BEGIN
          ,[CreatedBy]    
          ,[CreatedDate],UOMConversion     
         ,UOMConvertedQty,WorkflowID , WorkFlowStatus , WorkFlowLevel,DynamicInvDocDetailsID,RefCCID,RefNodeid
-        ,Account1,AP)  
-        SELECT X.value('@AccDocDetailsID','INT')    
+        ,Account1)  
+        SELECT X.value('@AccDocDetailsID','bigint')    
          , @DocID    
          , @CostCenterID           
          , @DocumentType,@DocOrder  
@@ -227,17 +226,17 @@ BEGIN
          , @StatusID    
          , @BillNo    
          , @BILLDate    
-         , X.value('@LinkedInvDocDetailsID','INT')    
+         , X.value('@LinkedInvDocDetailsID','bigint')    
          , X.value('@LinkedFieldName','nvarchar(200)')    
          , X.value('@LinkedFieldValue','float')    
          , X.value('@CommonNarration','nvarchar(max)')    
           , X.value('@LineNarration','nvarchar(max)')    
-         ,ISNULL( X.value('@DebitAccount','INT'),@ACCOUNT1)      
-       ,ISNULL(X.value('@CreditAccount','INT'),@ACCOUNT2)        
+         ,ISNULL( X.value('@DebitAccount','bigint'),@ACCOUNT1)      
+       ,ISNULL(X.value('@CreditAccount','bigint'),@ACCOUNT2)        
          , X.value('@DocSeqNo','int')    
-          , X.value('@ProductID','INT')     
+          , X.value('@ProductID','bigint')     
          , X.value('@Quantity','float')    
-         ,ISNULL( X.value('@Unit','INT'),1)     
+         ,ISNULL( X.value('@Unit','bigint'),1)     
          ,ISNULL( X.value('@HoldQuantity','float'),0)   
          ,ISNULL( X.value('@ReserveQuantity','float'),0)    
          ,0 --Release Qyt          
@@ -253,11 +252,10 @@ BEGIN
    , ISNULL(X.value('@StockValueFC','float'),ISNULL(X.value('@StockValue','float'),0))                         
          , @UserName    
    , @Dt    
-   , (select top 1 Conversion from COM_UOM with(nolock) where UOMID = ISNULL( X.value('@Unit','INT'),1))  --X.value('@UOMConversion','float')     
-  , ((select top 1 Conversion from COM_UOM with(nolock) where UOMID = ISNULL( X.value('@Unit','INT'),1)) * X.value('@Quantity','float') ) --X.value('@UOMConvertedQty','INT')           
+   , (select top 1 Conversion from COM_UOM with(nolock) where UOMID = ISNULL( X.value('@Unit','bigint'),1))  --X.value('@UOMConversion','float')     
+  , ((select top 1 Conversion from COM_UOM with(nolock) where UOMID = ISNULL( X.value('@Unit','bigint'),1)) * X.value('@Quantity','float') ) --X.value('@UOMConvertedQty','BIGINT')           
   ,@WID,@StatusID,@level,@DocDetailsID,@RefCCID,@RefNodeid 
-  ,case when @DocumentType in(1,39,27,26,25,2,34,6,3,4,13,41,42) then ISNULL(X.value('@CreditAccount','INT'),1)  else ISNULL( X.value('@DebitAccount','INT'),1)   end
-  ,@AP
+  ,case when @DocumentType in(1,39,27,26,25,2,34,6,3,4,13,41,42) then ISNULL(X.value('@CreditAccount','bigint'),1)  else ISNULL( X.value('@DebitAccount','bigint'),1)   end
       from @TRANSXML.nodes('/xml') as Data(X)    
     
 		SET @InvDocDetailsID=@@IDENTITY    
@@ -275,7 +273,7 @@ BEGIN
    
   
   UPDATE [INV_DocDetails]      
-   SET     AccDocDetailsID=X.value('@AccDocDetailsID','INT')   
+   SET     AccDocDetailsID=X.value('@AccDocDetailsID','bigint')   
 		,DynamicInvDocDetailsID=@DocDetailsID 
 		,VoucherNo=@VoucherNo
          ,VersionNo=@VersionNo  
@@ -284,17 +282,17 @@ BEGIN
          ,StatusID= @StatusID    
          ,BillNo= @BillNo    
        ,BillDate=CONVERT(FLOAT,X.value('@BillDate','datetime'))    
-         ,LinkedInvDocDetailsID= X.value('@LinkedInvDocDetailsID','INT')    
+         ,LinkedInvDocDetailsID= X.value('@LinkedInvDocDetailsID','bigint')    
          ,LinkedFieldName=X.value('@LinkedFieldName','nvarchar(200)')    
          ,LinkedFieldValue= X.value('@LinkedFieldValue','float')    
          ,CommonNarration= X.value('@CommonNarration','nvarchar(max)')    
        ,LineNarration= X.value('@LineNarration','nvarchar(max)')    
-         ,DebitAccount=ISNULL( X.value('@DebitAccount','INT'),@ACCOUNT1)    
-         ,CreditAccount= ISNULL(X.value('@CreditAccount','INT'),@ACCOUNT2)    
+         ,DebitAccount=ISNULL( X.value('@DebitAccount','bigint'),@ACCOUNT1)    
+         ,CreditAccount= ISNULL(X.value('@CreditAccount','bigint'),@ACCOUNT2)    
          ,DocSeqNo= X.value('@DocSeqNo','int')    
-         ,ProductID= X.value('@ProductID','INT')    
+         ,ProductID= X.value('@ProductID','bigint')    
          ,Quantity= X.value('@Quantity','float')    
-         ,Unit= X.value('@Unit','INT')    
+         ,Unit= X.value('@Unit','bigint')    
          ,HoldQuantity=ISNULL( X.value('@HoldQuantity','float'),0)    
          ,ReserveQuantity=ISNULL( X.value('@ReserveQuantity','float'),0)            
          ,IsQtyIgnored= ISNULL(X.value('@IsQtyIgnored','bit'),0)    
@@ -310,14 +308,13 @@ BEGIN
              
          ,ModifiedBy= @UserName    
          ,ModifiedDate= @Dt    
-          ,UOMConversion  = (select top 1 Conversion from COM_UOM with(nolock) where UOMID = ISNULL( X.value('@Unit','INT'),0))  --X.value('@UOMConversion','float')     
-   ,UOMConvertedQty =((select top 1 Conversion from COM_UOM with(nolock) where UOMID = ISNULL( X.value('@Unit','INT'),0)) * X.value('@Quantity','float') ) --X.value('@UOMConvertedQty','INT')           
+          ,UOMConversion  = (select top 1 Conversion from COM_UOM with(nolock) where UOMID = ISNULL( X.value('@Unit','bigint'),0))  --X.value('@UOMConversion','float')     
+   ,UOMConvertedQty =((select top 1 Conversion from COM_UOM with(nolock) where UOMID = ISNULL( X.value('@Unit','bigint'),0)) * X.value('@Quantity','float') ) --X.value('@UOMConvertedQty','BIGINT')           
            ,WorkflowID=@WID  
   , WorkFlowStatus =@StatusID  
   , WorkFlowLevel=@level 
   ,RefCCID=@RefCCID,RefNodeid =@RefNodeid 
-  ,AP=@AP
-  ,Account1=case when @DocumentType in(1,39,27,26,25,2,34,6,3,4,13,41,42) then ISNULL(X.value('@CreditAccount','INT'),1)  else ISNULL( X.value('@DebitAccount','INT'),1)   end
+  ,Account1=case when @DocumentType in(1,39,27,26,25,2,34,6,3,4,13,41,42) then ISNULL(X.value('@CreditAccount','bigint'),1)  else ISNULL( X.value('@DebitAccount','bigint'),1)   end
       from @TRANSXML.nodes('/xml') as Data(X)    
       WHERE InvDocDetailsID=@InvDocDetailsID    
      
@@ -365,10 +362,10 @@ BEGIN
 	if(@Extraxml is not null)--BATCH WISE PRODUCT      
     BEGIN      
       --DECLARING TEMP VARIABLES            
-		DECLARE @RefInvID INT,@Hold FLOAT,@Release FLOAT,@BATCHID INT,@Quantity float
+		DECLARE @RefInvID Bigint,@Hold FLOAT,@Release FLOAT,@BATCHID bigint,@Quantity float
 	 
-				select @BatchID=X.value('@BatchID','INT'),@Hold=X.value('@Hold','float'),@Release=X.value('@Release','float')
-				,@RefInvID=X.value('@RefInvID','INT'),@Quantity=X.value('@Quantity','FLOAT')
+				select @BatchID=X.value('@BatchID','BIGINT'),@Hold=X.value('@Hold','float'),@Release=X.value('@Release','float')
+				,@RefInvID=X.value('@RefInvID','BIGINT'),@Quantity=X.value('@Quantity','FLOAT')
 				from @Extraxml.nodes('/xml/Row') as Data(X)
 			 	
 			if(@Hold is null)    
@@ -391,7 +388,7 @@ BEGIN
    	  
 	if(@chkNeg=1 and @VoucherType=-1)
 	BEGIN
-		 select @ProductID= X.value('@ProductID','INT')             
+		 select @ProductID= X.value('@ProductID','bigint')             
          ,@IsQtyIgnored= ISNULL(X.value('@IsQtyIgnored','bit'),0)    
         from @TRANSXML.nodes('/xml') as Data(X)
         
@@ -404,7 +401,7 @@ BEGIN
 			if(@loc=1)
 			BEGIN				
 				set @sql='select @NID=dcCCNID2 from COM_DocCCData where InvDocDetailsID='+CONVERT(nvarchar,@InvDocDetailsID)			
-				EXEC sp_executesql @sql,N'@NID INT OUTPUT',@NID output		 
+				EXEC sp_executesql @sql,N'@NID bigint OUTPUT',@NID output		 
 									
 				set @WHERE =@WHERE+' and dcCCNID2='+CONVERT(nvarchar,@NID)        
 			END
@@ -412,7 +409,7 @@ BEGIN
 			if(@div=1)
 			BEGIN
 				set @sql='select @NID=dcCCNID1 from COM_DocCCData where InvDocDetailsID='+CONVERT(nvarchar,@InvDocDetailsID)			
-				EXEC sp_executesql @sql,N'@NID INT OUTPUT',@NID output		 
+				EXEC sp_executesql @sql,N'@NID bigint OUTPUT',@NID output		 
 									
 				set @WHERE =@WHERE+' and dcCCNID1='+CONVERT(nvarchar,@NID)        
 			END
@@ -421,7 +418,7 @@ BEGIN
 			BEGIN
 				set @sql='select @NID=dcCCNID'+convert(nvarchar,@dim) +' from COM_DocCCData where InvDocDetailsID='+CONVERT(nvarchar,@InvDocDetailsID)
 			
-				EXEC sp_executesql @sql,N'@NID INT OUTPUT',@NID output		 
+				EXEC sp_executesql @sql,N'@NID bigint OUTPUT',@NID output		 
 				set @WHERE =@WHERE+' and dcCCNID'+CONVERT(nvarchar,@dim)+'='+CONVERT(nvarchar,@NID)        
 			END
 			
@@ -536,7 +533,7 @@ BEGIN
          ,WorkFlowStatus   
          ,WorkFlowLevel  
          ,RefCCID  
-         ,RefNodeid,AP)      
+         ,RefNodeid)      
             
         SELECT @InvDocDetailsID,0,@VoucherNo      
          , @CostCenterID       
@@ -553,8 +550,8 @@ BEGIN
          , @BILLDate      
          , X.value('@CommonNarration','nvarchar(max)')      
          , X.value('@LineNarration','nvarchar(max)')               
-         ,ISNULL( X.value('@DebitAccount','INT'),0)
-         ,ISNULL( X.value('@CreditAccount','INT'),0) 
+         ,ISNULL( X.value('@DebitAccount','BIGINT'),0)
+         ,ISNULL( X.value('@CreditAccount','BIGINT'),0) 
          , X.value('@Amount','FLOAT')      
          , 1
          , ISNULL(X.value('@CurrencyID','int'),1)      
@@ -566,7 +563,7 @@ BEGIN
          , @StatusID  
          , @level   
          , @RefCCID  
-         , @RefNodeid   ,@AP
+         , @RefNodeid   
            from @accxml.nodes('/AccountsXML/Accounts') as Data(X)  
       
    END      

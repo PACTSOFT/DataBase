@@ -307,10 +307,10 @@ SET NOCOUNT ON
        ,[CurrencyID]    
        ,[Value]    
        ,[CreatedBy]    
-       ,[CreatedDate],MachineDim1,MachineDim2)    
+       ,[CreatedDate])    
     SELECT @BOMID ,  X.value('@ResourceID','bigint') ,X.value('@Hours','float'),       
     X.value('@ExchgRT','float'),X.value('@CurrencyID','bigint'),X.value('@Value','float'),    
-    @UserName,@Dt,X.value('@MachineDim1','bigint'), X.value('@MachineDim2','bigint')      
+    @UserName,@Dt      
    FROM @XML.nodes('/BOMResourceXML/Row') as Data(X)     
 
     END     

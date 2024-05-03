@@ -7,7 +7,7 @@ CREATE PROCEDURE [dbo].[spPAY_PostDailyAttendancetoPayroll]
 	@PayrollStart [datetime],
 	@PayrollEnd [datetime],
 	@IncludeOTHours [int],
-	@UserID [int] = 1,
+	@UserID [bigint] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -101,7 +101,7 @@ ALTER TABLE #TABATTDIMENSIONS ADD ID INT IDENTITY(1,1)
 	END
 	ELSE
 	BEGIN
-		IF (ISNULL(@strSelectCols,'')='')
+		IF (ISNULL(@strSelectCols,'')<>'')
 			SET @strQry=@strQry+' SELECT EMPNODE,SUM(WorkingHrs) as WorkingHrs,0 OT1,0 OT2,0 OT3,0 OT4,0 OT5,Count(Dat) DAYSATTENDED,0 as  ABSENTDAYS,0 as Leaves,SUM(TOTALOTAMOUNT) TOTALOTAMOUNT FROM @TABATTENDANCEDIM1 WHERE Leaves=0 GROUP BY EMPNODE'
 		ELSE
 			SET @strQry=@strQry+' SELECT EMPNODE,SUM(WorkingHrs) as WorkingHrs,'+ @strSelectCols +',0 OT1,0 OT2,0 OT3,0 OT4,0 OT5,Count(Dat) DAYSATTENDED,0 as ABSENTDAYS,0 as Leaves,SUM(TOTALOTAMOUNT) TOTALOTAMOUNT FROM @TABATTENDANCEDIM1 WHERE Leaves=0 GROUP BY EMPNODE,'+ @strSelectCols
@@ -134,7 +134,7 @@ ALTER TABLE #TABATTDIMENSIONS ADD ID INT IDENTITY(1,1)
 	END
 
 	print (@strQry)
-	EXEC sp_executesql @STRQRY
+	EXEC (@strQry)
 	EXEC SPSplitString @strSelectCols,','
 
 	IF (ISNULL(@strSelectCols,'')<>'')
@@ -152,7 +152,7 @@ ALTER TABLE #TABATTDIMENSIONS ADD ID INT IDENTITY(1,1)
 		
 
 		print (@strQry)
-		EXEC sp_executesql @STRQRY
+		EXEC (@strQry)
 
 	END
 	ELSE
@@ -164,5 +164,6 @@ ALTER TABLE #TABATTDIMENSIONS ADD ID INT IDENTITY(1,1)
 	
 
 END
+
 
 GO

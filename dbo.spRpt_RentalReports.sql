@@ -3,12 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spRpt_RentalReports]
-	@ReportType [int],
+	@ReportType [bigint],
 	@FromDate [datetime],
 	@ToDate [datetime],
 	@WHERE1 [nvarchar](max),
 	@WHERE2 [nvarchar](max),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -122,7 +122,7 @@ BEGIN
 END
 ELSE IF @ReportType=113--GetPropertyProfitSummaryAll
 BEGIN
-	DECLARE @Dim INT,@SubQuery NVARCHAR(MAX),@CCTBL NVARCHAR(100)
+	DECLARE @Dim BIGINT,@SubQuery NVARCHAR(MAX),@CCTBL NVARCHAR(100)
 	SELECT @Dim=ISNULL(Value,0) FROM COM_CostCenterPreferences WITH(NOLOCK) 
 	WHERE CostCenterID=94 AND Name='EIDNationalityDimension'
 	
@@ -307,41 +307,38 @@ BEGIN
 	where W.WorkFlowID=@WHERE1 and W.LevelID=@WHERE2 and W.GroupID is not null and G.RoleID>0
 	) as T
 	inner join ADM_Users U with(nolock) on T.UserID=U.UserID*/
-
-	declare @TblUsers as Table(UserID int,RoleID int)
+	
+	declare @TblUsers as Table(UserID int)
 	insert into @TblUsers
-	select U.UserID,T.RoleID from
+	select U.UserID from
 	(
-	select W.UserID,R.RoleID
+	select W.UserID
 	from COM_WorkFlow W with(nolock) 
-	inner join adm_userrolemap R with(nolock) on R.UserID=W.UserID and R.[Status]=1 and R.IsDefault=1
 	where W.WorkFlowID=@WHERE1 and W.LevelID=@WHERE2 and W.UserID is not null
 	union
-	select R.UserID,R.RoleID
+	select R.UserID
 	from COM_WorkFlow W with(nolock) 
 	inner join adm_userrolemap R with(nolock) on R.RoleID=W.RoleID and R.[Status]=1
 	where W.WorkFlowID=@WHERE1 and W.LevelID=@WHERE2 and W.RoleID is not null
 	union
-	select G.UserID,R.RoleID
+	select G.UserID
 	from COM_WorkFlow W with(nolock) 
 	inner join COM_Groups G with(nolock) on W.GroupID=G.GID  
-	inner join adm_userrolemap R with(nolock) on R.UserID=G.UserID and R.[Status]=1 and R.IsDefault=1
 	where W.WorkFlowID=@WHERE1 and W.LevelID=@WHERE2 and W.GroupID is not null and G.UserID>0
 	union
-	select R.UserID,R.RoleID
+	select R.UserID
 	from COM_WorkFlow W with(nolock) 
 	inner join COM_Groups G with(nolock) on W.GroupID=G.GID  
-	inner join adm_userrolemap R with(nolock) on R.RoleID=G.RoleID and R.[Status]=1
+	inner join adm_userrolemap R with(nolock) on R.RoleID=W.RoleID and R.[Status]=1
 	where W.WorkFlowID=@WHERE1 and W.LevelID=@WHERE2 and W.GroupID is not null and G.RoleID>0
 	) as T
 	inner join ADM_Users U with(nolock) on T.UserID=U.UserID
 	
 	if(@UserID=1)
 	begin
-		select U.UserID,U.UserName,U.FirstName,U.MiddleName,U.LastName,R.Name RoleName
+		select U.UserID,U.UserName,U.FirstName,U.MiddleName,U.LastName
 		from @TblUsers T
 		inner join ADM_Users U with(nolock) on T.UserID=U.UserID
-		inner join ADM_PRoles R with(nolock) on T.RoleID=R.RoleID
 		WHERE U.StatusID=1
 	end
 	else
@@ -358,7 +355,7 @@ BEGIN
 		) as T
 		inner join ADM_Users U with(nolock) on T.UserID=U.UserID*/
 		
-		declare @Dims as table(CostCenterID int,NodeID INT)
+		declare @Dims as table(CostCenterID int,NodeID bigint)
 		
 		insert into @Dims
 		select CostCenterID,NodeID from com_costcentercostcentermap C with(nolock) 
@@ -366,15 +363,14 @@ BEGIN
 		
 		if not exists(select * from @Dims)
 		begin
-			select U.UserID,U.UserName,U.FirstName,U.MiddleName,U.LastName,R.Name RoleName
+			select U.UserID,U.UserName,U.FirstName,U.MiddleName,U.LastName
 			from @TblUsers T
 			inner join ADM_Users U with(nolock) on T.UserID=U.UserID
-			inner join ADM_PRoles R with(nolock) on T.RoleID=R.RoleID
 			WHERE U.StatusID=1
 		end
 		else
 		begin
-			select U.UserID,U.UserName,U.FirstName,U.MiddleName,U.LastName,'' RoleName
+			select U.UserID,U.UserName,U.FirstName,U.MiddleName,U.LastName
 			from (
 				select distinct T.UserID
 				from @TblUsers T 

@@ -170,94 +170,94 @@ BEGIN TRY
 		CREATE NONCLUSTERED INDEX IDX_TbLINV_DetailsID on #TblINV(FeatureID)
 		CREATE NONCLUSTERED INDEX IDX_TbLACC_DetailsID on #TblACC(FeatureID)
 
-		IF (SELECT COUNT(*) FROM #TblINV WITH(nolock) WHERE IsRevise=0)>0
+		IF (SELECT COUNT(*) FROM #TblINV WHERE IsRevise=0)>0
 		BEGIN
 			insert into #TblIDS(DetailsID,ModifiedDate)
-			SELECT top 50000 INV.INVDocDetailsID,INV.ModifiedDate FROM INV_DocDetails_History INV WITH(nolock)
-			INNER JOIN #TblINV I WITH(nolock) ON I.FeatureID=INV.CostCenterID-- AND I.IsRevise=0
+			SELECT top 50000 INV.INVDocDetailsID,INV.ModifiedDate FROM INV_DocDetails_History INV
+			INNER JOIN #TblINV I ON I.FeatureID=INV.CostCenterID-- AND I.IsRevise=0
 			WHERE INV.ModifiedDate<@Dt
 			GROUP BY INV.INVDocDetailsID,INV.ModifiedDate
 
 			IF @Archive=1
 			BEGIN
 				set @sql='INSERT INTO '+@ArchDBName+'.dbo.COM_DocCCData_History
-			SELECT CC.* FROM COM_DocCCData_History CC WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON CC.INVDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate'
+			SELECT CC.* FROM COM_DocCCData_History CC
+			INNER JOIN #TblIDS T ON CC.INVDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate'
 				exec(@sql)
 				
 				set @sql='INSERT INTO '+@ArchDBName+'.dbo.COM_DocNumData_History
-			SELECT NUM.* FROM COM_DocNumData_History NUM WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON NUM.INVDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate'
+			SELECT NUM.* FROM COM_DocNumData_History NUM
+			INNER JOIN #TblIDS T ON NUM.INVDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate'
 				exec(@sql)
 				
 				set @sql='INSERT INTO '+@ArchDBName+'.dbo.COM_DocTextData_History
-			SELECT TXT.* FROM COM_DocTextData_History TXT WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON TXT.INVDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate'
+			SELECT TXT.* FROM COM_DocTextData_History TXT
+			INNER JOIN #TblIDS T ON TXT.INVDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate'
 				exec(@sql)
 				
 				set @sql='INSERT INTO '+@ArchDBName+'.dbo.INV_DocDetails_History			
-			SELECT INV.* FROM INV_DocDetails_History INV WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON INV.INVDocDetailsID=T.DetailsID and INV.ModifiedDate=T.ModifiedDate'
+			SELECT INV.* FROM INV_DocDetails_History INV
+			INNER JOIN #TblIDS T ON INV.INVDocDetailsID=T.DetailsID and INV.ModifiedDate=T.ModifiedDate'
 				exec(@sql)
 			END
 			
-			DELETE CC FROM COM_DocCCData_History CC WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON CC.INVDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate
+			DELETE CC FROM COM_DocCCData_History CC
+			INNER JOIN #TblIDS T ON CC.INVDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate
 			
-			DELETE NUM FROM COM_DocNumData_History NUM WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON NUM.INVDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate
+			DELETE NUM FROM COM_DocNumData_History NUM
+			INNER JOIN #TblIDS T ON NUM.INVDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate
 			
-			DELETE TXT FROM COM_DocTextData_History TXT WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON TXT.INVDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate
+			DELETE TXT FROM COM_DocTextData_History TXT
+			INNER JOIN #TblIDS T ON TXT.INVDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate
 			
-			DELETE INV FROM INV_DocDetails_History INV WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON INV.INVDocDetailsID=T.DetailsID and INV.ModifiedDate=T.ModifiedDate
+			DELETE INV FROM INV_DocDetails_History INV
+			INNER JOIN #TblIDS T ON INV.INVDocDetailsID=T.DetailsID and INV.ModifiedDate=T.ModifiedDate
 			
 			TRUNCATE TABLE #TblIDS
 		END
 		
-		IF (SELECT COUNT(*) FROM #TblACC WITH(nolock) WHERE IsRevise=0)>0
+		IF (SELECT COUNT(*) FROM #TblACC WHERE IsRevise=0)>0
 		BEGIN
 			insert into #TblIDS(DetailsID,ModifiedDate)
-			SELECT top 50000 ACC.AccDocDetailsID,ACC.ModifiedDate FROM ACC_DocDetails_History ACC WITH(nolock)
-			INNER JOIN #TblACC I WITH(nolock) ON I.FeatureID=ACC.CostCenterID-- AND I.IsRevise=0
+			SELECT top 50000 ACC.AccDocDetailsID,ACC.ModifiedDate FROM ACC_DocDetails_History ACC
+			INNER JOIN #TblACC I ON I.FeatureID=ACC.CostCenterID-- AND I.IsRevise=0
 			WHERE ACC.ModifiedDate<@Dt
 			GROUP BY ACC.AccDocDetailsID,ACC.ModifiedDate
 			
 			IF @Archive=1
 			BEGIN
 				set @sql='INSERT INTO '+@ArchDBName+'.dbo.COM_DocCCData_History
-			SELECT CC.* FROM COM_DocCCData_History CC WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON CC.ACCDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate'
+			SELECT CC.* FROM COM_DocCCData_History CC
+			INNER JOIN #TblIDS T ON CC.ACCDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate'
 				exec(@sql)
 				
 				set @sql='INSERT INTO '+@ArchDBName+'.dbo.COM_DocNumData_History
-			SELECT NUM.* FROM COM_DocNumData_History NUM WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON NUM.ACCDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate'
+			SELECT NUM.* FROM COM_DocNumData_History NUM
+			INNER JOIN #TblIDS T ON NUM.ACCDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate'
 				exec(@sql)
 				
 				set @sql='INSERT INTO '+@ArchDBName+'.dbo.COM_DocTextData_History
-			SELECT TXT.* FROM COM_DocTextData_History TXT WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON TXT.ACCDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate'
+			SELECT TXT.* FROM COM_DocTextData_History TXT
+			INNER JOIN #TblIDS T ON TXT.ACCDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate'
 				exec(@sql)
 				
 				set @sql='INSERT INTO '+@ArchDBName+'.dbo.ACC_DocDetails_History
-			SELECT ACC.* FROM ACC_DocDetails_History ACC WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON ACC.ACCDocDetailsID=T.DetailsID and ACC.ModifiedDate=T.ModifiedDate'
+			SELECT ACC.* FROM ACC_DocDetails_History ACC
+			INNER JOIN #TblIDS T ON ACC.ACCDocDetailsID=T.DetailsID and ACC.ModifiedDate=T.ModifiedDate'
 				exec(@sql)
 			END
 			
-			DELETE CC FROM COM_DocCCData_History CC WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON CC.ACCDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate 
+			DELETE CC FROM COM_DocCCData_History CC
+			INNER JOIN #TblIDS T ON CC.ACCDocDetailsID=T.DetailsID and CC.ModifiedDate=T.ModifiedDate 
 			
-			DELETE NUM FROM COM_DocNumData_History NUM WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON NUM.ACCDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate
+			DELETE NUM FROM COM_DocNumData_History NUM
+			INNER JOIN #TblIDS T ON NUM.ACCDocDetailsID=T.DetailsID and NUM.ModifiedDate=T.ModifiedDate
 			
-			DELETE TXT FROM COM_DocTextData_History TXT WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON TXT.ACCDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate
+			DELETE TXT FROM COM_DocTextData_History TXT
+			INNER JOIN #TblIDS T ON TXT.ACCDocDetailsID=T.DetailsID and TXT.ModifiedDate=T.ModifiedDate
 			
-			DELETE ACC FROM ACC_DocDetails_History ACC WITH(nolock)
-			INNER JOIN #TblIDS T WITH(nolock) ON ACC.ACCDocDetailsID=T.DetailsID and ACC.ModifiedDate=T.ModifiedDate 
+			DELETE ACC FROM ACC_DocDetails_History ACC
+			INNER JOIN #TblIDS T ON ACC.ACCDocDetailsID=T.DetailsID and ACC.ModifiedDate=T.ModifiedDate 
 		END
 		
 		drop table #TblIDS
@@ -273,10 +273,10 @@ BEGIN TRY
 		--SELECT @DimensionsList
 		declare @featureid bigint
 		set @I=1
-		select @CNT=COUNT(*) from #Tbl WITH(nolock)
+		select @CNT=COUNT(*) from #Tbl
 		while @I<=@CNT
 		BEGIN
-			select @featureid=FeatureID from #Tbl WITH(nolock) where ID=@I
+			select @featureid=FeatureID from #Tbl where ID=@I
 			IF (@featureid=2)
 			BEGIN
 				IF @Archive=1
@@ -313,8 +313,7 @@ BEGIN TRY
 			END
 			ELSE IF (@featureid=93 OR @featureid=94 OR @featureid=95)
 			BEGIN
-				set @sql='EXEC [spREN_DeleteAuditData] '+CONVERT(NVARCHAR,@Archive)+','''+@ArchDBName+''','+CONVERT(NVARCHAR,@featureid)+','+CONVERT(NVARCHAR(MAX),@Dt)+','''+@DtChar+''','+CONVERT(NVARCHAR,@UserID)+','+CONVERT(NVARCHAR,@LangID)
-				EXEC (@sql)   
+				EXEC [spREN_DeleteAuditData] @Archive,@ArchDBName,@featureid,@Dt,@DtChar,@UserID,@LangID   
 			END
 			set @I=@I+1
 		END

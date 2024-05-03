@@ -11,39 +11,25 @@ AS
 BEGIN TRANSACTION
 BEGIN TRY
 		
-	DECLARE @SQL NVARCHAR(MAX),@FeatureID INT=0
+	DECLARE @SQL NVARCHAR(MAX),@FeatureID INT
 	
-	SELECT @FeatureID=MAX(FeatureID) FROM ADM_Features WITH(NOLOCK) 
-	WHERE FeatureID BETWEEN 50009 AND 50050
+	SELECT @FeatureID=FeatureID FROM ADM_Features WITH(NOLOCK) WHERE FeatureID BETWEEN 51000 AND 59999
 	
-	IF @FeatureID IS NULL OR @FeatureID<>50050 
-	BEGIN
-		IF @FeatureID IS NULL
-			SET @FeatureID=50009
-		ELSE
-			SET @FeatureID=@FeatureID+1
-	END
+	IF @FeatureID IS NULL OR @FeatureID=''
+		SET @FeatureID=51000
 	ELSE
-	BEGIN
-		SELECT @FeatureID=MAX(FeatureID) FROM ADM_Features WITH(NOLOCK) 
-		WHERE FeatureID BETWEEN 51000 AND 59999
-		
-		IF @FeatureID IS NULL
-			SET @FeatureID=51000
-		ELSE
-			SET @FeatureID=@FeatureID+1
-	END
+		SET @FeatureID=@FeatureID+1
 	
 	SET @SQL='CREATE TABLE [dbo].[COM_CC'+CONVERT(NVARCHAR,@FeatureID)+'](
-[NodeID] [INT] IDENTITY(1000,1) NOT NULL,
+[NodeID] [bigint] IDENTITY(1000,1) NOT NULL,
 [Code] [nvarchar](500) NULL,
 [Name] [nvarchar](500) NULL,
 [AliasName] [nvarchar](500) NULL,
 [StatusID] [int] NOT NULL,
 [Depth] [int] NOT NULL,
-[ParentID] [INT] NOT NULL,
-[lft] [INT] NOT NULL,
-[rgt] [INT] NOT NULL,
+[ParentID] [bigint] NOT NULL,
+[lft] [bigint] NOT NULL,
+[rgt] [bigint] NOT NULL,
 [IsGroup] [bit] NOT NULL,
 [CreditDays] [int] NOT NULL,
 [CreditLimit] [float] NOT NULL,
@@ -59,7 +45,7 @@ BEGIN TRY
 [DebitDays] [int] NULL,
 [DebitLimit] [float] NULL,
 [CodePrefix] [nvarchar](100) NULL,
-[CodeNumber] [INT] NULL DEFAULT ((0)),
+[CodeNumber] [bigint] NULL DEFAULT ((0)),
 [GroupSeqNoLength] [int] NOT NULL DEFAULT ((0)),
 [CurrencyID] [int] NULL,
  CONSTRAINT [PK_COM_CC'+CONVERT(NVARCHAR,@FeatureID)+'] PRIMARY KEY CLUSTERED 
@@ -67,9 +53,9 @@ BEGIN TRY
 	[NodeID] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 ) ON [PRIMARY]'
-	EXEC sp_executesql @SQL
+	EXEC (@SQL)
 	
-	DECLARE @Rid INT,@ID INT
+	DECLARE @Rid bigint,@ID bigint
 	SELECT @Rid=MAX([ResourceID])+1 FROM [Com_LanguageResources] WITH(NOLOCK)
 
 	--FEATURE
@@ -115,14 +101,14 @@ BEGIN TRY
 	CASE WHEN [FeatureActionTypeID]<=7 THEN @Rid+[FeatureActionTypeID] WHEN [FeatureActionTypeID]=21 THEN @Rid+8 ELSE [ResourceID] END
 	,@FeatureID,[FeatureActionTypeID],[ApplicationID],[GridShortCut],[Description],[Status],[CreatedDate],[CreatedBy] 
 	FROM [ADM_FeatureAction] WITH(NOLOCK)
-	WHERE FeatureID=50001
+	WHERE FeatureID=50009
 
 	SET IDENTITY_INSERT [ADM_FeatureAction] OFF
 
 	INSERT INTO [ADM_FeatureActionRoleMap]([RoleID],[FeatureActionID],[Description],[Status],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate])
 	SELECT 1,FA.[FeatureActionID],NULL,1,'Admin',CONVERT(FLOAT,GETDATE()),NULL,NULL
 	FROM [ADM_FeatureAction] FA WITH(NOLOCK)
-	JOIN [ADM_FeatureAction] FAL WITH(NOLOCK) ON FAL.Name=FA.Name AND FAL.FeatureID=50001
+	JOIN [ADM_FeatureAction] FAL WITH(NOLOCK) ON FAL.Name=FA.Name AND FAL.FeatureID=50009
 	JOIN [ADM_FeatureActionRoleMap] FAR WITH(NOLOCK) ON FAL.[FeatureActionID]=FAR.[FeatureActionID] AND FAR.[RoleID]=1
 	WHERE FA.FeatureID=@FeatureID
 
@@ -159,12 +145,12 @@ BEGIN TRY
 	INSERT INTO [Com_LanguageResources] ([ResourceID],[ResourceName],[LanguageID],[LanguageName],[ResourceData],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[FEATURE])
 	VALUES(@Rid+6,@FeatureName,2,'Arabic',@FeatureName,'GUID',NULL,'Admin',convert(float,getdate()),NULL,NULL,@FeatureName) 
 
-	INSERT INTO [ADM_RibbonView]([RibbonViewID],[TabID],[GroupID],[DrpID],[TabName],[GroupName],[DrpName],[TabResourceID],[GroupResourceID],[DrpResourceID],[TabOrder],[GroupOrder],[FeatureID],[FeatureActionID],[FeatureActionResourceID],[FeatureActionName],[TabKeyTip],[GroupKeyTip],[DrpKeyTip],[ButtonKeyTip],[IsEnabled],[ScreenName],[ScreenResourceID],[ImageType],[ImagePath],[DrpImage],[ToolTipTitleResourceID],[ToolTipTitle],[ToolTipImg],[ToolTipDescResourceID],[ToolTipDesc],[RoleID],[UserID],[UserName],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[DisplayName],[DisplayNameResourceID],[ColumnOrder],[ShowInWeb],[IsMobile],[AppPath],[ShowInMobile],[Version],[IsOffLine],WebIcon,LicSIMPLE)
-	SELECT (SELECT MAX([RibbonViewID])+1 FROM [ADM_RibbonView] WITH(NOLOCK)),7,[GroupID],[DrpID],[TabName],[GroupName],@FeatureName,[TabResourceID],[GroupResourceID],[DrpResourceID],[TabOrder],[GroupOrder],@FeatureID,@ID+2,@Rid+2,@FeatureName,[TabKeyTip],[GroupKeyTip],[DrpKeyTip],[ButtonKeyTip],[IsEnabled],@FeatureName,@Rid+3,0,'CC_icon_4.png','CC_icon_4.png',@Rid+4,@FeatureName,'CC_icon_4.png',@Rid+5,@FeatureName,[RoleID],[UserID],[UserName],[CompanyGUID],NEWID(),@FeatureName,[CreatedBy],CONVERT(FLOAT,GETDATE()),NULL,NULL,@FeatureName,@Rid+6,[ColumnOrder],[ShowInWeb],[IsMobile],[AppPath],[ShowInMobile],[Version],[IsOffLine],WebIcon,LicSIMPLE
-	FROM [ADM_RibbonView] WITH(NOLOCK) WHERE [RibbonViewID]=213
+	INSERT INTO [ADM_RibbonView]([RibbonViewID],[TabID],[GroupID],[DrpID],[TabName],[GroupName],[DrpName],[TabResourceID],[GroupResourceID],[DrpResourceID],[TabOrder],[GroupOrder],[FeatureID],[FeatureActionID],[FeatureActionResourceID],[FeatureActionName],[TabKeyTip],[GroupKeyTip],[DrpKeyTip],[ButtonKeyTip],[IsEnabled],[ScreenName],[ScreenResourceID],[ImageType],[ImagePath],[DrpImage],[ToolTipTitleResourceID],[ToolTipTitle],[ToolTipImg],[ToolTipDescResourceID],[ToolTipDesc],[RoleID],[UserID],[UserName],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[DisplayName],[DisplayNameResourceID],[ColumnOrder],[ShowInWeb],[IsMobile],[AppPath],[ShowInMobile],[Version],[IsOffLine])
+	SELECT (SELECT MAX([RibbonViewID])+1 FROM [ADM_RibbonView] WITH(NOLOCK)),[TabID],[GroupID],[DrpID],[TabName],[GroupName],@FeatureName,[TabResourceID],[GroupResourceID],[DrpResourceID],[TabOrder],[GroupOrder],@FeatureID,@ID+2,@Rid+2,@FeatureName,[TabKeyTip],[GroupKeyTip],[DrpKeyTip],[ButtonKeyTip],[IsEnabled],@FeatureName,@Rid+3,[ImageType],[ImagePath],[DrpImage],@Rid+4,@FeatureName,[ToolTipImg],@Rid+5,@FeatureName,[RoleID],[UserID],[UserName],[CompanyGUID],NEWID(),@FeatureName,[CreatedBy],CONVERT(FLOAT,GETDATE()),NULL,NULL,@FeatureName,@Rid+6,[ColumnOrder],[ShowInWeb],[IsMobile],[AppPath],[ShowInMobile],[Version],[IsOffLine]
+	FROM [ADM_RibbonView] WITH(NOLOCK) WHERE FeatureID=50009
 
 	--STATUS
-	DECLARE @StatusID INT
+	DECLARE @StatusID BIGINT
 	SELECT @StatusID=MAX(StatusID)+1 FROM [COM_Status] WITH(NOLOCK)
 
 	SET IDENTITY_INSERT [COM_Status] ON
@@ -178,7 +164,7 @@ BEGIN TRY
 	SET IDENTITY_INSERT [COM_Status] OFF
 
 	--CostCenter Definition
-	DECLARE @CostCenterColID INT
+	DECLARE @CostCenterColID BIGINT
 	SELECT @CostCenterColID=MAX(CostCenterColID)+1 FROM [adm_costcenterdef] WITH(NOLOCK)
 
 	SET @Rid=@Rid+7
@@ -218,7 +204,7 @@ BEGIN TRY
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID,@Rid,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'Code','Code',NULL,'CODE',NULL,NULL,NULL,1,0,1,1,0,0,0,0,0,0,NULL,0,NULL,1,NULL,NULL,0,0,2,1,NULL,'CompanyGUID','64A3D1F9-AFF1-44DF-908A-0BD9A8138243',NULL,'ADMIN',4.076467853962191e+004,NULL,NULL,NULL,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,1,0,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+1,@Rid+1,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'Name','Name',NULL,'TEXT',NULL,NULL,NULL,3,1,1,1,0,0,0,0,0,0,NULL,0,NULL,3,NULL,NULL,1,0,3,1,NULL,'CompanyGUID','EAFE947B-6E88-46B9-B0BA-897271F1DA26',NULL,'ADMIN',4.076467853962191e+004,NULL,NULL,NULL,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,1,1,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+2,@Rid+2,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'Status','StatusID',NULL,'COMBOBOX',NULL,@StatusID,NULL,5,0,1,1,0,0,0,0,113,0,NULL,0,NULL,5,NULL,NULL,3,0,2,1,NULL,'CompanyGUID','C612D2A7-6B60-4FAE-8BA7-62B04507D26B',NULL,'ADMIN',4.076467853962191e+004,NULL,NULL,NULL,1,113,0,1,'COM_Status','StatusID',22872,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,1,3,NULL,NULL,NULL)
-	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+3,@Rid+3,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'Group','IsGroup',NULL,'LISTBOX','LISTBOX',NULL,NULL,2,1,1,1,0,0,0,0,@FeatureID,2,NULL,0,NULL,2,NULL,NULL,0,2,1,1,NULL,'CompanyGUID','BC4FB01F-6FB7-48B7-88DB-4B06750A6332',NULL,'ADMIN',4.076467853962191e+004,NULL,NULL,NULL,1,@FeatureID,0,1,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'NodeID',@CostCenterColID+1,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,1,4,NULL,NULL,NULL)
+	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+3,@Rid+3,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'Group','IsGroup',NULL,'LISTBOX','LISTBOX',NULL,NULL,2,1,1,1,0,0,0,0,@FeatureID,2,NULL,0,NULL,2,NULL,NULL,0,2,1,1,NULL,'CompanyGUID','BC4FB01F-6FB7-48B7-88DB-4B06750A6332',NULL,'ADMIN',4.076467853962191e+004,NULL,NULL,NULL,1,@FeatureID,0,1,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'NodeID',2325,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,1,4,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+4,@Rid+4,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'CreditDays','CreditDays',NULL,'Float','Float','0',NULL,8,0,1,1,0,0,0,0,0,0,NULL,0,NULL,8,NULL,NULL,4,0,1,1,NULL,'CompanyGUID','41B94310-EE2A-44FA-A155-B9F9641C9260',NULL,'ADMIN',4.076467853962191e+004,NULL,NULL,NULL,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+5,@Rid+5,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'CreditLimit','CreditLimit',NULL,'Float','Float','0.0',NULL,7,0,1,1,0,0,0,0,0,0,NULL,0,NULL,7,NULL,NULL,4,1,1,1,NULL,'CompanyGUID','57A1A268-354A-46F4-9327-F173D18594E6',NULL,'ADMIN',4.076467853962191e+004,NULL,NULL,NULL,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+6,@Rid+6,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'PurchaseAccount','PurchaseAccount',NULL,'LISTBOX',NULL,'2',NULL,6,0,1,1,0,0,0,0,2,2,NULL,0,NULL,6,NULL,NULL,3,2,2,1,NULL,'CompanyGUID','1A3E50AD-D67A-4A90-A308-2A35693E2068',NULL,'ADMIN',4.076467853962191e+004,NULL,NULL,NULL,1,2,0,1,'ACC_Accounts','AccountID',239,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
@@ -227,12 +213,12 @@ BEGIN TRY
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+9,@Rid+9,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'DebitLimit','DebitLimit',NULL,'Float','Float','0.0',NULL,10,0,1,1,0,0,0,0,0,0,NULL,0,NULL,10,NULL,NULL,5,1,1,1,NULL,'CompanyGUID','FC442A86-472C-4D88-B6A1-A63DF4E0C431',NULL,'admin',4.081849413892747e+004,NULL,NULL,NULL,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+10,@Rid+10,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'Alias Name','AliasName',NULL,NULL,NULL,NULL,NULL,4,0,1,1,1,0,0,0,0,0,NULL,0,NULL,4,NULL,NULL,2,0,3,1,NULL,'F9D7F28C-97BF-4C30-95A6-26FA76B88915','3DE435C1-6EE4-4797-A544-BCA50A8A599D',NULL,'Admin',4.073665758000000e+004,NULL,NULL,NULL,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,1,2,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+11,@Rid+11,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'GroupSeqNoLength','GroupSeqNoLength',NULL,'NUMERIC','INT','0',NULL,2,0,1,1,0,0,0,0,0,0,NULL,0,NULL,28,NULL,NULL,8,3,1,1,NULL,'BEE3907C-6942-4173-A199-C500822DCCEC','73B45B4D-6A15-454C-8834-D33E0BD20BC8',NULL,'Admin',4.073353878070987e+004,NULL,NULL,NULL,1,301,0,1,'ACC_AccountTypes','AccountTypeID',22870,NULL,NULL,NULL,0,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,1,5,NULL,NULL,NULL)
-	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+12,@Rid+12,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'GroupName','ParentID',NULL,NULL,NULL,NULL,NULL,6,0,1,0,1,0,0,0,0,0,NULL,0,NULL,NULL,NULL,NULL,3,0,1,1,NULL,'11EE07A5-EFFF-455B-A95A-23E4CE3BE3AF','CCD92216-00B2-4EDE-85A2-51C7C1A55B14',NULL,'Admin',4.073665758479938e+004,NULL,NULL,NULL,1,@FeatureID,0,1,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'NodeID',@CostCenterColID+1,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
+	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+12,@Rid+12,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'GroupName','ParentID',NULL,NULL,NULL,NULL,NULL,6,0,1,0,1,0,0,0,0,0,NULL,0,NULL,NULL,NULL,NULL,3,0,1,1,NULL,'11EE07A5-EFFF-455B-A95A-23E4CE3BE3AF','CCD92216-00B2-4EDE-85A2-51C7C1A55B14',NULL,'Admin',4.073665758479938e+004,NULL,NULL,NULL,1,@FeatureID,0,1,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'NodeID',2325,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+13,@Rid+13,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'CreatedBy','CreatedBy',NULL,'TEXT','String','','',42,0,1,0,0,0,0,0,0,0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,NULL,'CompanyGUID','E2A0101B-9AE3-4061-ACCB-55F8EB5BEE0F',NULL,'ADMIN',4.074074000416667e+004,NULL,NULL,NULL,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+14,@Rid+14,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'CurrencyID','CurrencyID',NULL,'LISTBOX','INT',NULL,NULL,10,0,1,1,0,0,0,0,12,1,NULL,0,NULL,10,NULL,NULL,4,3,1,1,NULL,'FA722FBF-1F6A-47BA-9A85-E8C7EC9F2787','85678E42-3126-4E80-8FDC-37E970AC7F26',NULL,'Admin',4.073353878070987e+004,NULL,NULL,NULL,0,12,0,1,'COM_Currency','CurrencyID',172,NULL,NULL,NULL,0,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+17,147,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'DimensionImage','DimensionImage',NULL,NULL,'IMAGE',NULL,NULL,0,0,1,0,0,0,0,0,0,0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,NULL,'693E656C-CD0D-486D-AFAC-FC36CBFFAF0D','A5203D77-8DD2-499D-8BB7-9495333DC917',NULL,'Admin',4.000000000000000e+000,NULL,NULL,0,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
 	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+18,34074,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'Assigned','',NULL,'STRING','STRING',NULL,NULL,0,0,1,1,0,0,0,0,0,0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,NULL,'ASSIGN_GUID','ASSIGN_GUID',NULL,'Admin',4.000000000000000e+000,NULL,NULL,0,1,8,0,1,'COM_CostCenterCostCenterMap','CCCCMapID',50002,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,NULL)
-	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+19,5077,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'GroupName','ParentID',NULL,NULL,NULL,NULL,NULL,6,0,1,0,1,0,0,0,0,0,NULL,0,NULL,NULL,NULL,NULL,3,0,1,1,NULL,'11EE07A5-EFFF-455B-A95A-23E4CE3BE3AF','CCD92216-00B2-4EDE-85A2-51C7C1A55B14',NULL,'Admin',4.073665758479938e+004,NULL,NULL,NULL,1,@FeatureID,0,1,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'NodeID',@CostCenterColID,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,1)
+	INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat],[Filter],[IsRepeat],[LastValueVouchers],[IsnoTab],[dependancy],[dependanton],[IsTransfer],[DbFilter],[CrFilter],[ShowInQuickAdd],[QuickAddOrder],[Calculate],[Cformula],[IsReEvaluate])VALUES(@FeatureID,@CostCenterColID+19,5077,@FeatureName,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'GroupName','ParentID',NULL,NULL,NULL,NULL,NULL,6,0,1,0,1,0,0,0,0,0,NULL,0,NULL,NULL,NULL,NULL,3,0,1,1,NULL,'11EE07A5-EFFF-455B-A95A-23E4CE3BE3AF','CCD92216-00B2-4EDE-85A2-51C7C1A55B14',NULL,'Admin',4.073665758479938e+004,NULL,NULL,NULL,1,@FeatureID,0,1,'COM_CC'+CONVERT(NVARCHAR,@FeatureID),'NodeID',2324,NULL,NULL,NULL,NULL,NULL,0,NULL,0,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,1)
 
 	SET IDENTITY_INSERT [ADM_CostCenterDef] OFF
 
@@ -243,7 +229,7 @@ BEGIN TRY
 
 	INSERT INTO [ADM_CostCenterTab]([CCTabID],[CCTabName],[CostCenterID],[ResourceID],[TabOrder],[IsVisible],[IsTabUserDefined],[GroupOrder],[GroupVisible])
 	SELECT @ID+ROW_NUMBER() OVER ( ORDER BY [CCTabID]),[CCTabName],@FeatureID,[ResourceID],[TabOrder],1,[IsTabUserDefined],[GroupOrder],1 
-	FROM [ADM_CostCenterTab] WITH(NOLOCK) WHERE [CostCenterID]=50001
+	FROM [ADM_CostCenterTab] WITH(NOLOCK) WHERE [CostCenterID]=50009
 
 	SET IDENTITY_INSERT [ADM_CostCenterTab] OFF
 
@@ -270,7 +256,7 @@ BEGIN TRY
 	INSERT INTO [ADM_GridViewColumns]([GridViewID],[CostCenterColID],[ColumnResourceID],[ColumnFilter],[ColumnOrder],[ColumnWidth],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[ColumnType])
 	VALUES(@ID,@CostCenterColID+1,NULL,NULL,1,200,NULL,'Admin',convert(float,getdate()),NULL,NULL,1)
 
-	DECLARE @GridContextMenuID INT
+	DECLARE @GridContextMenuID BIGINT
 	SELECT @GridContextMenuID=MAX([GridContextMenuID]) FROM [ADM_GridContextMenu] WITH(NOLOCK)
 
 	SET IDENTITY_INSERT [ADM_GridContextMenu] ON
@@ -278,7 +264,7 @@ BEGIN TRY
 	INSERT INTO [ADM_GridContextMenu]([GridContextMenuID],[GridViewID],[GridViewColumnID],[FeatureActionID],[MenuOrder],[RoleID],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate])
 	SELECT @GridContextMenuID+ROW_NUMBER() OVER ( ORDER BY GCM.[MenuOrder]),@ID,GCM.[GridViewColumnID],FAL.[FeatureActionID],GCM.[MenuOrder],GCM.[RoleID],GCM.[CompanyGUID],GCM.[GUID],GCM.[Description],GCM.[CreatedBy],GCM.[CreatedDate],GCM.[ModifiedBy],GCM.[ModifiedDate] 
 	FROM [ADM_GridContextMenu] GCM WITH(NOLOCK)
-	JOIN [ADM_GridView] GV WITH(NOLOCK) ON  GV.[GridViewID]=GCM.[GridViewID] AND GV.[FeatureID]=50001
+	JOIN [ADM_GridView] GV WITH(NOLOCK) ON  GV.[GridViewID]=GCM.[GridViewID] AND GV.[FeatureID]=50009
 	JOIN [ADM_FeatureAction] FA WITH(NOLOCK) ON FA.[FeatureActionID]=GCM.[FeatureActionID]
 	JOIN [ADM_FeatureAction] FAL WITH(NOLOCK) ON FAL.[Name]=FA.[Name] AND FAL.[FeatureID]=@FeatureID
 	WHERE GCM.[RoleID]=1
@@ -335,21 +321,8 @@ BEGIN TRY
 	INSERT INTO [COM_CostCenterPreferences] ([CostCenterID],[FeatureID],[ResourceID],[Name],[Value],[DefaultValue],[ProbableValues],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate])
 	SELECT @FeatureID,@FeatureID,[ResourceID],[Name],[DefaultValue],[DefaultValue],[ProbableValues],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate] 
 	FROM [COM_CostCenterPreferences] WITH(NOLOCK) 
-	WHERE [CostCenterID]=50001
-	
-	SET @Rid=@Rid+1
+	WHERE [CostCenterID]=50009
 
-	INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
-	VALUES (@Rid, 'dcCCNID'+convert(nvarchar,(@FeatureID-50000)),1,'English',@FeatureName ,'')
-	INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
-	VALUES (@Rid, 'dcCCNID'+convert(nvarchar,(@FeatureID-50000)),2,'Arabic', @FeatureName,'')
-	
-	INSERT INTO ADM_CostCenterDef (CostCenterID,ResourceID,CostCenterName,SysTableName,UserColumnName,SysColumnName,ColumnTypeSeqNumber,UserColumnType,ColumnDataType,UserDefaultValue,UserProbableValues,ColumnOrder,IsMandatory,IsEditable,IsVisible,IsCostCenterUserDefined,IsColumnUserDefined,IsCCDeleted,IsColumnDeleted,ColumnCostCenterID,ColumnCCListViewTypeID,FetchMaxRows,IsColumnGroup,ColumnGroupNumber,SectionSeqNumber,SectionID,SectionName,RowNo,ColumnNo,ColumnSpan,IsColumnInUse,UIWidth,CompanyGUID,GUID,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate
-	,IsUnique,[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID])
-	SELECT CostCenterID,@Rid,DocumentName,'COM_DocCCData',@FeatureName,'dcCCNID'+convert(nvarchar,(@FeatureID-50000)),NULL,'LISTBOX','LISTBOX','','',0,0,1,1,0,1,0,0,@FeatureID,1,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL
-	,0,1,@FeatureID,0,1,'COM_CC'+convert(nvarchar,@FeatureID),'NodeID',(SELECT TOP 1 CostCenterColID FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@FeatureID AND SysColumnName='Name')
-	FROM ADM_DocumentTypes with(nolock) WHERE CostCenterID=40001
-	
 --INSERTS
 SET @SQL='SET IDENTITY_INSERT [COM_CC'+CONVERT(NVARCHAR,@FeatureID)+'] ON
 INSERT INTO [COM_CC'+CONVERT(NVARCHAR,@FeatureID)+'] ([NodeID],[Code],[Name],[AliasName],[StatusID],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CreditDays],[CreditLimit],[PurchaseAccount],[SalesAccount],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[DebitDays],[DebitLimit],[CodePrefix],[CodeNumber],[GroupSeqNoLength],[CurrencyID])VALUES(1,'''+@FeatureName+''','''+@FeatureName+''','''+@FeatureName+''','+CONVERT(NVARCHAR,@StatusID)+',1,2,2,3,0,0,0.000000000000000e+000,0,0,''GUID'',''GUID'',NULL,''ADMIN'',2.200000000000000e+001,NULL,NULL,0,0.000000000000000e+000,NULL,0,0,NULL)
@@ -358,60 +331,30 @@ SET IDENTITY_INSERT [COM_CC'+CONVERT(NVARCHAR,@FeatureID)+'] OFF
 
 INSERT INTO COM_CCCCData ([CostCenterID], [NodeID], [CreatedBy],[CreatedDate], [CompanyGUID],[GUID])  
 select '+CONVERT(NVARCHAR,@FeatureID)+',NodeID,''admin'',1,''COMPANYGUID'',''GUID'' from COM_CC'+CONVERT(NVARCHAR,@FeatureID)+' with(nolock) WHERE NODEID>0'
-	EXEC sp_executesql @SQL
+	EXEC (@SQL)
 	
-	SET @SQL='ALTER TABLE [COM_CCCCData] ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT default(1) not null
-ALTER TABLE [COM_CCCCDataHistory] ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT default(1) not null
+	SET @SQL='ALTER TABLE [COM_CCCCData] ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] BIGINT default(1) not null
+ALTER TABLE [COM_CCCCDataHistory] ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] BIGINT default(1) not null
 
 ALTER TABLE [COM_CCCCData] WITH CHECK ADD  CONSTRAINT [FK_COM_CCCCData_COM_CC'+CONVERT(NVARCHAR,@FeatureID)+'] FOREIGN KEY([CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+']) REFERENCES [COM_CC'+CONVERT(NVARCHAR,@FeatureID)+'] ([NodeID])
 ALTER TABLE [COM_CCCCData] CHECK CONSTRAINT [FK_COM_CCCCData_COM_CC'+CONVERT(NVARCHAR,@FeatureID)+']
 
-ALTER TABLE [COM_DocCCData] ADD [dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT default(1) not null
+ALTER TABLE [COM_DocCCData] ADD [dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] BIGINT default(1) not null
 ALTER TABLE [COM_DocCCData] WITH CHECK ADD  CONSTRAINT [FK_COM_DocCCData_COM_CC'+CONVERT(NVARCHAR,@FeatureID)+'] FOREIGN KEY([dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+']) REFERENCES [COM_CC'+CONVERT(NVARCHAR,@FeatureID)+'] ([NodeID])
 ALTER TABLE [COM_DocCCData] CHECK CONSTRAINT [FK_COM_DocCCData_COM_CC'+CONVERT(NVARCHAR,@FeatureID)+']
 
-ALTER TABLE [COM_DocCCData_History] ADD [dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT  default(1) not null
+ALTER TABLE [COM_DocCCData_History] ADD [dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] BIGINT  default(1) not null
 
-ALTER TABLE COM_CCPrices ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT  default(0) not null
-ALTER TABLE COM_CCTaxes ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT  default(0) not null
-ALTER TABLE COM_BudgetAlloc ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT  default(1) not null
-ALTER TABLE COM_BudgetAlloc_history ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT  default(1) not null
-ALTER TABLE ADM_SchemesDiscounts ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT  default(1) not null
+ALTER TABLE COM_CCPrices ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] BIGINT  default(0) not null
+ALTER TABLE COM_CCTaxes ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] BIGINT  default(0) not null
+ALTER TABLE COM_BudgetAlloc ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] BIGINT  default(1) not null
+ALTER TABLE ADM_SchemesDiscounts ADD [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] BIGINT  default(1) not null
 
-ALTER TABLE COM_Billwise ADD [dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT  default(1) not null
-ALTER TABLE COM_BillwiseHistory ADD [dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT  default(1) not null
+ALTER TABLE COM_Billwise ADD dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+' BIGINT  default(1) not null
+ALTER TABLE COM_BillwiseHistory ADD dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+' BIGINT  default(1) not null
 
-ALTER TABLE COM_DimensionMappings add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT not null default(1)
-
-ALTER TABLE ADM_DimensionWiseLockData add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE COM_ChequeReturn add [dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE COM_LCBills add [dcCCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE CRM_Activities add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE COM_Address add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE COM_Address_History add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-'
-	IF EXISTS (SELECT * FROM SYS.TABLES WITH(NOLOCK) WHERE NAME='PAY_EmpDetail')
-	BEGIN
-		SET @SQL=@SQL+' ALTER TABLE PAY_EmpDetail add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE PAY_EmpDetail_History add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-		'
-	END	
-	
-	IF EXISTS (SELECT * FROM SYS.TABLES WITH(NOLOCK) WHERE NAME='CRM_Campaigns')
-	BEGIN
-		SET @SQL=@SQL+' ALTER TABLE CRM_CampaignApprovals add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE CRM_CampaignDemoKit add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE CRM_CampaignInvites add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE CRM_CampaignOrganization add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE CRM_CampaignProducts add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE CRM_CampaignResponse add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE CRM_CampaignSpeakers add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE CRM_Feedback add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-ALTER TABLE CRM_ProductMapping add [CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+'] INT
-		'
-	END	
-		
-	EXEC sp_executesql @SQL
+ALTER TABLE COM_DimensionMappings add CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+' bigint not null default(1)'
+	EXEC (@SQL)
 	
 COMMIT TRANSACTION
 SELECT * FROM ADM_FEATURES WITH(NOLOCK) WHERE FeatureID=@FeatureID       

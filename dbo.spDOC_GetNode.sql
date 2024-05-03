@@ -12,7 +12,7 @@ CREATE PROCEDURE [dbo].[spDOC_GetNode]
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
 	@LangID [int] = 1,
-	@NodeID [int] OUTPUT
+	@NodeID [bigint] OUTPUT
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 declare @TEMPxml nvarchar(max),@IsCodeAutoGen bit,@RetVal int,@tabName nvarchar(100)
@@ -55,7 +55,7 @@ declare @TEMPxml nvarchar(max),@IsCodeAutoGen bit,@RetVal int,@tabName nvarchar(
 		else    
 			SET @TEMPxml='set @NodeID =(select top 1 NodeID from '+@tabName+' with(nolock) where Name='''+@Name+''' and IsGroup=0)'
 		
-		EXEC sp_executesql @TEMPxml,N'@NodeID INT OUTPUT',@NodeID output
+		EXEC sp_executesql @TEMPxml,N'@NodeID bigint OUTPUT',@NodeID output
 	end 
 
 
@@ -74,17 +74,11 @@ declare @TEMPxml nvarchar(max),@IsCodeAutoGen bit,@RetVal int,@tabName nvarchar(
 		 SET @TEMPxml=@TEMPxml+'   ></Row></XML>'
 
  		 EXEC @RetVal = [dbo].[spADM_SetImportData]      
-		   @XML = @TEMPxml,     
-		   @CCMapXML='',
-		   @HistoryXML='' ,
+		   @XML = @TEMPxml,      
 		   @COSTCENTERID = @CostCenterID,      
 		   @IsDuplicateNameAllowed = 1,      
 		   @IsCodeAutoGen = @IsCodeAutoGen,      
 		   @IsOnlyName = 1,      
-		   @IsProductVehicle=null,
-		   @IsUpdate=0,
-		   @IsCode=null,
-		   @Attachment=null,
 		   @CompanyGUID = @CompanyGUID,      
 		   @UserName = @UserName ,      
 		   @UserID = @UserID, 
@@ -109,12 +103,14 @@ declare @TEMPxml nvarchar(max),@IsCodeAutoGen bit,@RetVal int,@tabName nvarchar(
 			begin
 				select @tabName=TableName from ADM_Features WITH(NOLOCK) WHERE FeatureID=@CostCenterID
 				if(@IsCode is not null and @IsCode=1)
-					SET @TEMPxml='set @NodeID =(select top 1 NodeID from '+@tabName+' with(nolock) where Code='''+@Name+''' and IsGroup=0)'
+					SET @TEMPxml='set @NodeID =(select top 1 NodeID from '+@tabName+' with(nolock) where Code=@Name and IsGroup=0)'
 				else    
-					SET @TEMPxml='set @NodeID =(select top 1 NodeID from '+@tabName+' with(nolock) where Name='''+@Name+''' and IsGroup=0)'
+					SET @TEMPxml='set @NodeID =(select top 1 NodeID from '+@tabName+' with(nolock) where Name=@Name and IsGroup=0)'
 				
-				EXEC sp_executesql @TEMPxml,N'@NodeID INT OUTPUT',@NodeID output
+				EXEC sp_executesql @TEMPxml,N'@NodeID bigint OUTPUT',@NodeID output
 			end     
 		 
-	 end
+	 end  
+	 
+	
 GO

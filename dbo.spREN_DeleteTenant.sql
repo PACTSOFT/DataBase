@@ -13,7 +13,7 @@ BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;  
 		--Declaration Section
-		DECLARE @HasAccess bit,@lft bigint,@rgt bigint,@Width bigint,@UserName NVARCHAR(64)
+		DECLARE @HasAccess bit,@lft bigint,@rgt bigint,@Width bigint
 
 		--SP Required Parameters Check
 		if(@TenantID=0)
@@ -73,60 +73,40 @@ SET NOCOUNT ON;
 				--Deleting from Mapping Table
 				Delete from com_docbridge WHERE CostCenterID = 94 AND RefDimensionNodeID = @NodeID AND RefDimensionID = 	@Dimesion					
 			end
-
-			--Delete Linked Account
-				set @NodeID=0
-				select  @NodeID = AccountID from REN_Tenant with(nolock) 
-				where TenantID  IN (select TenantID from @temp where id=@i)
-
-				if (@NodeID is not null and @NodeID>0)
-				begin
-					Update REN_Tenant set AccountID=0 where TenantID in (select TenantID from @temp where id=@i)
-				
-					EXEC spACC_DeleteAccount @NodeID,@UserID,1,@LangID
-				
-					--Deleting from Mapping Table
-					Delete from com_docbridge WHERE CostCenterID = 94 AND RefDimensionNodeID = @NodeID AND RefDimensionID = 2					
-				end
-			--END :: Delete Linked Account
-
-
 			set @i=@i+1
 		end
-		
-		SELECT @UserName=USERNAME FROM ADM_USERS WITH(NOLOCK) WHERE UserID=@UserID
+
+		INSERT INTO [dbo].[REN_TenantHistory]
+		([TenantID],[TenantCode],[TypeID],[PositionID],[FirstName],[MiddleName],[LastName],[LeaseSignatory],[ContactPerson],[PostingID]
+		,[Phone1],[Phone2],[Email],[Fax],[IDNumber],[Profession],[Passport],[Nationality],[PassportIssueDate],[PassportExpiryDate]
+		,[SponsorName],[SponsorPassport],[SponsorIssueDate],[SponsorExpiryDate],[License],[LicenseIssuedBy],[LicenseIssueDate]
+		,[LicenseExpiryDate],[Description],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]
+		,[ModifiedBy],[ModifiedDate],[CCNodeID],[CCID],[UserName],[Password],[StatusID],[HistoryStatus])
+		select 
+		[TenantID],[TenantCode],[TypeID],[PositionID],[FirstName],[MiddleName],[LastName],[LeaseSignatory],[ContactPerson],[PostingID]
+		,[Phone1],[Phone2],[Email],[Fax],[IDNumber],[Profession],[Passport],[Nationality],[PassportIssueDate],[PassportExpiryDate]
+		,[SponsorName],[SponsorPassport],[SponsorIssueDate],[SponsorExpiryDate],[License],[LicenseIssuedBy],[LicenseIssueDate]
+		,[LicenseExpiryDate],[Description],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]
+		,[ModifiedBy],[ModifiedDate],[CCNodeID],[CCID],[UserName],[Password],[StatusID],'Deleted'
+		from ren_tenant with(nolock) WHERE lft >= @lft AND rgt <= @rgt
 	
-		select @i=1,@cnt=count(*) from @temp
-		while @i<=@cnt
-		begin
-			select @NodeID=TenantID from @temp where id=@i
-			
-			--INSERT INTO HISTROY   
-			EXEC [spCOM_SaveHistory]  
-				@CostCenterID =94,    
-				@NodeID =@NodeID,
-				@HistoryStatus ='Deleted',
-				@UserName=@UserName
-			
-			set @i=@i+1
-		end
-			
-		DELETE FROM  COM_Notes  
-		WHERE FEATUREID=94 and  FeaturePK in (select TenantID from @temp)
+		insert into Ren_TenantExtendedHistory
+		select *,'Deleted' from REN_TenantExtended WHERE Tenantid IN
+		(select Tenantid from REN_Tenant with(nolock) WHERE lft >= @lft AND rgt <= @rgt)
 		
 		DELETE FROM  COM_Files  
-		WHERE FEATUREID=94 and  FeaturePK in (select TenantID from @temp)
+		WHERE FEATUREID=94 and  FeaturePK in
+		(select TenantID from REN_Tenant with(nolock) WHERE lft >= @lft AND rgt <= @rgt)
 		
-		DELETE FROM CRM_ACTIVITIES WHERE CostCenterID=94 AND NodeID in (select TenantID from @temp)
-		
-		DELETE FROM  COM_Contacts 
-		WHERE FEATUREID=94 and  FeaturePK in (select TenantID from @temp)
+		DELETE FROM CRM_ACTIVITIES WHERE CostCenterID=94 AND NodeID in
+		(select TenantID from REN_Tenant with(nolock) WHERE lft >= @lft AND rgt <= @rgt)
 		
 		---Delete from Extended Table
-     	DELETE FROM REN_TenantExtended WHERE TenantID in (select TenantID from @temp)
+     	DELETE FROM REN_TenantExtended WHERE TenantID in
+		(select TenantID from REN_Tenant with(nolock) WHERE lft >= @lft AND rgt <= @rgt)
 		
 		--Delete from main table
-		DELETE FROM REN_Tenant WHERE TenantID in (select TenantID from @temp)
+		DELETE FROM REN_Tenant WHERE lft >= @lft AND rgt <= @rgt
 
 		--Update left and right extent to set the tree
 		UPDATE REN_Tenant SET rgt = rgt - @Width WHERE rgt > @rgt;
@@ -163,4 +143,5 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
 GO

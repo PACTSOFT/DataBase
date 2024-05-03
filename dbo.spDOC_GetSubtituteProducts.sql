@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetSubtituteProducts]
-	@ProductID [int] = 0,
+	@ProductID [bigint] = 0,
 	@CCXML [nvarchar](max),
 	@DocDate [datetime],
-	@DocDetailsID [int] = 0,
-	@CostCenterID [int] = 0,
+	@DocDetailsID [bigint] = 0,
+	@CostCenterID [bigint] = 0,
 	@UserID [int] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -15,8 +15,8 @@ AS
 BEGIN TRY      
 SET NOCOUNT ON      
       
-	DECLARE @SQL NVARCHAR(MAX),@XML XML,@WHERE NVARCHAR(MAX),@ParentPrefValue nvarchar(100),@PrefValue nvarchar(100),@NID INT,@Join nvarchar(max),@QOH float
-	Declare @i int ,@CNT int,@TableName nvarchar(100),@ColID INT,@Colname nvarchar(100),@CustomCols nvarchar(max),@EnableSubstituteType nvarchar(20),@SubsQOH nvarchar(20)
+	DECLARE @SQL NVARCHAR(MAX),@XML XML,@WHERE NVARCHAR(MAX),@ParentPrefValue nvarchar(100),@PrefValue nvarchar(100),@NID bigint,@Join nvarchar(max),@QOH float
+	Declare @i int ,@CNT int,@TableName nvarchar(100),@ColID BIGINT,@Colname nvarchar(100),@CustomCols nvarchar(max),@EnableSubstituteType nvarchar(20),@SubsQOH nvarchar(20)
 	SET @XML=@CCXML   
 	
 	select @ParentPrefValue=Value from com_costcenterpreferences with(nolock) where CostCenterID=3 and Name='ProductsOfSameParentAsSubstitue'
@@ -26,12 +26,12 @@ SET NOCOUNT ON
 	
 	
          
-	DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId INT)      
+	DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId BIGINT)      
 	INSERT INTO @tblCC(CostCenterID,NodeId)      
-	SELECT X.value('@CostCenterID','int'),X.value('@NODEID','INT')      
+	SELECT X.value('@CostCenterID','int'),X.value('@NODEID','BIGINT')      
 	FROM @XML.nodes('/XML/Row') as Data(X)      
 	        
-    declare @TEMP TABLE (ID INT IDENTITY(1,1),ColID INT,SYSCOLUMNNAME NVARCHAR(100),TableName NVARCHAR(100),CCID int,UserColumnName NVARCHAR(200),ColumnWidth int,ColumnOrder int,usercolumntype nvarchar(50))
+    declare @TEMP TABLE (ID INT IDENTITY(1,1),ColID BIGINT,SYSCOLUMNNAME NVARCHAR(100),TableName NVARCHAR(100),CCID int,UserColumnName NVARCHAR(200),ColumnWidth int,ColumnOrder int,usercolumntype nvarchar(50))
 	  
 	INSERT INTO @TEMP 
 	select a.CostCenterColID,b.SysColumnName,c.TableName,isnull(c.FeatureID,0),case when b.UserColumnName is null then c.Name else r.resourcedata end,a.ColumnWidth,a.ColumnOrder,usercolumntype
@@ -75,10 +75,10 @@ SET NOCOUNT ON
     set @PrefValue=''    
     select @PrefValue= isnull(Value,'') from ADM_GlobalPreferences with(nolock) where Name='Maintain Dimensionwise stock'      
         
-    if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0  and exists (select NodeId from @tblCC where CostCenterID=convert(INT,@PrefValue)))      
+    if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0  and exists (select NodeId from @tblCC where CostCenterID=convert(bigint,@PrefValue)))      
     begin      
-		select @NID=NodeId from @tblCC where CostCenterID=convert(INT,@PrefValue)      
-		set @PrefValue=convert(INT,@PrefValue)-50000             
+		select @NID=NodeId from @tblCC where CostCenterID=convert(bigint,@PrefValue)      
+		set @PrefValue=convert(bigint,@PrefValue)-50000             
 		set @WHERE =@WHERE+' and dcCCNID'+@PrefValue+'='+CONVERT(nvarchar,@NID)      
     end               
          
@@ -142,7 +142,7 @@ SET NOCOUNT ON
 	END  		
 
 
-	set @SQL='SELECT DISTINCT PPP.ProductID ProductName_Key,ISNULL(S.SNo,0) SNo'+@CustomCols
+	set @SQL='SELECT DISTINCT PPP.ProductID ProductName_Key'+@CustomCols
 	if @EnableSubstituteType='True'
 		set @SQL=@SQL+',SType.Name SubstituteType,SType.NodeID STypeID'
 		
@@ -175,7 +175,7 @@ SET NOCOUNT ON
 	BEGIN
 		set @SQL=@SQL+' 
 		UNION
-		SELECT DISTINCT PPP.ProductID ProductName_Key,ISNULL(S.SNo,0) SNo'+@CustomCols+',SType.Name SubstituteType,SType.NodeID STypeID'
+		SELECT DISTINCT PPP.ProductID ProductName_Key'+@CustomCols+',SType.Name SubstituteType,SType.NodeID STypeID'
 		set @SQL=@SQL+' FROM INV_ProductSubstitutes S WITH(NOLOCK)     
 		INNER JOIN INV_Product P WITH(NOLOCK) on S.SProductID=P.ProductID
 		INNER JOIN INV_Product SP WITH(NOLOCK) on S.SProductID=SP.ProductID 
@@ -193,7 +193,7 @@ INNER JOIN INV_Product GSP WITH(NOLOCK) on GSP.LFT BETWEEN SP.LFT AND SP.RGT '
 	
 	set @SQL=@SQL+' 
 	UNION
-	select PPP.ProductID ProductName_Key,0'+@CustomCols
+	select PPP.ProductID ProductName_Key'+@CustomCols
 	if @EnableSubstituteType='True'
 		set @SQL=@SQL+',null SubstituteType,null STypeID'
 		
@@ -220,9 +220,7 @@ INNER JOIN INV_Product GSP WITH(NOLOCK) on GSP.LFT BETWEEN SP.LFT AND SP.RGT '
 	end
 	
 	if @EnableSubstituteType='True'
-		set @SQL=@SQL+' ORDER BY STypeID,SNo'
-	else
-		set @SQL=@SQL+' ORDER BY SNo'	
+		set @SQL=@SQL+' ORDER BY STypeID'
 	
 	--@EnableSubstituteType
 		
@@ -250,6 +248,5 @@ BEGIN CATCH
       END      
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH
-
+END CATCH   
 GO

@@ -3,16 +3,16 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_SetTaxChartNew]
-	@ProfileID [int],
+	@ProfileID [bigint],
 	@ProfileName [nvarchar](50) = null,
-	@SelectedNodeID [int],
+	@SelectedNodeID [bigint],
 	@IsGroup [bit],
 	@TaxXML [nvarchar](max) = null,
 	@DeleteXML [nvarchar](max) = null,
 	@IsImport [bit] = 0,
 	@CompanyGUID [nvarchar](50) = null,
 	@UserName [nvarchar](50),
-	@RoleID [int],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -23,12 +23,12 @@ SET NOCOUNT ON;
 	DECLARE @Dt FLOAT ,@HasAccess BIT
 	DECLARE @CCID NVARCHAR(500),@CCNodeID NVARCHAR(500),@XML XML
 	DECLARE @Tbl1 TABLE(ID INT IDENTITY(1,1),CCID INT)
-	DECLARE @Tbl2 TABLE(ID INT IDENTITY(1,1),CCNodeID INT)
-	DECLARE @TblXML TABLE(ID INT IDENTITY(1,1),DocID INT,ColID INT,Price FLOAT,WEF DATETIME,CCID NVARCHAR(500),CCNodeID NVARCHAR(500))
-	DECLARE @I INT,@Count INT,@GroupID INT
+	DECLARE @Tbl2 TABLE(ID INT IDENTITY(1,1),CCNodeID BIGINT)
+	DECLARE @TblXML TABLE(ID INT IDENTITY(1,1),DocID INT,ColID BIGINT,Price FLOAT,WEF DATETIME,CCID NVARCHAR(500),CCNodeID NVARCHAR(500))
+	DECLARE @I INT,@Count INT,@GroupID BIGINT
 	DECLARE @SPInvoice cursor, @nStatusOuter int
-	DECLARE @CCUpdate NVARCHAR(MAX),@CCTaxID INT,@SQL nvarchar(max)
-		,@DocID int,@ColID INT,@ProductID INT,@Price FLOAT,@WEF FLOAT,@AccountID INT,@TillDate FLOAT,@Message NVARCHAR(MAX)
+	DECLARE @CCUpdate NVARCHAR(MAX),@CCTaxID bigint,@SQL nvarchar(max)
+		,@DocID int,@ColID BIGINT,@ProductID BIGINT,@Price FLOAT,@WEF FLOAT,@AccountID BIGINT,@VID BIGINT,@TillDate FLOAT,@Message NVARCHAR(MAX)
 
 	IF @CompanyGUID IS NULL OR @CompanyGUID=''
 		set @CompanyGUID='CompanyGUID'
@@ -38,24 +38,44 @@ SET NOCOUNT ON;
 	
 	if(@IsImport=1  and @ProfileID>0)
 	begin
-		set @SQL='delete from [COM_CCTaxes] where cctaxid in (select C.cctaxid from [COM_CCTaxes] C WITH(nolock)
-		join @XML.nodes(''/XML/Row'') as Data(X) on C.profileid='+CONVERT(NVARCHAR,@ProfileID)+' and C.ProductID = ISNULL(X.value(''@ProductID'',''INT''),0) 
-		and C.DocID = X.value(''@DocID'',''INT'') and C.ColID = X.value(''@ColID'',''INT'') 
-		and c.WEF=CONVERT(FLOAT,X.value(''@WEF'',''DATETIME'')) and C.value=ISNULL(X.value(''@Price'',''FLOAT''),0)  
-		and isnull(c.TillDate,0)=isnull(CONVERT(FLOAT,X.value(''@TillDate'',''DATETIME'')),0)
-		and isnull(c.[Message],'''')=isnull(X.value(''@Message'',''NVARCHAR(MAX)''),'''')'
-		
-		select @SQL=@SQL+' AND C.'+name+'=ISNULL(X.value(''@'+REPLACE(name,'NID','')+''',''INT''),0)' 
-		from sys.columns 
-		where object_id=object_id('COM_CCTaxes') and name LIKE 'ccnid%'
-		
-		SET @SQL=@SQL+')'
-		EXEC sp_executesql @SQL,N'@XML XML',@XML
+		delete from [COM_CCTaxes]   where cctaxid in (select cctaxid from [COM_CCTaxes] c
+		join @XML.nodes('/XML/Row') as Data(X) on c.profileid=@ProfileID and DocID = X.value('@DocID','bigint') and ColID = X.value('@ColID','bigint') 
+		and c.WEF=CONVERT(FLOAT,X.value('@WEF','DATETIME')) and c.PRoductid=ISNULL(X.value('@ProductID','BIGINT'),0) and
+		value=ISNULL(X.value('@Price','FLOAT'),0)  and 
+		c.ccnid1= ISNULL(X.value('@CC1','BIGINT'),0) and c.ccnid2 = ISNULL(X.value('@CC2','BIGINT'),0) and 
+		c.ccnid3= ISNULL(X.value('@CC3','BIGINT'),0) and c.ccnid4 = ISNULL(X.value('@CC4','BIGINT'),0) and 
+		c.ccnid5= ISNULL(X.value('@CC5','BIGINT'),0) and c.ccnid6 = ISNULL(X.value('@CC6','BIGINT'),0) and 
+		c.ccnid7= ISNULL(X.value('@CC7','BIGINT'),0) and c.ccnid8 = ISNULL(X.value('@CC8','BIGINT'),0) and 
+		c.ccnid9= ISNULL(X.value('@CC9','BIGINT'),0) and c.ccnid10= ISNULL(X.value('@CC10','BIGINT'),0) and  
+		c.ccnid11= ISNULL(X.value('@CC11','BIGINT'),0) and c.ccnid12 = ISNULL(X.value('@CC12','BIGINT'),0) and 
+		c.ccnid13= ISNULL(X.value('@CC13','BIGINT'),0) and c.ccnid14 = ISNULL(X.value('@CC14','BIGINT'),0) and 
+		c.ccnid15= ISNULL(X.value('@CC15','BIGINT'),0) and c.ccnid16 = ISNULL(X.value('@CC16','BIGINT'),0) and 
+		c.ccnid17= ISNULL(X.value('@CC17','BIGINT'),0) and c.ccnid18 = ISNULL(X.value('@CC18','BIGINT'),0) and 
+		c.ccnid19= ISNULL(X.value('@CC19','BIGINT'),0) and c.ccnid20 = ISNULL(X.value('@CC20','BIGINT'),0) and  
+		c.ccnid21= ISNULL(X.value('@CC21','BIGINT'),0) and c.ccnid22 = ISNULL(X.value('@CC22','BIGINT'),0) and 
+		c.ccnid23= ISNULL(X.value('@CC23','BIGINT'),0) and c.ccnid24 = ISNULL(X.value('@CC24','BIGINT'),0) and 
+		c.ccnid25= ISNULL(X.value('@CC25','BIGINT'),0) and c.ccnid26 = ISNULL(X.value('@CC26','BIGINT'),0) and 
+		c.ccnid27= ISNULL(X.value('@CC27','BIGINT'),0) and c.ccnid28 = ISNULL(X.value('@CC28','BIGINT'),0) and 
+		c.ccnid29= ISNULL(X.value('@CC29','BIGINT'),0) and c.ccnid30 = ISNULL(X.value('@CC30','BIGINT'),0) and  
+		c.ccnid31= ISNULL(X.value('@CC31','BIGINT'),0) and c.ccnid32 = ISNULL(X.value('@CC32','BIGINT'),0) and 
+		c.ccnid33= ISNULL(X.value('@CC33','BIGINT'),0) and c.ccnid34 = ISNULL(X.value('@CC34','BIGINT'),0) and 
+		c.ccnid35= ISNULL(X.value('@CC35','BIGINT'),0) and c.ccnid36 = ISNULL(X.value('@CC36','BIGINT'),0) and 
+		c.ccnid37= ISNULL(X.value('@CC37','BIGINT'),0) and c.ccnid38 = ISNULL(X.value('@CC38','BIGINT'),0) and 
+		c.ccnid39= ISNULL(X.value('@CC39','BIGINT'),0) and c.ccnid40 = ISNULL(X.value('@CC40','BIGINT'),0) and 
+		c.ccnid41= ISNULL(X.value('@CC41','BIGINT'),0) and c.ccnid42 = ISNULL(X.value('@CC42','BIGINT'),0) and 
+		c.ccnid43= ISNULL(X.value('@CC43','BIGINT'),0) and c.ccnid44 = ISNULL(X.value('@CC44','BIGINT'),0) and 
+		c.ccnid45= ISNULL(X.value('@CC45','BIGINT'),0) and c.ccnid46 = ISNULL(X.value('@CC46','BIGINT'),0) and 
+		c.ccnid47= ISNULL(X.value('@CC47','BIGINT'),0) and c.ccnid48 = ISNULL(X.value('@CC48','BIGINT'),0) and 
+		c.ccnid49= ISNULL(X.value('@CC49','BIGINT'),0) and c.ccnid50 = ISNULL(X.value('@CC50','BIGINT'),0) and 
+		c.ccnid49= ISNULL(X.value('@CC49','BIGINT'),0) and c.ccnid50 = ISNULL(X.value('@CC50','BIGINT'),0) 
+		and isnull(c.TillDate,0)=isnull(CONVERT(FLOAT,X.value('@TillDate','DATETIME')),0)
+		and isnull(c.[Message],'')=isnull(X.value('@Message','NVARCHAR(MAX)'),'')
+		)
 	end 
 	 
 		IF @ProfileID=0--NEW
 		BEGIN
-			DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT
+			DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint
 			DECLARE @SelectedIsGroup bit
 	
 			IF EXISTS (SELECT ProfileID FROM COM_CCTaxesDefn WITH(nolock) WHERE ProfileName=@ProfileName) 
@@ -110,24 +130,24 @@ SET NOCOUNT ON;
 			SET @ProfileID=SCOPE_IDENTITY() 
 			
 			SET @SPInvoice = cursor for 
-			SELECT X.value('@DocID','INT'),X.value('@ColID','INT'),ISNULL(X.value('@ProductID','INT'),0),X.value('@Price','FLOAT'),CONVERT(FLOAT,X.value('@WEF','DATETIME'))
-				,ISNULL(X.value('@AccountID','INT'),0),CONVERT(FLOAT,X.value('@TillDate','DATETIME')),X.value('@Message','NVARCHAR(MAX)')
+			SELECT X.value('@DocID','INT'),X.value('@ColID','BIGINT'),ISNULL(X.value('@ProductID','BIGINT'),0),X.value('@Price','FLOAT'),CONVERT(FLOAT,X.value('@WEF','DATETIME'))
+				,ISNULL(X.value('@AccountID','BIGINT'),0),ISNULL(X.value('@VID','BIGINT'),0),CONVERT(FLOAT,X.value('@TillDate','DATETIME')),X.value('@Message','NVARCHAR(MAX)')
 				,isnull(X.value('@CCUpdate','NVARCHAR(MAX)'),'')
 			FROM @XML.nodes('/XML/Row') as Data(X)
-			WHERE X.value('@CCTaxID','INT') IS NULL
+			WHERE X.value('@CCTaxID','BIGINT') IS NULL
 
 			OPEN @SPInvoice 
 			SET @nStatusOuter = @@FETCH_STATUS
 			
-			FETCH NEXT FROM @SPInvoice Into @DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@TillDate,@Message,@CCUpdate
+			FETCH NEXT FROM @SPInvoice Into @DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@VID,@TillDate,@Message,@CCUpdate
 			SET @nStatusOuter = @@FETCH_STATUS
 			WHILE(@nStatusOuter <> -1)
 			BEGIN
 				INSERT INTO COM_CCTaxes([ProfileID],[ProfileName]
-				   ,[DocID],[ColID],[ProductID],[Value],[WEF],[AccountID],TillDate,[Message]
+				   ,[DocID],[ColID],[ProductID],[Value],[WEF],[AccountID],VehicleID,TillDate,[Message]
 				   ,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]) 
 				SELECT @ProfileID,@ProfileName
-					,@DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@TillDate,@Message
+					,@DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@VID,@TillDate,@Message
 					,@CompanyGUID,NEWID(),@UserName,CONVERT(FLOAT,GETDATE())
 				set @CCTaxID=Scope_Identity()
 				--select @CCTaxID,@CCUpdate
@@ -137,7 +157,7 @@ SET NOCOUNT ON;
 					exec(@SQL)
 				end
 				
-				FETCH NEXT FROM @SPInvoice Into @DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@TillDate,@Message,@CCUpdate
+				FETCH NEXT FROM @SPInvoice Into @DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@VID,@TillDate,@Message,@CCUpdate
 				SET @nStatusOuter = @@FETCH_STATUS
 			END
 		END
@@ -154,24 +174,24 @@ SET NOCOUNT ON;
 				WHERE ProfileID=@ProfileID
 
 				SET @SPInvoice = cursor for 
-				SELECT X.value('@DocID','INT'),X.value('@ColID','INT'),ISNULL(X.value('@ProductID','INT'),0),X.value('@Price','FLOAT'),CONVERT(FLOAT,X.value('@WEF','DATETIME'))
-					,ISNULL(X.value('@AccountID','INT'),0),CONVERT(FLOAT,X.value('@TillDate','DATETIME')),X.value('@Message','NVARCHAR(MAX)')
+				SELECT X.value('@DocID','INT'),X.value('@ColID','BIGINT'),ISNULL(X.value('@ProductID','BIGINT'),0),X.value('@Price','FLOAT'),CONVERT(FLOAT,X.value('@WEF','DATETIME'))
+					,ISNULL(X.value('@AccountID','BIGINT'),0),ISNULL(X.value('@VID','BIGINT'),0),CONVERT(FLOAT,X.value('@TillDate','DATETIME')),X.value('@Message','NVARCHAR(MAX)')
 					,isnull(X.value('@CCUpdate','NVARCHAR(MAX)'),'')
 				FROM @XML.nodes('/XML/Row') as Data(X)
-				WHERE X.value('@CCTaxID','INT') IS NULL
+				WHERE X.value('@CCTaxID','BIGINT') IS NULL
 				
 				OPEN @SPInvoice 
 				SET @nStatusOuter = @@FETCH_STATUS
 				
-				FETCH NEXT FROM @SPInvoice Into @DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@TillDate,@Message,@CCUpdate
+				FETCH NEXT FROM @SPInvoice Into @DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@VID,@TillDate,@Message,@CCUpdate
 				SET @nStatusOuter = @@FETCH_STATUS
 				WHILE(@nStatusOuter <> -1)
 				BEGIN
 					INSERT INTO COM_CCTaxes([ProfileID],[ProfileName]
-					   ,[DocID],[ColID],[ProductID],[Value],[WEF],[AccountID],TillDate,[Message]
+					   ,[DocID],[ColID],[ProductID],[Value],[WEF],[AccountID],VehicleID,TillDate,[Message]
 					   ,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]) 
 					SELECT @ProfileID,@ProfileName
-						,@DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@TillDate,@Message
+						,@DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@VID,@TillDate,@Message
 						,@CompanyGUID,NEWID(),@UserName,CONVERT(FLOAT,GETDATE())
 					set @CCTaxID=Scope_Identity()
 					--select @CCTaxID,@CCUpdate
@@ -181,41 +201,45 @@ SET NOCOUNT ON;
 						exec(@SQL)
 					end
 					
-					FETCH NEXT FROM @SPInvoice Into @DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@TillDate,@Message,@CCUpdate
+					FETCH NEXT FROM @SPInvoice Into @DocID,@ColID,@ProductID,@Price,@WEF,@AccountID,@VID,@TillDate,@Message,@CCUpdate
 					SET @nStatusOuter = @@FETCH_STATUS
 				END
 			END
 			
 			UPDATE COM_CCTaxes
 			SET DocID=CONVERT(FLOAT,X.value('@DocID','INT')),
-				ColID=CONVERT(FLOAT,X.value('@ColID','INT')),
+				ColID=CONVERT(FLOAT,X.value('@ColID','BIGINT')),
 				WEF=CONVERT(FLOAT,X.value('@WEF','DATETIME')),
 				TillDate=CONVERT(FLOAT,X.value('@TillDate','DATETIME')),
 				Value=ISNULL(X.value('@Price','FLOAT'),0),
 				[Message]=X.value('@Message','NVARCHAR(MAX)')
 			FROM @XML.nodes('/XML/Row') as Data(X),COM_CCTaxes P
-			WHERE X.value('@CCTaxID','INT') IS NOT NULL AND P.CCTaxID=X.value('@CCTaxID','INT')
+			WHERE X.value('@CCTaxID','BIGINT') IS NOT NULL AND P.CCTaxID=X.value('@CCTaxID','BIGINT')
 			
 			--Delete Rows
 			IF @DeleteXML IS NOT NULL AND @DeleteXML!=''
 			BEGIN
 				SET @XML=@DeleteXML
 				DELETE FROM COM_CCTaxes
-				WHERE CCTaxID IN (SELECT X.value('@ID','INT') FROM @XML.nodes('/XML/Row') as Data(X))
+				WHERE CCTaxID IN (SELECT X.value('@ID','BIGINT') FROM @XML.nodes('/XML/Row') as Data(X))
 				
 			END
 		END
 	
- 	--Added to set default inactive if action exists
-	SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,45,156)
-	if(@HasAccess!=0)
-	begin
-		update COM_CCTaxesDefn set statusid=2 where profileid=@ProfileID
-		update COM_CCTaxes  set statusid=2 where profileid=@ProfileID
-	end 
-	
+	 	--Added to set default inactive if action exists
+		SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,45,156)
+		if(@HasAccess!=0)
+		begin
+			update COM_CCTaxesDefn set statusid=2 where profileid=@ProfileID
+			update COM_CCTaxes  set statusid=2 where profileid=@ProfileID
+		end 
 	--To Set Used CostCenters with Group Check
 	EXEC [spADM_SetPriceTaxUsedCC] 2,@ProfileID,1
+	
+
+	--select * from COM_CCTaxesDefn with(nolock) where ProfileID=@ProfileID
+	--select * from COM_CCPriceTaxCCDefn with(nolock) where DefType=2 and ProfileID=@ProfileID
+	--select * from COM_CCTaxes with(nolock) where ProfileID=@ProfileID
 	
 	
 COMMIT TRANSACTION  

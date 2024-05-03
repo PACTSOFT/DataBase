@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_MoveAccount]
-	@AccountID [int],
-	@SelectedNodeID [int],
-	@RoleID [int],
+	@AccountID [bigint],
+	@SelectedNodeID [bigint],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -14,20 +14,16 @@ BEGIN TRY
 SET NOCOUNT ON; 
  
 		--Declaration Section  
-		DECLARE @lft INT,@rgt INT,@Width INT,@Selectedlft INT,@Selectedrgt INT,@SelectedDepth INT,@Depth INT,@ParentID INT  
-		DECLARE @Temp TABLE (ID INT)
-		DECLARE @TypeAccount INT, @TypeSelected INT,@nodeparentid INT
+		DECLARE @lft BIGINT,@rgt BIGINT,@Width INT,@Selectedlft BIGINT,@Selectedrgt BIGINT,@SelectedDepth INT,@Depth INT,@ParentID BIGINT  
+		DECLARE @Temp TABLE (ID BIGINT)
+		DECLARE @TypeAccount bigint, @TypeSelected bigint,@nodeparentid bigint
 		DECLARE @HasAccess BIT,@SelectedIsGroup BIT
 		
 		--Check if Selected NodeID Root NodeID
-		if @SelectedNodeID=1 AND NOT EXISTS (select Value from COM_CostCenterPreferences with(nolock) where FeatureID=2 and Name='AllowChildAtRoot' and Value='True')
+		IF(@SelectedNodeID=1)
 		BEGIN
 			RAISERROR('-226',16,1)
 		END
-		--IF(@SelectedNodeID=1)
-		--BEGIN
-		--	RAISERROR('-226',16,1)
-		--END
 
 		--Check for manadatory paramters  
 		IF(@AccountID=0 OR @SelectedNodeID=0)
@@ -158,4 +154,7 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
+
+
 GO

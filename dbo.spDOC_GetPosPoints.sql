@@ -4,8 +4,8 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetPosPoints]
 	@LoyaltyOn [int],
-	@AccountId [int],
-	@DOcID [int],
+	@AccountId [bigint],
+	@DOcID [bigint],
 	@Dim [int],
 	@docdate [datetime],
 	@UserID [int] = 0,
@@ -15,32 +15,12 @@ AS
 BEGIN TRY      
 SET NOCOUNT ON      
       
-		DECLARE @SQL NVARCHAR(MAX),@nodeid INT,@tablename nvarchar(200),@opfield nvarchar(50),@OpPoints float,@dec int
+		DECLARE @SQL NVARCHAR(MAX),@nodeid BIGINT,@tablename nvarchar(200)
 		
-		set @dec='2'
-		select @dec=Value from ADM_GlobalPreferences WITH(NOLOCK)
-		where Name ='DecimalsinAmount' and Value is not null and Value<>'' and isnumeric(Value)=1
+		 
+		set @SQL='select @nodeid=CCNID'+convert(nvarchar,(@Dim-50000))+' from COM_CCCCData WITH(NOLOCK) where NodeID='+convert(nvarchar,@AccountId)+' and CostCenterID='+CONVERT(nvarchar,@LoyaltyOn)
 		
-		set @opfield=''
-		select @opfield=Value from Adm_globalPreferences WITH(NOLOCK)
-		where Name='LoyaltyOpening' and value is not null and value<>''
-		
-		if(@Dim>50000)
-		BEGIN
-			set @SQL='select @nodeid=CCNID'+convert(nvarchar,(@Dim-50000))+' from COM_CCCCData WITH(NOLOCK) where NodeID='+convert(nvarchar,@AccountId)+' and CostCenterID='+CONVERT(nvarchar,@LoyaltyOn)		
-			exec sp_executesql  @SQL,N'@nodeid INT OUTPUT',@nodeid output
-		END
-		else
-			set @nodeid=0
-			
-		set @OpPoints=0
-		if(@opfield<>'')
-		BEGIN
-			select @tablename=TableName from ADM_Features where FeatureID=@LoyaltyOn
-			set @SQL='select @OpPoints=convert(float,'+@opfield+') from '+@tablename+' WITH(NOLOCK)
-			 where NodeID='+convert(nvarchar,@AccountId)+' and '+@opfield+' is not null and isnumeric('+@opfield+')=1'
-			exec sp_executesql  @SQL,N'@OpPoints Float OUTPUT',@OpPoints output
-		END
+		exec sp_executesql  @SQL,N'@nodeid BIGINT OUTPUT',@nodeid output
 		
 		if(@nodeid>0)
 		BEGIN	
@@ -56,8 +36,8 @@ SET NOCOUNT ON
 		ELSE	
 			select 1 where 1<>1
 		
-		select round(@OpPoints+isnull(SUM(Quantity),0),@dec) points from INV_DocExtraDetails WITH(NOLOCK)
-		where Type=5 and fld1 is not null and isnumeric(Fld1)=1 and CONVERT(INT,fld1)=@AccountId and RefID<>@DOcID
+		select isnull(SUM(Quantity),0) points from INV_DocExtraDetails WITH(NOLOCK)
+		where Type=5 and fld1 is not null and isnumeric(Fld1)=1 and CONVERT(bigint,fld1)=@AccountId and RefID<>@DOcID
 		
 
 SET NOCOUNT OFF;      
@@ -77,5 +57,5 @@ BEGIN CATCH
 
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH
+END CATCH   
 GO

@@ -3,18 +3,18 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_GetEmpPayrollInfo]
-	@EmpID [int],
-	@LeaveCompID [int],
+	@EmpID [bigint],
+	@LeaveCompID [bigint],
 	@PayrollDate [datetime],
 	@Flag [int] = 0,
 	@StartMonth [int] = 1,
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY    
 SET NOCOUNT ON;  
-DECLARE @STARTDATE DATETIME,@VALID INT,@ALStartMonthYear DATETIME,@ALEndMonthYear DATETIME,@DOJ DATETIME,@NoOfMonths INT,@Grade int,@tID INT,@Cnt INT
+DECLARE @STARTDATE DATETIME,@VALID INT,@ALStartMonthYear DATETIME,@ALEndMonthYear DATETIME,@DOJ DATETIME,@NoOfMonths INT,@Grade int,@tID BIGINT,@Cnt INT
 SET @Cnt=0
 SET @VALID=0
 SET @NoOfMonths=0
@@ -89,7 +89,7 @@ BEGIN
 END
 ELSE IF (ISNULL(@Flag,0)=2)--JOIN FROM VACATION
 BEGIN
-	SELECT TOP 1 @tID= CONVERT(INT,dcAlpha1)
+	SELECT TOP 1 @tID= CONVERT(BIGINT,dcAlpha1)
 	FROM INV_DocDetails a WITH(NOLOCK) 
 	JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
 	WHERE a.CostCenterID=40061 and a.StatusID=369

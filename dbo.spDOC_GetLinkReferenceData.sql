@@ -4,19 +4,19 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetLinkReferenceData]
 	@COSTCENTERCOlID [int],
-	@DOCUMENTID [int],
-	@NODEID [int],
+	@DOCUMENTID [bigint],
+	@NODEID [bigint],
 	@DocDate [datetime],
-	@CreditAccount [int],
+	@CreditAccount [bigint],
 	@ccxml [nvarchar](max),
 	@ProfileExists [bit] = 0,
-	@DocumentLinkDefID [int] = 0,
-	@LocationID [int] = 0,
-	@DivisionID [int] = 0,
+	@DocumentLinkDefID [bigint] = 0,
+	@LocationID [bigint] = 0,
+	@DivisionID [bigint] = 0,
 	@DueDate [datetime] = null,
-	@DocID [int] = 0,
-	@DbAcc [int] = 0,
-	@CrAcc [int] = 0,
+	@DocID [bigint] = 0,
+	@DbAcc [bigint] = 0,
+	@CrAcc [bigint] = 0,
 	@DimWhere [nvarchar](max) = '',
 	@UserID [int] = 0,
 	@LangID [int] = 1,
@@ -28,21 +28,21 @@ SET NOCOUNT ON;
 
 DECLARE @TABLE NVARCHAR(50),@QUERY NVARCHAR(MAX),@AccWhere NVARCHAR(MAX),@TEMPCOLUMN NVARCHAR(500),@COLUMN NVARCHAR(50) , @DUPLICATECODE NVARCHAR(500),@tempCode NVARCHAR(500)
 DECLARE @ID NVARCHAR(100),@COLUMNCNT INT ,@COLUMNS NVARCHAR(MAX),@TableName NVARCHAR(100),@Join NVARCHAR(MAX),@sql nvarchar(max),@dependancy int
-DECLARE @FeatureID INT,@FeatureTableName NVARCHAR(100),@COSTCENTERID INT,@xml xml,@Where nvarchar(max),@CID INT,@CurrencyID INT
-declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(max),@isHist bit,@linkData INT,@dec int
+DECLARE @FeatureID bigint,@FeatureTableName NVARCHAR(100),@COSTCENTERID INT,@xml xml,@Where nvarchar(max),@CID BIGINT,@CurrencyID INT
+declare @lOCATION BIGINT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(max),@isHist bit,@linkData bigint,@dec int
 
 	set @dec=2
-	select @dec=convert(int,value) from adm_globalpreferences WITH(NOLOCK)
+	select @dec=convert(int,value) from adm_globalpreferences
 	where name ='DecimalsinAmount' and isnumeric(value)=1
 
 	SELECT @COSTCENTERID=ColumnCostCenterID from ADM_CostCenterDef WITH(NOLOCK) where CostCenterColID=@COSTCENTERCOlID
 	declare @cctable table(ID INT IDENTITY(1,1),CCID nvarchar(50)) 
 	SELECT @TableName=TABLENAME FROM ADM_FEATURES WITH(NOLOCK) WHERE FEATUREID=@COSTCENTERID 
 
-	declare @dims TABLE(ID INT IDENTITY(1,1),CCID int,NodeID INT)
+	declare @dims TABLE(ID INT IDENTITY(1,1),CCID int,NodeID bigint)
 	set @XML=@ccxml
 	insert into @dims
-	SELECT X.value('@CostCenterID','int'),X.value('@NODEID','INT')
+	SELECT X.value('@CostCenterID','int'),X.value('@NODEID','bigint')
 	from @XML.nodes('/XML/Row') as Data(X) 
 
 
@@ -75,6 +75,8 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 		SET @ID = 'ACCOUNTID'
 	ELSE IF(@COSTCENTERID =3)
 		SET @ID = 'PRODUCTID'
+	ELSE IF(@COSTCENTERID =61)
+		SET @ID = 'VehicleID'
 	ELSE IF(@COSTCENTERID =83)
 		SET @ID = 'CustomerID'	
 	ELSE IF(@COSTCENTERID =65)
@@ -82,7 +84,7 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 	ELSE 
 		SET @ID = 'NODEID'
 	 
-	declare @TEMPLINKTABLE TABLE (ID INT IDENTITY(1,1) ,SYSCOLUMNNAME NVARCHAR(100),FCCID INT,COLUMNNAME NVARCHAR(100),CCID INT,IsParent BIT,inclcc nvarchar(max),dependancy int,filterinuse bit,FeatureID int,Prob bit,LinkData INT)
+	declare @TEMPLINKTABLE TABLE (ID INT IDENTITY(1,1) ,SYSCOLUMNNAME NVARCHAR(100),FCCID bigint,COLUMNNAME NVARCHAR(100),CCID bigint,IsParent BIT,inclcc nvarchar(max),dependancy int,filterinuse bit,FeatureID int,Prob bit,LinkData BIGINT)
 	
 	INSERT INTO @TEMPLINKTABLE 
 	SELECT ISNULL(CDF.SYSCOLUMNNAME,C.LinkData),ISNULL(CDF.ColumnCostCenterID,C.linkdata) , C.SYSCOLUMNNAME,C.ColumnCostCenterID,0,c.LastValueVouchers,C.dependancy
@@ -92,7 +94,7 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 	LEFT JOIN ADM_CostCenterDef CDF WITH(NOLOCK)  ON C.linkdata = CDF.CostCenterColID 
 	LEFT JOIN ADM_CostCenterDef PDF WITH(NOLOCK)  ON PDF.costcenterid = @COSTCENTERID and PDF.syscolumnname=REPLACE(C.SYSCOLUMNNAME,'dc','')
 	WHERE C.CostCenterID = @DOCUMENTID AND (c.LocalReference = @COSTCENTERCOlID OR c.LocalReference = -@COSTCENTERCOlID)
-	and  (@DOCUMENTID in (154) or C.linkdata is null or C.linkdata not in (-100,-101,-102,276,277,22786,22787,22788,22789,22790,22791,22792,22793,22794,22795,22796,22797,22798,22799,22820,22821))
+	and  (C.linkdata is null or C.linkdata not in (-100,-101,-102,276,277,22786,22787,22788,22789,22790,22791,22792,22793,22794,22795,22796,22797,22798,22799,22820,22821))
 	and not (C.linkdata is not null and (@COSTCENTERID =3 and C.linkdata<0))
 	and C.SysColumnName not like 'dccalc%'
 	
@@ -113,10 +115,10 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 		and  C.linkdata =225
 	END
 	
-	declare @LocWise bit,@DivWise bit,@DIVIS INT,@DimWise INT
+	declare @LocWise bit,@DivWise bit,@DIVIS bigint,@DimWise BIGINT
 	select @LocWise=value from adm_globalpreferences WITH(NOLOCK) where name='EnableLocationWise'
 	select @DivWise=value from adm_globalpreferences WITH(NOLOCK) where name='EnableDivisionWise'
-	SELECT @DimWise=ISNULL(CONVERT(INT,value),0) from adm_globalpreferences WITH(NOLOCK) where name='DimWiseCreditDebit'
+	SELECT @DimWise=ISNULL(CONVERT(BIGINT,value),0) from adm_globalpreferences WITH(NOLOCK) where name='DimWiseCreditDebit'
 	
 	if(@LocWise=1)
 		select @LocWise=value from adm_globalpreferences WITH(NOLOCK) where name='LW CreditDebit' 
@@ -580,7 +582,7 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 				IF(@COSTCENTERID =2 OR (@LocWise=1 AND @COSTCENTERID=50001) 
 				OR (@DivWise=1 AND @COSTCENTERID=50002) OR (@DimWise>0 AND @COSTCENTERID=@DimWise) )
 				BEGIN
-					declare @dL NVARCHAR(MAX),@DimID INT
+					declare @dL NVARCHAR(MAX),@DimID BIGINT
 					select @lOCATION=ISNULL(NodeID,0) from @dims where CCID= 50002
 					select @DIVIS=ISNULL(NodeID,0) from @dims where CCID= 50001
 					IF(@DimWise>0)
@@ -633,10 +635,7 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 			end	
 			else if(@TEMPCOLUMN like '%alpha%' and (@COSTCENTERID=2 or @COSTCENTERID=65 or @COSTCENTERID=3 or @COSTCENTERID=83))
 			BEGIN
-				select @FeatureID=CCID from  @TEMPLINKTABLE WHERE ID =  @I  			
-				SELECT @FeatureTableName=TABLENAME FROM ADM_FEATURES WITH(NOLOCK)  WHERE FEATUREID =  @FeatureID
-				
-				if (@FeatureID=44)
+				if exists(select CCID from  @TEMPLINKTABLE WHERE ID =  @I and CCID=44)
 				BEGIN
 					if(@IsParent=1)
 					BEGIN
@@ -651,26 +650,13 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 						set @TEMPCOLUMN='e.'+@TEMPCOLUMN+ ' AS '+ @COLUMN+',l'+convert(nvarchar,@I)+'.Name '+ @COLUMN+'name'
 					END
 				END
-				ELSE if(@FeatureID>50000)
-				begin
-					set @Join=@Join+' left join '+@FeatureTableName +' C'+CONVERT(nvarchar,@I)+' WITH(NOLOCK) on '+' C'+CONVERT(nvarchar,@I)+'.NODEID=e.'+@TEMPCOLUMN
-					
-					set @TEMPCOLUMN='e.'+@TEMPCOLUMN+ 'AS '+ @COLUMN+',C'+CONVERT(nvarchar,@I)+'.Name'+ ' as '+@COLUMN+'Name'
-				
-				end
-				ELSE if(@FeatureID=2)
-				begin
-					set @Join=@Join+' left join acc_Accounts C'+CONVERT(nvarchar,@I)+' WITH(NOLOCK) on '+' C'+CONVERT(nvarchar,@I)+'.AccountID=e.'+@TEMPCOLUMN
-					
-					set @TEMPCOLUMN='e.'+@TEMPCOLUMN+ ' AS '+ @COLUMN+',C'+CONVERT(nvarchar,@I)+'.AccountName'+ ' as '+@COLUMN+'Name'				
-				end
 				ELSE
 				BEGIN
 					if(@IsParent=1)
 						set @TEMPCOLUMN='Pe.'+@TEMPCOLUMN+ ' AS '+ @COLUMN	
 					ELSE
 						set @TEMPCOLUMN='e.'+@TEMPCOLUMN+ ' AS '+ @COLUMN
-				END
+				END		
 			END	
 			Else If (@costcenterId=50051 and (select COUNT(*) from ADM_CostCenterDef where CostcenterId=@costcenterId and CostCenterColID=@linkData and ColumnDatatype ='DATE')>0)
 			Begin
@@ -678,20 +664,7 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 				set @TEMPCOLUMN='pa.'+@TEMPCOLUMN+ ' AS '+ @COLUMN
 			ELSE 
 				set @TEMPCOLUMN='Convert(Datetime,a.'+@TEMPCOLUMN+ ') AS '+ @COLUMN
-			End
-			Else If (@costcenterId=50051 and (@TEMPCOLUMN='BasicMonthly' OR @TEMPCOLUMN='NetSalary' OR @TEMPCOLUMN='AnnualCTC'))
-			BEGIN
-				DECLARE @TEMPI INT
-				SET @TEMPI=(SELECT TOP 1 ID FROM @TEMPLINKTABLE WHERE SYSCOLUMNNAME IN('BasicMonthly','NetSalary','AnnualCTC') ORDER BY ID ASC)
-
-				IF(@Join NOT LIKE'%Pay_EmpPay%')
-				BEGIN
-					set @Join=@Join+' left join Pay_EmpPay C'+CONVERT(nvarchar,@TEMPI)+' WITH(NOLOCK) on '+' C'+CONVERT(nvarchar,@TEMPI)+'.EmployeeID'
-					set @Join=@Join+'=a.NodeID AND C'+CONVERT(nvarchar,@TEMPI)+'.SeqNo IN (SELECT TOP 1 SeqNo FROM PAY_EMPPAY with(nolock) WHERE EmployeeID=C.NodeID ORDER BY EffectFrom DESC)'
-				END
-
-				set @TEMPCOLUMN='c'+CONVERT(nvarchar,@TEMPI)+'.'+@TEMPCOLUMN+ ' AS '+ @COLUMN
-			END			
+			End		
 			else 
 			BEGIN 
 				select @FeatureID=FCCID from  @TEMPLINKTABLE WHERE ID =  @I 
@@ -732,15 +705,6 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 			END
 				
 		end	
-		else if(@COLUMN like 'ContactID')
-		begin
-			if(@COSTCENTERID=2)
-			BEGIN
-				set @Join=@Join+' left join com_contacts con WITH(NOLOCK) on con.FeaturePK=a.AccountID and con.FeatureID=2 and con.AddressTypeID=1 '
-				set @TEMPCOLUMN='	con.ContactID AS '+ @COLUMN+' ,con.FirstName'+ ' as '+@COLUMN+'Name'
-			END	
-				
-		END
 		else if(@COLUMN like '%CCNID%')
 		begin
 				select @FeatureID=CCID from  @TEMPLINKTABLE WHERE ID =  @I  			
@@ -808,7 +772,12 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 					END	
 				end
 		end
+		else if(@COLUMN = 'Vehicleid')
+		begin
 		
+			SET @I = @I + 1
+			continue
+		end
 		IF (@I = 1)
 			SET @COLUMNS  = @TEMPCOLUMN 
 		ELSE IF (@I > 1)
@@ -860,7 +829,7 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 		set @QUERY=@QUERY+ ' left join COM_Address AS bill WITH(NOLOCK) on bill.addresstypeid=2 and bill.FEATUREID='+CONVERT(NVARCHAR,@COSTCENTERID)+' AND bill.FEATUREPK='+CONVERT(NVARCHAR,@NODEID)
 		set @QUERY=@QUERY+ ' left join COM_Address AS ship WITH(NOLOCK) on ship.addresstypeid=3 and ship.FEATUREID='+CONVERT(NVARCHAR,@COSTCENTERID)+' AND ship.FEATUREPK='+CONVERT(NVARCHAR,@NODEID)
 	END
-	else if(@COSTCENTERID<>61 and @COSTCENTERID<>3)
+	else if(@COSTCENTERID<>61)
 		set @QUERY=@QUERY+ ' left join COM_Address AS addr WITH(NOLOCK)  on addr.FEATUREID='+CONVERT(NVARCHAR,@COSTCENTERID)+' AND addr.FEATUREPK='+CONVERT(NVARCHAR,@NODEID)
 	
 	set @QUERY=@QUERY+' '+@Join+' WHERE a.'+ @ID +' = ' + CONVERT(NVARCHAR(50),@NODEID)
@@ -873,8 +842,10 @@ declare @lOCATION INT,@IsParent BIT,@ccWhere nvarchar(max),@IncludeCC nvarchar(m
 		set @QUERY='select 1 where 1=2'--NOT to return any row
  end
  print @QUERY
-EXEC sp_executesql @QUERY
+  --   SELECT @QUERY
 
+EXEC (@QUERY)
+  
   	declare @DocumentType int,@isinventory bit,@Costcenters nvarchar(max),@II int,@CCNT int,@isinvexists bit
 	select @DocumentType=DocumentType,@isinventory=isinventory from adm_documenttypes WITH(NOLOCK) where costcenterid=@DOCUMENTID
 
@@ -889,7 +860,7 @@ EXEC sp_executesql @QUERY
 			set @lOCATION=1
 			set @FeatureID=0
 			select @FeatureID=isnull(value,0) from ADM_GlobalPreferences WITH(NOLOCK) 
-			where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(INT,value)>50000
+			where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>50000
 			if(@FeatureID>0)
 				select @lOCATION=NodeID from @dims where CCID=@FeatureID
 			
@@ -946,7 +917,7 @@ EXEC sp_executesql @QUERY
 			set @lOCATION=1
 			set @FeatureID=0
 			select @FeatureID=isnull(value,0) from ADM_GlobalPreferences WITH(NOLOCK) 
-			where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(INT,value)>50000
+			where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>50000
 			if(@FeatureID>0)
 				select @lOCATION=NodeID from @dims where CCID=@FeatureID
 			
@@ -960,7 +931,7 @@ EXEC sp_executesql @QUERY
 			select 1 Rate where 1=2
 		end
 		select * from ACC_ChequeBooks WITH(NOLOCK)  
-		where BankAccountID=@NODEID and convert(INT,CurrentNo)<=convert(INT,EndNo) and Status=1
+		where BankAccountID=@NODEID and convert(bigint,CurrentNo)<=convert(bigint,EndNo) and Status=1
 		
 		SELECT * FROM  COM_Files WITH(NOLOCK) 
 		WHERE FeatureID=2 and  FeaturePK=@NODEID
@@ -969,7 +940,7 @@ EXEC sp_executesql @QUERY
 	
 	if((@isinventory=1 and @COSTCENTERID =3) or (@isinventory=0 and @COSTCENTERID =2))
 	begin
-		declare @LastValue TABLE(ID INT IDENTITY(1,1),SYSCOLUMNNAME NVARCHAR(100),COLUMNxml NVARCHAR(max),LinkData INT)
+		declare @LastValue TABLE(ID INT IDENTITY(1,1),SYSCOLUMNNAME NVARCHAR(100),COLUMNxml NVARCHAR(max),LinkData bigint)
 		
 		
 		INSERT INTO @LastValue 
@@ -1010,7 +981,7 @@ EXEC sp_executesql @QUERY
 			WHILE (@II<=@CCNT)
 			BEGIN 
 				select @TEMPCOLUMN=SYSCOLUMNNAME,@FeatureID=CCID from @LastValueColumns where ID=@II
-				if(@TEMPCOLUMN like 'dcccnid%' or @TEMPCOLUMN ='ContactID')
+				if(@TEMPCOLUMN like 'dcccnid%' or @TEMPCOLUMN ='VehicleID'  or @TEMPCOLUMN ='ContactID')
 				BEGIN
 					
 					select @CID=ColumnCostcenterid from adm_costcenterdef WITH(NOLOCK) 
@@ -1049,10 +1020,8 @@ EXEC sp_executesql @QUERY
 					 END
 					 ELSE
 					 BEGIN
-						
-						if(@TEMPCOLUMN in ('CurrencyID'))
-							set @QUERY=@QUERY+'(select Name from COM_Currency tmp WITH(NOLOCK) where tmp.CurrencyID=a.CurrencyID)'
-						 else if(@TEMPCOLUMN in ('BillDate','DocDate','DueDate'))
+					 
+						 if(@TEMPCOLUMN in ('BillDate','DocDate','DueDate'))
 							set @QUERY=@QUERY+'convert(nvarchar,convert(datetime,'+@TEMPCOLUMN+'))'
 						 else
 							set @QUERY=@QUERY+@TEMPCOLUMN 	
@@ -1063,7 +1032,7 @@ EXEC sp_executesql @QUERY
 			 end
 			 
 			
-			if exists(select  ID FROM @LastValueColumns where SYSCOLUMNNAME not in('ProductID','ContactID') and SYSCOLUMNNAME not like 'dcccnid%')
+			if exists(select  ID FROM @LastValueColumns where SYSCOLUMNNAME not in('ProductID','VehicleID','ContactID') and SYSCOLUMNNAME not like 'dcccnid%')
 			BEGIN
 				set @isinvexists=1
 				
@@ -1112,7 +1081,7 @@ EXEC sp_executesql @QUERY
 					WHILE (@II<=@CCNT)
 					BEGIN 
 						select @TEMPCOLUMN=SYSCOLUMNNAME,@FeatureID=CCID from @LastValueColumns where ID=@II
-						if(@TEMPCOLUMN like 'dcccnid%' or @TEMPCOLUMN ='ContactID')
+						if(@TEMPCOLUMN like 'dcccnid%' or @TEMPCOLUMN ='VehicleID'  or @TEMPCOLUMN ='ContactID')
 						BEGIN
 							
 							select @CID=ColumnCostcenterid from adm_costcenterdef WITH(NOLOCK) 
@@ -1180,34 +1149,11 @@ EXEC sp_executesql @QUERY
 	
 	if(@ProfileExists=1)
 	BEGIN
-		declare @ProfileCC nvarchar(max),@PXML XML,@K INT,@CNT INT,@profileid NVARCHAR(MAX)
-
-		set @ProfileCC=''
-		SelecT @ProfileCC=prefvalue from com_documentpreferences WITH(NOLOCK) where Costcenterid=@DOCUMENTID and prefname='DefaultProfileID'
 		
-		declare @Profiletable table(ID INT IDENTITY(1,1),wef datetime,tilldate datetime,profileid NVARCHAR(50)) 
-		set @PXML=@ProfileCC
-		
-		INSERT INTO @Profiletable      
-		SELECT     
-			X.value('@WEFDate','DateTime')       
-			,X.value('@TillDate','DateTime')
-			,X.value('@ProfileID','INT')
-		from @PXML.nodes('/DimensionDefProfile/Row') as Data(X) 
-		
-		SET @K=1
-		SELECT  @CNT=COUNT(*) FROM @Profiletable
-		WHILE (@K<=@CNT)
-		BEGIN
-				IF(ISNULL(@IncludeCC,'')='')
-					SELECT  @IncludeCC=profileid FROM @Profiletable WHERE ID=@K AND ((CONVERT(DATETIME,@DocDate) BETWEEN CONVERT(DATETIME,WEF) AND CONVERT(DATETIME,tilldate)) OR ISNULL(WEF,'')='')
-				ELSE
-					SELECT  @IncludeCC=@IncludeCC+','+profileid FROM @Profiletable WHERE ID=@K AND ((CONVERT(DATETIME,@DocDate) BETWEEN CONVERT(DATETIME,WEF) AND CONVERT(DATETIME,tilldate)) OR ISNULL(WEF,'')='')
-		SET @K=@K+1
-		END
-		
+		SelecT @IncludeCC=prefvalue from com_documentpreferences WITH(NOLOCK)
+		where Costcenterid=@DOCUMENTID and prefname='DefaultProfileID'
+		 
 		delete from @cctable
-
 		insert into @cctable  
 		exec SPSplitString @IncludeCC,','  
 		
@@ -1243,8 +1189,7 @@ EXEC sp_executesql @QUERY
 				FROM @XML.nodes('/XML/Row') as Data(X)
 				where X.value('@IsBase','int')=0
 				set @QUERY=@QUERY+' from COM_DimensionMappings a WITH(NOLOCK) '+@Join+' where ProfileID='+convert(nvarchar,@FeatureID)+@Where
-				EXEC sp_executesql @QUERY
-				print @QUERY
+				EXEC (@QUERY)
 		END				
 	END
 	
@@ -1269,5 +1214,4 @@ BEGIN CATCH
  SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
-
 GO

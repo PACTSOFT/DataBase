@@ -4,9 +4,9 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spRPT_GetReport]
 	@Type [int] = 0,
-	@ReportID [int],
-	@UserID [int] = 1,
-	@RoleID [int] = 1,
+	@ReportID [bigint],
+	@UserID [bigint] = 1,
+	@RoleID [bigint] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -32,16 +32,13 @@ SET NOCOUNT ON;
 	   inner join ADM_RevenUReports SR with(nolock) on SR.lft between R.lft and R.rgt and SR.ReportID>0
 	   WHERE SR.ReportID=@ReportID AND (@UserID=1 OR @RoleID=1 OR (UserID=@UserID OR RoleID=@RoleID 
 		OR GroupID IN (SELECT GID FROM COM_Groups with(nolock) WHERE UserID=@UserID or RoleID=@RoleID)))
-		
-		SELECT * FROM [COM_APIFieldsMapping] WITH(NOLOCK) 
-		WHERE CostCenterID=50 AND Mode=@ReportID
 	END
 	ELSE IF @Type=1--Getting UnitStatus From Com_Lookup in Floor Wise Report (Status)
 	BEGIN
 		declare @XML xml,@StatusDim int,@Query nvarchar(max)
 		set @XML=(Select CustomPreferences From ADM_RevenUReports where ReportID=@ReportID)
 		set @StatusDim=0
-		select @StatusDim=X.value('StatusDimension[1]','INT')
+		select @StatusDim=X.value('StatusDimension[1]','BIGINT')
 		from @XML.nodes('XML') as Data(X)
 		if @StatusDim is not null and @StatusDim>50000
 		begin

@@ -6,7 +6,7 @@ CREATE PROCEDURE [dbo].[spCRM_SetTeam]
 	@Name [nvarchar](200),
 	@Data [nvarchar](max) = null,
 	@StatusID [int],
-	@TeamID [int],
+	@TeamID [bigint],
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
@@ -15,137 +15,185 @@ CREATE PROCEDURE [dbo].[spCRM_SetTeam]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 SET NOCOUNT ON 
-BEGIN TRANSACTION
-BEGIN TRY
-	DECLARE @Dt FLOAT, @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@HasAccess bit,
-	@Depth int,@ParentID INT,@SelectedIsGroup int ,@IsGroup int ,@SelectedNodeID INT, @XML XML
+	BEGIN TRANSACTION
+	BEGIN TRY
+	 
+  
+    DECLARE @Dt FLOAT, @lft bigint,@rgt bigint,@TempGuid nvarchar(50),@Selectedlft bigint,@Selectedrgt bigint,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsLeadCodeAutoGen bit  ,@IsIgnoreSpace bit  ,
+	@Depth int,@ParentID bigint,@SelectedIsGroup int ,@IsGroup int ,@SelectedNodeID bigint, @XML XML,@ParentCode nvarchar(200),@DetailContact int
+
+	  
 
 	--User access check 
-	SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,91,1)
-	IF @HasAccess=0
-	BEGIN
-		RAISERROR('-105',16,1)
-	END
+		SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,91,1)
+		IF @HasAccess=0
+		BEGIN
+			RAISERROR('-105',16,1)
+		END
 		
     delete from CRM_Teams where TEAMID=@TeamID
-	IF (@TeamID>0)
-		SET @TeamID=0
-	SET @Dt=convert(float,getdate())--Setting Current Date  
+   IF (@TeamID>0)
+	 SET @TeamID=0
+	 SET @Dt=convert(float,getdate())--Setting Current Date  
 	 
-	IF @TeamID= 0--------START INSERT RECORD-----------  
-	BEGIN--CREATE Case  
-  		--To Set Left,Right And Depth of Record  
-		SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
-		from CRM_Teams with(NOLOCK) where NodeID=1  
-	   
-		--IF No Record Selected or Record Doesn't Exist  
-		if(@SelectedIsGroup is null)   
-		 select @SelectedNodeID=NodeID,@SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
-		 from CRM_Teams with(NOLOCK) where ParentID =0  
-	         
-		if(@SelectedIsGroup = 1)--Adding Node Under the Group  
-		 BEGIN  
-		  UPDATE CRM_Teams SET rgt = rgt + 2 WHERE rgt > @Selectedlft;  
-		  UPDATE CRM_Teams SET lft = lft + 2 WHERE lft > @Selectedlft;  
-		  set @lft =  @Selectedlft + 1  
-		  set @rgt = @Selectedlft + 2  
-		  set @ParentID = @SelectedNodeID  
-		  set @Depth = @Depth + 1  
-		 END  
-		else if(@SelectedIsGroup = 0)--Adding Node at Same level  
-		 BEGIN  
-		  UPDATE CRM_Teams SET rgt = rgt + 2 WHERE rgt > @Selectedrgt;  
-		  UPDATE CRM_Teams SET lft = lft + 2 WHERE lft > @Selectedrgt;  
-		  set @lft =  @Selectedrgt + 1  
-		  set @rgt = @Selectedrgt + 2   
-		 END  
-		else  --Adding Root  
-		 BEGIN  
-		  set @lft =  1  
-		  set @rgt = 2   
-		  set @Depth = 0  
-		  set @ParentID =0  
-		  set @IsGroup=1  
-		 END 
+	 IF @TeamID= 0--------START INSERT RECORD-----------  
+		BEGIN--CREATE Case  
+  	  --To Set Left,Right And Depth of Record  
+				SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
+				from CRM_Teams with(NOLOCK) where NodeID=1  
+			   
+				--IF No Record Selected or Record Doesn't Exist  
+				if(@SelectedIsGroup is null)   
+				 select @SelectedNodeID=NodeID,@SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
+				 from CRM_Teams with(NOLOCK) where ParentID =0  
+			         
+				if(@SelectedIsGroup = 1)--Adding Node Under the Group  
+				 BEGIN  
+				  UPDATE CRM_Teams SET rgt = rgt + 2 WHERE rgt > @Selectedlft;  
+				  UPDATE CRM_Teams SET lft = lft + 2 WHERE lft > @Selectedlft;  
+				  set @lft =  @Selectedlft + 1  
+				  set @rgt = @Selectedlft + 2  
+				  set @ParentID = @SelectedNodeID  
+				  set @Depth = @Depth + 1  
+				 END  
+				else if(@SelectedIsGroup = 0)--Adding Node at Same level  
+				 BEGIN  
+				  UPDATE CRM_Teams SET rgt = rgt + 2 WHERE rgt > @Selectedrgt;  
+				  UPDATE CRM_Teams SET lft = lft + 2 WHERE lft > @Selectedrgt;  
+				  set @lft =  @Selectedrgt + 1  
+				  set @rgt = @Selectedrgt + 2   
+				 END  
+				else  --Adding Root  
+				 BEGIN  
+				  set @lft =  1  
+				  set @rgt = 2   
+				  set @Depth = 0  
+				  set @ParentID =0  
+				  set @IsGroup=1  
+				 END 
  
-		SELECT @TeamID=MAX(TEAMID)+1 FROM [CRM_Teams] with(NOLOCK)
-		INSERT INTO [CRM_Teams]([TeamID],[TeamName],[StatusID],[UserID],[IsOwner],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],IsParent)
-		VALUES(@TeamID,@Name,@StatusID,0,0,@Depth,1,@lft,@rgt,1,@CompanyGUID,NEWID(),@UserName,convert(float,@Dt),1)
-		
-		set @SelectedNodeID=SCOPE_IDENTITY()
+		 SELECT @TeamID=MAX(TEAMID)+1 FROM [CRM_Teams]
+	   INSERT INTO [CRM_Teams]
+           ([TeamID]
+           ,[TeamName]
+           ,[StatusID]
+           ,[UserID]
+           ,[IsOwner]
+           ,[Depth]
+           ,[ParentID]
+           ,[lft]
+           ,[rgt]
+           ,[IsGroup]
+           ,[CompanyGUID]
+           ,[GUID] 
+           ,[CreatedBy]
+           ,[CreatedDate],IsParent
+			)
+     VALUES
+           (@TeamID
+           ,@Name
+           ,@StatusID
+           ,0
+           ,0
+           ,@Depth
+           ,1
+           ,@lft
+           ,@rgt
+           ,1
+           ,@CompanyGUID
+           ,NEWID() 
+           ,@UserName
+           ,convert(float,@Dt),1)
+           set @SelectedNodeID=SCOPE_IDENTITY()
  
-	END --------END INSERT RECORD-----------  
+
+
+
+				
+		END --------END INSERT RECORD-----------  
 		
 	SET @XML=@Data
-	CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),UserID INT,isOwner int,[CompanyGUID] nvarchar(50),[GUID] nvarchar(50),[CreatedBy] nvarchar(50),[CreatedDate] float)
+	 CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1), UserID BIGINT,
+       isOwner int	  
+      ,[CompanyGUID] nvarchar(50)
+      ,[GUID]    nvarchar(50)
+      ,[CreatedBy] nvarchar(50)
+      ,[CreatedDate] float)
 
-	INSERT INTO #TBLTEMP 
-	SELECT X.value('@UserId','INT'), X.value('@IsOwner','INT'),@CompanyGUID, NewId(),@UserName,convert(float,getdate())
-	from @XML.nodes('XML/Row') as Data(X)
+	  INSERT INTO #TBLTEMP 
+	  SELECT X.value('@UserId','BIGINT'), X.value('@IsOwner','BIGINT')
+	   ,@CompanyGUID, NewId(),@UserName,convert(float,getdate())
+   from @XML.nodes('XML/Row') as Data(X)
  
-	DECLARE @I INT,@TEMPCOUNT INT
-	SELECT @I=1,@TEMPCOUNT=COUNT(*) FROM #TBLTEMP with(NOLOCK)
+  DECLARE @I INT,@TEMPCOUNT INT,@J INT 
+  SET @I=1
+  SET @J=1
+  SELECT @TEMPCOUNT=COUNT(*) FROM #TBLTEMP
  
 	set @lft =0  
 	set @rgt = 0   
 	set @Depth = 0  
 	set @ParentID =0  
 	
-	WHILE(@I<=@TEMPCOUNT)
-	BEGIN
-		--To Set Left,Right And Depth of Record  
-		SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
-		from [CRM_Teams] with(NOLOCK) where NodeID=@SelectedNodeID  
-	   
-		--IF No Record Selected or Record Doesn't Exist  
-		if(@SelectedIsGroup is null)   
-		 select @SelectedNodeID=NodeID,@SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
-		 from [CRM_Teams] with(NOLOCK) where ParentID =0  
-	         
-		if(@SelectedIsGroup = 1)--Adding Node Under the Group  
-		 BEGIN  
-		  UPDATE [CRM_Teams] SET rgt = rgt + 2 WHERE rgt > @Selectedlft;  
-		  UPDATE [CRM_Teams] SET lft = lft + 2 WHERE lft > @Selectedlft;  
-		  set @lft =  @Selectedlft + 1  
-		  set @rgt = @Selectedlft + 2  
-		  set @ParentID = @SelectedNodeID  
-		  set @Depth = @Depth + 1  
-		 END  
-		else if(@SelectedIsGroup = 0)--Adding Node at Same level  
-		 BEGIN  
-		  UPDATE [CRM_Teams] SET rgt = rgt + 2 WHERE rgt > @Selectedrgt;  
-		  UPDATE [CRM_Teams] SET lft = lft + 2 WHERE lft > @Selectedrgt;  
-		  set @lft =  @Selectedrgt + 1  
-		  set @rgt = @Selectedrgt + 2   
-		 END  
-		else  --Adding Root  
-		 BEGIN  
-		  set @lft =  1  
-		  set @rgt = 2   
-		  set @Depth = 0  
-		  set @ParentID =0  
-		  set @IsGroup = 1  
-		 END   
+  WHILE(@I<=@TEMPCOUNT)
+  BEGIN
+    --To Set Left,Right And Depth of Record  
+				SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
+				from [CRM_Teams] with(NOLOCK) where NodeID=@SelectedNodeID  
+			   
+				--IF No Record Selected or Record Doesn't Exist  
+				if(@SelectedIsGroup is null)   
+				 select @SelectedNodeID=NodeID,@SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
+				 from [CRM_Teams] with(NOLOCK) where ParentID =0  
+			         
+				if(@SelectedIsGroup = 1)--Adding Node Under the Group  
+				 BEGIN  
+				  UPDATE [CRM_Teams] SET rgt = rgt + 2 WHERE rgt > @Selectedlft;  
+				  UPDATE [CRM_Teams] SET lft = lft + 2 WHERE lft > @Selectedlft;  
+				  set @lft =  @Selectedlft + 1  
+				  set @rgt = @Selectedlft + 2  
+				  set @ParentID = @SelectedNodeID  
+				  set @Depth = @Depth + 1  
+				 END  
+				else if(@SelectedIsGroup = 0)--Adding Node at Same level  
+				 BEGIN  
+				  UPDATE [CRM_Teams] SET rgt = rgt + 2 WHERE rgt > @Selectedrgt;  
+				  UPDATE [CRM_Teams] SET lft = lft + 2 WHERE lft > @Selectedrgt;  
+				  set @lft =  @Selectedrgt + 1  
+				  set @rgt = @Selectedrgt + 2   
+				 END  
+				else  --Adding Root  
+				 BEGIN  
+				  set @lft =  1  
+				  set @rgt = 2   
+				  set @Depth = 0  
+				  set @ParentID =0  
+				  set @IsGroup = 1  
+				 END   
 			 
-		INSERT INTO [CRM_Teams] (TeamID,TeamName,UserID,StatusID,IsOwner 				    
-			  ,[CompanyGUID]
-			  ,[GUID]    
-			  ,[CreatedBy]
-			  ,[CreatedDate]
-			  , [Depth],  
-			   [ParentID],  
-			   [lft],  
-			   [rgt],  
-			   [IsGroup]   ) 
-		SELECT @TeamID,@Name,USERID,@StatusID,isOwner,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],2,@SelectedNodeID,@lft,@rgt,0 
-		FROM #TBLTEMP WITH(nolock)   
-		WHERE  ID=@I  
+			  INSERT INTO [CRM_Teams] (
+				  TeamID,TeamName,UserID,StatusID,IsOwner 				    
+				  ,[CompanyGUID]
+				  ,[GUID]    
+				  ,[CreatedBy]
+				  ,[CreatedDate]
+				  , [Depth],  
+				   [ParentID],  
+				   [lft],  
+				   [rgt],  
+				   [IsGroup]   ) 
+				  SELECT @TeamID,@Name,USERID,@StatusID,isOwner,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],
+					2,  
+				   @SelectedNodeID,  
+				   @lft,  
+				   @rgt,  
+				   0 FROM #TBLTEMP   
+				  WHERE  ID=@I  
   
-		SET @I=@I+1
+ SET @I=@I+1
 
-	END
-	
-	drop table #TBLTEMP	   
+  END
+		   
 	COMMIT TRANSACTION
 	SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
 WHERE ErrorNumber=100 AND LanguageID=@LangID  
@@ -188,4 +236,6 @@ END CATCH
 -- ,'admin'
 -- ,1
 -- ,1
+ 
+ 
 GO

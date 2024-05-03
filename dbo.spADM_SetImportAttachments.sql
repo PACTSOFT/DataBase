@@ -10,7 +10,7 @@ CREATE PROCEDURE [dbo].[spADM_SetImportAttachments]
 	@IsCode [bit] = NULL,
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@RoleID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -19,7 +19,7 @@ BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;
 		--Declaration Section  
-		DECLARE @NodeID INT ,@SQL NVARCHAR(MAX),@prim NVARCHAR(300),@TABLEname NVARCHAR(300),@dt Float
+		DECLARE @NodeID bigint ,@SQL NVARCHAR(MAX),@prim NVARCHAR(300),@TABLEname NVARCHAR(300),@dt Float
 		
 		select @dt=convert(float,getdate())
 		select @TABLEname=TableName,@prim=PrimaryKey from adm_features WITH(NOLOCK) where FeatureID=@CCID
@@ -33,7 +33,7 @@ SET NOCOUNT ON;
 				set @SQL=@SQL+'AccountCode='
 			else if(@CCID=73)
 				set @SQL=@SQL+'CaseNumber='
-			else if(@CCID=86 or @CCID=92 or @CCID=93 or @CCID > 50000)
+			else if(@CCID=86 or @CCID=92 or @CCID=93 or @CCID between 50000 and 50050)
 				set @SQL=@SQL+'Code='	
 			else if(@CCID=94)
 				set @SQL=@SQL+'TenantCode='
@@ -54,7 +54,7 @@ SET NOCOUNT ON;
 				set @SQL=@SQL+'CaseNumber='
 			else if(@CCID=86)
 				set @SQL=@SQL+'Company='
-			else if(@CCID=92 or @CCID=93 or @CCID > 50000)
+			else if(@CCID=92 or @CCID=93 or @CCID between 50000 and 50050)
 				set @SQL=@SQL+'Name='	
 			else if(@CCID=94)
 				set @SQL=@SQL+'FirstName='
@@ -64,7 +64,7 @@ SET NOCOUNT ON;
 			set @SQL=@SQL+''''+@Name +''''	
 		END	
 		
-		EXEC sp_executesql @SQL,N'@NodeID INT OUTPUT',@NodeID output
+		EXEC sp_executesql @SQL,N'@NodeID bigint OUTPUT',@NodeID output
 		
 		exec [spCOM_SetAttachments] @NodeID,@CCID,@AttXML,@UserName,@dt
  		

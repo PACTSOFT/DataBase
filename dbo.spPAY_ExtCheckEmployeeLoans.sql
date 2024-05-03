@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_ExtCheckEmployeeLoans]
-	@COSTCENTERID [int],
-	@DOCID [int],
+	@COSTCENTERID [bigint],
+	@DOCID [bigint],
 	@UserID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -39,4 +39,5 @@ SET NOCOUNT OFF;
 END
 
 ----spPAY_ExtCheckEmployeeLoans 40056,24680,1,1
+
 GO

@@ -3,25 +3,20 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SaveHistory]
-	@DocID [int],
+	@DocID [bigint],
 	@HistoryStatus [nvarchar](500),
 	@Ininv [bit],
 	@ReviseReason [nvarchar](max),
 	@LangID [int],
 	@UserName [nvarchar](50) = NULL,
 	@ModDate [float] = NULL,
-	@CCID [int] = 0,
-	@AP [varchar](10) = '',
-	@sysinfo [nvarchar](max) = ''
+	@CCID [int] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION      
 BEGIN TRY        
 SET NOCOUNT ON;  
 
-if(@DocID=0)
-	return @DocID
-	
 declare @NumCols nvarchar(max),@CC nvarchar(max),@txt nvarchar(max)
 set @NumCols=''
 set @CC=''
@@ -42,7 +37,7 @@ where b.name='COM_DocCCData'
 
 select @txt =@txt +a.name+',' from sys.columns a
 join sys.tables b on a.object_id=b.object_id
-where b.name='COM_DocTextData' and a.name not in('tCostCenterID','tDocumentType')
+where b.name='COM_DocTextData'
 
 
 if(@Ininv=1)
@@ -98,7 +93,7 @@ BEGIN
 		 ,[UOMConvertedQty]    
 		 ,[WorkflowID]    
 			   ,[WorkFlowStatus]    
-			   ,[WorkFlowLevel],RefCCID,RefNodeid,ReserveQuantity,DynamicInvDocDetailsID,HistoryStatus,ReviseReason,AP,SysInfo)    
+			   ,[WorkFlowLevel],RefCCID,RefNodeid,ReserveQuantity,DynamicInvDocDetailsID,HistoryStatus,ReviseReason,SysInfo)    
 	  SELECT [InvDocDetailsID]    
 		 ,[AccDocDetailsID]    
 		 ,[DocID]    
@@ -149,7 +144,7 @@ BEGIN
 		 ,[UOMConvertedQty]    
 		 ,[WorkflowID]    
 			   ,[WorkFlowStatus]    
-			   ,[WorkFlowLevel],RefCCID,RefNodeid,ReserveQuantity,DynamicInvDocDetailsID,@HistoryStatus,@ReviseReason,case when @AP='' then AP ELSE @AP END,case when @sysinfo='' then sysinfo ELSE @sysinfo END
+			   ,[WorkFlowLevel],RefCCID,RefNodeid,ReserveQuantity,DynamicInvDocDetailsID,@HistoryStatus,@ReviseReason,SysInfo
 				FROM [INV_DocDetails] a WITH(NOLOCK)
 				join COM_DOCID b WITH(NOLOCK) on a.DocID=b.id
 				 WHERE DocID=@DocID    
@@ -240,7 +235,7 @@ BEGIN
            ,[AmountFC]
            ,[WorkflowID]
            ,[WorkFlowStatus]
-           ,[WorkFlowLevel],RefCCID,RefNodeid,HistoryStatus,ReviseReason,ConvertedDate,AP,SysInfo,BankAccountID)
+           ,[WorkFlowLevel],RefCCID,RefNodeid,HistoryStatus,ReviseReason,ConvertedDate,SysInfo,BankAccountID)
   SELECT [AccDocDetailsID]
            ,[InvDocDetailsID]
            ,[DocID]
@@ -282,7 +277,7 @@ BEGIN
            ,[AmountFC]
            ,[WorkflowID]
            ,[WorkFlowStatus]
-           ,[WorkFlowLevel],RefCCID,RefNodeid,@HistoryStatus,@ReviseReason,ConvertedDate,case when @AP='' then AP ELSE @AP END,case when @sysinfo='' then sysinfo ELSE @sysinfo END,BankAccountID 
+           ,[WorkFlowLevel],RefCCID,RefNodeid,@HistoryStatus,@ReviseReason,ConvertedDate,SysInfo,BankAccountID 
            FROM [ACC_DocDetails] a WITH(NOLOCK)
            join COM_DOCID b WITH(NOLOCK) on a.DocID=b.id
              WHERE DocID=@DocID

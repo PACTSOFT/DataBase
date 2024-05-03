@@ -3,9 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_VacanctContract]
-	@ContractID [int],
+	@ContractID [bigint],
 	@VacancyDate [datetime],
-	@PostingDate [datetime],
 	@SRTXML [nvarchar](max) = NULL,
 	@VacantXML [nvarchar](max) = NULL,
 	@PenaltyXML [nvarchar](max) = NULL,
@@ -21,12 +20,11 @@ CREATE PROCEDURE [dbo].[spREN_VacanctContract]
 	@TermRemarks [nvarchar](max) = NULL,
 	@SecurityDeposit [float] = 0,
 	@action [int],
-	@RentRecID [int] = 0,
-	@LocationID [int] = 0,
-	@divisionID [int] = 0,
-	@RoleID [int] = 0,
+	@RentRecID [bigint] = 0,
+	@LocationID [bigint] = 0,
+	@divisionID [bigint] = 0,
+	@RoleID [bigint] = 0,
 	@TermPart [nvarchar](max),
-	@WID [int],
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
@@ -39,64 +37,22 @@ DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE NVARCHAR(100)
 BEGIN TRY      
 SET NOCOUNT ON;   
   
-	DECLARE @Dt float,@XML xml,@return_value int,@SNO int,@RcptCCID INT,@tempAmt float,@Prefix nvarchar(200)
-	DECLARE  @CNT INT ,  @ICNT INT,@AA XML,@DocXml nvarchar(max) ,@BillWiseXMl nvarchar(max) ,@CCNODEID INT,@Dimesion int   
-	DECLARE @PickAcc nvarchar(50) ,@penAccID INT,@AccountType xml,@level int,@maxLevel int,@StatusID int,@wfAction int
+	DECLARE @Dt float,@XML xml,@return_value int,@SNO int,@RcptCCID BIGint,@tempAmt float,@Prefix nvarchar(200)
+	DECLARE  @CNT INT ,  @ICNT INT,@AA XML,@DocXml nvarchar(max) ,@BillWiseXMl nvarchar(max) ,@CCNODEID BIGINT,@Dimesion int   
+	DECLARE @PickAcc nvarchar(50) ,@penAccID BIGINT,@AccountType xml
 	
-	SET @Dt=convert(float,getdate())--Setting Current Date 
-	if(@action=3)
-		set @StatusID =450
-	else
-		set @StatusID =480
-		
-	if(@WID>0)
-	begin
-		set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-		where WorkFlowID=@WID and  UserID =@UserID)
+	SET @Dt=convert(float,getdate())--Setting Current Date   
 
-		if(@level is null )
-			set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
-			where WorkFlowID=@WID and  RoleID =@RoleID)
-
-		if(@level is null ) 
-			set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
-
-		if(@level is null )
-			set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
-			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
-			where RoleID =@RoleID))
-
-		select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
-		
-		if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
-		begin			
-		    --set @StatusID=466
-		    if(@action=2)
-		    BEGIN
-				set @StatusID=481
-				set @wfAction=3
-		    END
-		    ELSE
-		    BEGIN
-				set @StatusID=478
-				set @wfAction=2
-			END	
-		END
-	END
-	
 	if(@action=3)
 		UPDATE REN_CONTRACT
-		SET STATUSID = @StatusID, WorkFlowID=@WID,wfAction=@wfAction,WorkFlowLevel=case when @WID>0 then @level else WorkFlowLevel end
-		 ,RefundDate = CONVERT(FLOAT , @VacancyDate),SRTAmount=@SRTAmount,RefundAmt=@RefundAmt,
+		SET STATUSID = 450 ,RefundDate = CONVERT(FLOAT , @VacancyDate),SRTAmount=@SRTAmount,RefundAmt=@RefundAmt,
 		PDCRefund=@PDCRefund,Penalty=@Penalty,Amt=@Amt,TermPayMode=@TermPayMode,TermChequeNo=@TermChequeNo,
 		TermChequeDate= CONVERT(FLOAT , @TermChequeDate),TermRemarks=@TermRemarks,SecurityDeposit=@SecurityDeposit
 		,modifieddate=@Dt,modifiedby=@UserName
 		WHERE ContractID = @ContractID or RefContractID=@ContractID
 	ELSE
 		UPDATE REN_CONTRACT
-		SET STATUSID = @StatusID, WorkFlowID=@WID,wfAction=@wfAction,WorkFlowLevel=case when @WID>0 then @level else WorkFlowLevel end
-		 ,VacancyDate = CONVERT(FLOAT , @VacancyDate),SRTAmount=@SRTAmount,RefundAmt=@RefundAmt,
+		SET STATUSID = 450 ,VacancyDate = CONVERT(FLOAT , @VacancyDate),SRTAmount=@SRTAmount,RefundAmt=@RefundAmt,
 		PDCRefund=@PDCRefund,Penalty=@Penalty,Amt=@Amt,TermPayMode=@TermPayMode,TermChequeNo=@TermChequeNo,
 		TermChequeDate= CONVERT(FLOAT , @TermChequeDate),TermRemarks=@TermRemarks,SecurityDeposit=@SecurityDeposit
 		,modifieddate=@Dt,modifiedby=@UserName
@@ -150,7 +106,7 @@ SET NOCOUNT ON;
 			end
 
 			set @Prefix=''
-			 EXEC [sp_GetDocPrefix] @DocXml,@PostingDate,@RcptCCID,@Prefix   output
+			 EXEC [sp_GetDocPrefix] @DocXml,@VacancyDate,@RcptCCID,@Prefix   output
 	
 			set @DocXml=Replace(@DocXml,'<RowHead/>','')
 			set @DocXml=Replace(@DocXml,'</DocumentXML>','')
@@ -162,7 +118,7 @@ SET NOCOUNT ON;
 			@DocID = 0,
 			@DocPrefix = @Prefix,
 			@DocNumber = N'',
-			@DocDate = @PostingDate,
+			@DocDate = @VacancyDate,
 			@DueDate = NULL,
 			@BillNo = @SNO,
 			@InvDocXML =@DocXml,
@@ -200,7 +156,7 @@ SET NOCOUNT ON;
 			Set @DocXml = convert(nvarchar(max), @VacantXML)  
 
 			set @Prefix=''
-			EXEC [sp_GetDocPrefix] @DocXml,@PostingDate,@RcptCCID,@Prefix   output
+			EXEC [sp_GetDocPrefix] @DocXml,@VacancyDate,@RcptCCID,@Prefix   output
 			
 			if exists(select * from adm_documenttypes WITH(NOLOCK) where costcenterid= @RcptCCID and isinventory=1)
 			BEGIN
@@ -213,7 +169,7 @@ SET NOCOUNT ON;
 				@DocID = 0,  
 				@DocPrefix = @Prefix,  
 				@DocNumber = 1,  
-				@DocDate = @PostingDate,  
+				@DocDate = @VacancyDate,  
 				@DueDate = NULL,  
 				@BillNo = @SNO,  
 				@InvDocXML =@DocXml,  
@@ -245,7 +201,7 @@ SET NOCOUNT ON;
 				   @DocID = 0,      
 				   @DocPrefix = @Prefix,      
 				   @DocNumber =1,      
-				   @DocDate = @PostingDate,      
+				   @DocDate = @VacancyDate,      
 				   @DueDate = NULL,      
 				   @BillNo = @SNO,      
 				   @InvDocXML = @DocXml,      
@@ -279,7 +235,7 @@ SET NOCOUNT ON;
 			where CostCenterID=95 and Name='TerminatePenaltyJV' 
 			 
 			set @Prefix=''
-			EXEC [sp_GetDocPrefix] @PenaltyXML,@PostingDate,@RcptCCID,@Prefix   output
+			EXEC [sp_GetDocPrefix] @DocXml,@VacancyDate,@RcptCCID,@Prefix   output
 
 			if exists(select * from adm_documenttypes WITH(NOLOCK) where costcenterid= @RcptCCID and isinventory=1)
 			BEGIN
@@ -292,7 +248,7 @@ SET NOCOUNT ON;
 				@DocID = 0,  
 				@DocPrefix = @Prefix,  
 				@DocNumber = 1,  
-				@DocDate = @PostingDate,  
+				@DocDate = @VacancyDate,  
 				@DueDate = NULL,  
 				@BillNo = @SNO,  
 				@InvDocXML =@PenaltyXML,  
@@ -326,7 +282,7 @@ SET NOCOUNT ON;
 				@DocID = 0,
 				@DocPrefix = @Prefix,
 				@DocNumber =1,
-				@DocDate = @PostingDate, --@TerminationDate,
+				@DocDate = @VacancyDate, --@TerminationDate,
 				@DueDate = NULL,
 				@BillNo = @SNO,
 				@InvDocXML = @PenaltyXML,
@@ -382,7 +338,7 @@ SET NOCOUNT ON;
 				@DocID = 0,
 				@DocPrefix = N'',
 				@DocNumber =1,
-				@DocDate = @PostingDate,
+				@DocDate = @VacancyDate,
 				@DueDate = NULL,
 				@BillNo = @SNO,
 				@InvDocXML = @DocXml,
@@ -434,46 +390,12 @@ SET NOCOUNT ON;
 			where contractID=@ContractID
 			
 			insert into [REN_TerminationParticulars]
-			SELECT   @ContractID,X.value ('@CCNodeID', 'INT' )
-			,X.value ('@CreditAccID', 'INT' ),X.value ('@DebitAccID', 'INT' ),X.value ('@Amount', 'float' )
+			SELECT   @ContractID,X.value ('@CCNodeID', 'BIGINT' )
+			,X.value ('@CreditAccID', 'BIGINT' ),X.value ('@DebitAccID', 'BIGINT' ),X.value ('@Amount', 'float' )
 			,X.value ('@VatPer', 'float' ),X.value ('@VatAmount', 'float' )
 			from @XML.nodes('XML/Row') as Data(X) 
 			
 		END
-		
-		 
-		if(@WID>0 and @wfAction is not null)
-		BEGIN	 
-		 
-			INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID   
-			  ,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)      
-			VALUES(95,@ContractID,@StatusID,CONVERT(FLOAT,getdate()),'',@UserID
-			  ,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
-	 
-		    if(@StatusID not in(426,427))
-			BEGIN
-				update INV_DOCDETAILS
-				set StatusID=371
-				FROM INV_DOCDETAILS a WITH(NOLOCK)
-				join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-				WHERE CONTRACTID = @ContractID  AND ISACCDOC = 0 and RefNodeID = @ContractID and b.Type=101      
-						
-				update ACC_DOCDETAILS
-				set StatusID=371
-				FROM ACC_DOCDETAILS b WITH(NOLOCK)
-				join INV_DOCDETAILS a WITH(NOLOCK) on b.INVDOCDETAILSID=a.INVDOCDETAILSID
-				join REN_CONTRACTDOCMAPPING c WITH(NOLOCK) on a.DocID=b.DocID 
-				WHERE CONTRACTID = @ContractID  AND ISACCDOC = 0 and a.RefNodeid = @ContractID   and c.Type=101
-
-				update ACC_DOCDETAILS
-				set StatusID=371
-				FROM ACC_DOCDETAILS a WITH(NOLOCK)
-				join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-				WHERE CONTRACTID = @ContractID AND ISACCDOC = 1  and RefNodeID = @ContractID and b.Type=101   
-				and not (StatusID in(369,429) and DocumentType in(14,19))
-			END	
-		END	
-	 
  	
 COMMIT TRANSACTION     
    

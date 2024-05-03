@@ -8,7 +8,7 @@ CREATE PROCEDURE [dbo].[spCRM_ConvertCampaignLead]
 	@Opportunity [bit] = 0,
 	@CompanyGUID [nvarchar](100),
 	@UserName [nvarchar](100),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -16,14 +16,14 @@ BEGIN TRANSACTION
 BEGIN TRY 
 SET NOCOUNT ON
 
-  DECLARE @Dt float,@ParentCode nvarchar(200),@LeadStatusApprove bit, @IsCodeAutoGen bit,@CodePrefix NVARCHAR(300),@CodeNumber INT
-  DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT
+  DECLARE @Dt float,@ParentCode nvarchar(200),@LeadStatusApprove bit, @IsCodeAutoGen bit,@CodePrefix NVARCHAR(300),@CodeNumber BIGINT
+  DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint
   DECLARE @SelectedIsGroup bit ,@SelectedNodeID INT,@IsGroup BIT
-  DECLARE @CampaignCode NVARCHAR(300),@Code NVARCHAR(300),@LeadID INT,@OpportunityID INT
+  DECLARE @CampaignCode NVARCHAR(300),@Code NVARCHAR(300),@LeadID BIGINT,@OpportunityID BIGINT
   DECLARE @CompanyName nvarchar(500),@Description nvarchar(500)
   DECLARE @ACOUNT INT,@I INT,@SOURCEDATA NVARCHAR(MAX),@DESTDATA NVARCHAR(MAX)
-  DECLARE @return_value int,@LinkCostCenterID INT,@DIMID INT,@UpdateSql NVARCHAR(MAX)
- create table #temp1(prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+  DECLARE @return_value int,@LinkCostCenterID INT,@DIMID BIGINT,@UpdateSql NVARCHAR(MAX)
+ create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
   
 --SELECT @CampaignCode=Code,@CompanyName=Company,@Description=Description  FROM CRM_CAMPAIGNS WHERE CAMPAIGNID=@CampaignID
 
@@ -83,8 +83,8 @@ SELECT @LeadStatusApprove=Value FROM COM_CostCenterPreferences  WITH(nolock) WHE
 		else
 		insert into #temp1
 		EXEC [spCOM_GetCodeData] 86,@SelectedNodeID,''  
-		
-		select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1 with(nolock)
+		--select * from #temp1
+		select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1
   
     END  
     
@@ -99,37 +99,39 @@ SELECT @LeadStatusApprove=Value FROM COM_CostCenterPreferences  WITH(nolock) WHE
 		
 			CREATE TABLE #TBLTEMP(ID  INT IDENTITY(1,1),BASECOLUMN NVARCHAR(300),LINKCOLUMN NVARCHAR(300))
 			INSERT INTO #TBLTEMP
-			 select l.SysColumnName, b.SysColumnName 
-			 from COM_DocumentLinkDetails dl with(nolock)
-			 left join ADM_CostCenterDef b with(nolock) on dl.CostCenterColIDBase=b.CostCenterColID
-			 left join ADM_CostCenterDef l with(nolock) on dl.CostCenterColIDLinked=l.CostCenterColID
-			where DocumentLinkDeFID in (select DocumentLinkDeFID from COM_DocumentLinkDef with(nolock) where CostCenterIDBase=88 )
+			 select 
+			 l.SysColumnName, b.SysColumnName 
+			 from COM_DocumentLinkDetails dl
+			 left join ADM_CostCenterDef b on dl.CostCenterColIDBase=b.CostCenterColID
+			 left join Com_LanguageResources C on C.ResourceID=b.ResourceID   AND C.LanguageID=1
+			 left join ADM_CostCenterDef l on dl.CostCenterColIDLinked=l.CostCenterColID
+			where DocumentLinkDeFID in (select DocumentLinkDeFID from COM_DocumentLinkDef where CostCenterIDBase=88 )
 			and l.costcenterid=86
 				 
 			
 		 
 			DELETE FROM #TBLTEMP WHERE LINKCOLUMN IN ('FirstName','Code','Mode','StatusID','MiddleName','LastName','JobTitle','Phone1','Phone2','Email','Fax','Department','SalutationID')
 		 
-		 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTEMP with(nolock)    
+		 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTEMP    
 	--FIRST INSERT INTO MAIN TABLE 
 			SET @DESTDATA=''
 			SET @SOURCEDATA=''
 			SET @OpportunityID=0
 			SET @SOURCEDATA=' INSERT INTO CRM_LEADS (ConvertFromCampaignID,Code,CodePrefix,CodeNumber,StatusID,Mode,' 
-			SET @DESTDATA='SELECT '+CONVERT(NVARCHAR(300),@CampaignID) +','''+@Code+''','''+isnull(@CodePrefix,'')+''','+CONVERT(NVARCHAR(300),isnull(@CodeNumber,0)) +',1,0,'  
+			SET @DESTDATA='(SELECT '+CONVERT(NVARCHAR(300),@CampaignID) +','''+@Code+''','''+isnull(@CodePrefix,'')+''','+CONVERT(NVARCHAR(300),isnull(@CodeNumber,0)) +',1,0,'  
 			 --MAIN TABLE 
 				WHILE @I<=@ACOUNT
 				BEGIN 
-				IF(  exists (SELECT * FROM #TBLTEMP with(nolock) WHERE ID=@I and 
+				IF(  exists (SELECT * FROM #TBLTEMP WHERE ID=@I and 
 				(BASECOLUMN NOT likE '%CCNID%' AND BASECOLUMN NOT likE '%caAlpha%' AND
 				LINKCOLUMN NOT likE '%CCNID%' AND LINKCOLUMN NOT likE '%LDAlpha%')))
 				begin
 						 
-					SET @SOURCEDATA= @SOURCEDATA + (SELECT BASECOLUMN FROM #TBLTEMP with(nolock) WHERE ID=@I) 				 
-					IF((SELECT LINKCOLUMN FROM #TBLTEMP with(nolock) WHERE ID=@I)='Company')
-						 SET @DESTDATA =@DESTDATA + 'CRM_CAMPAIGNS.'+(SELECT LINKCOLUMN FROM #TBLTEMP with(nolock) WHERE ID=@I)   
+					SET @SOURCEDATA= @SOURCEDATA + (SELECT BASECOLUMN FROM #TBLTEMP WHERE ID=@I) 				 
+					IF((SELECT LINKCOLUMN FROM #TBLTEMP WHERE ID=@I)='Company')
+						 SET @DESTDATA =@DESTDATA + 'CRM_CAMPAIGNS.'+(SELECT LINKCOLUMN FROM #TBLTEMP WHERE ID=@I)   
 					 else
-					   SET @DESTDATA= @DESTDATA + (SELECT LINKCOLUMN FROM #TBLTEMP with(nolock) WHERE ID=@I)
+					   SET @DESTDATA= @DESTDATA + (SELECT LINKCOLUMN FROM #TBLTEMP WHERE ID=@I)
 					   
 					--IF(@I<>@ACOUNT)
 					BEGIN
@@ -141,7 +143,7 @@ SELECT @LeadStatusApprove=Value FROM COM_CostCenterPreferences  WITH(nolock) WHE
 				SET @I=@I+1
 				END
 				
-				if((select COUNT(*) from  #TBLTEMP with(nolock))=0)
+				if((select COUNT(*) from  #TBLTEMP)=0)
 				begin 
 					set @SOURCEDATA =@SOURCEDATA +'Company,Date,'
 					set @DESTDATA =@DESTDATA +''''+@Code+''','+convert(nvarchar,convert(float,getdate()))+','
@@ -157,8 +159,8 @@ SELECT @LeadStatusApprove=Value FROM COM_CostCenterPreferences  WITH(nolock) WHE
 				CONVERT(NVARCHAR(300),@rgt) + ',' + CONVERT(NVARCHAR(300),@IsGroup) + ',''' + CONVERT(NVARCHAR(300),@CompanyGUID) + ''',' + 'newid()'
 				+ ',CRM_CAMPAIGNS.CreatedBy' +  ', CRM_CAMPAIGNS.createddate' 
 				
-				SET  @SOURCEDATA=@SOURCEDATA +  @DESTDATA + ' FROM CRM_CAMPAIGNS with(nolock)  
-				 WHERE CRM_CAMPAIGNS.CAMPAIGNID='+CONVERT(NVARCHAR(300),@CampaignID) 
+				SET  @SOURCEDATA=@SOURCEDATA +  @DESTDATA + ' FROM CRM_CAMPAIGNS   
+				 WHERE CRM_CAMPAIGNS.CAMPAIGNID='+CONVERT(NVARCHAR(300),@CampaignID) + ')'
 				 PRINT @SOURCEDATA
 				 
 				 EXEC (@SOURCEDATA) 
@@ -171,18 +173,18 @@ SELECT @LeadStatusApprove=Value FROM COM_CostCenterPreferences  WITH(nolock) WHE
 				 SET @DESTDATA=''
 				 SET @ACOUNT=0
 				 
-				 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTEMP with(nolock) 
+				 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTEMP 
 				 
 				 SET @SOURCEDATA=' INSERT INTO CRM_LEADSEXTENDED (LeadID,'
-				 SET @DESTDATA='SELECT '+CONVERT(NVARCHAR(300),@LEADID) +','
+				 SET @DESTDATA='(SELECT '+CONVERT(NVARCHAR(300),@LEADID) +','
 				 --EXTENDED TABLE
 				WHILE @I<=@ACOUNT
 				BEGIN 
-				IF( exists (SELECT * FROM #TBLTEMP with(nolock) WHERE ID=@I and (BASECOLUMN likE '%opAlpha%' AND LINKCOLUMN  likE '%LDAlpha%')))
+				IF( exists (SELECT * FROM #TBLTEMP WHERE ID=@I and (BASECOLUMN likE '%opAlpha%' AND LINKCOLUMN  likE '%LDAlpha%')))
 				begin
 			 
-					SET @SOURCEDATA= @SOURCEDATA + (SELECT BASECOLUMN FROM #TBLTEMP with(nolock) WHERE ID=@I) 				 
-				    SET @DESTDATA= @DESTDATA + (SELECT LINKCOLUMN FROM #TBLTEMP with(nolock) WHERE ID=@I)
+					SET @SOURCEDATA= @SOURCEDATA + (SELECT BASECOLUMN FROM #TBLTEMP WHERE ID=@I) 				 
+				    SET @DESTDATA= @DESTDATA + (SELECT LINKCOLUMN FROM #TBLTEMP WHERE ID=@I)
 					   
 				 
 					BEGIN
@@ -203,8 +205,8 @@ SELECT @LeadStatusApprove=Value FROM COM_CostCenterPreferences  WITH(nolock) WHE
 				set @SOURCEDATA=@SOURCEDATA+ ',[CreatedBy],  [CreatedDate] )'  		
 				set @DESTDATA=@DESTDATA + + ',CRM_CAMPAIGNSEXTENDED.CreatedBy' +  ', CRM_CAMPAIGNSEXTENDED.createddate' 
 				
-				SET  @SOURCEDATA=@SOURCEDATA +  @DESTDATA + ' FROM CRM_CAMPAIGNSEXTENDED with(nolock)   
-				 WHERE CRM_CAMPAIGNSEXTENDED.CAMPAIGNID='+CONVERT(NVARCHAR(300),@CampaignID) 
+				SET  @SOURCEDATA=@SOURCEDATA +  @DESTDATA + ' FROM CRM_CAMPAIGNSEXTENDED   
+				 WHERE CRM_CAMPAIGNSEXTENDED.CAMPAIGNID='+CONVERT(NVARCHAR(300),@CampaignID) + ')'
 				 PRINT @SOURCEDATA	
 		         EXEC(@SOURCEDATA)
 		       
@@ -212,19 +214,19 @@ SELECT @LeadStatusApprove=Value FROM COM_CostCenterPreferences  WITH(nolock) WHE
 				 SET @DESTDATA=''
 				 SET @ACOUNT=0
 				 
-				 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTEMP with(nolock)  
+				 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTEMP  
 				 
 			 
 				 --CCDATA TABLE
 				WHILE @I<=@ACOUNT
 				BEGIN 
 			 
-				IF( exists (SELECT * FROM #TBLTEMP with(nolock) WHERE ID=@I and  (BASECOLUMN likE '%CCNID%' AND LINKCOLUMN likE '%CCNID%') ))
+				IF( exists (SELECT * FROM #TBLTEMP WHERE ID=@I and  (BASECOLUMN likE '%CCNID%' AND LINKCOLUMN likE '%CCNID%') ))
 				begin
 				 
 			 
-					SET @SOURCEDATA= 'UPDATE COM_CCCCDATA SET '+(SELECT BASECOLUMN FROM #TBLTEMP with(nolock) WHERE ID=@I)+'=(
-					SELECT '+(SELECT LINKCOLUMN FROM #TBLTEMP with(nolock) WHERE ID=@I)+' FROM COM_CCCCDATA WITH(NOLOCK) WHERE COSTCENTERID=88 AND 
+					SET @SOURCEDATA= 'UPDATE COM_CCCCDATA SET '+(SELECT BASECOLUMN FROM #TBLTEMP WHERE ID=@I)+'=(
+					SELECT '+(SELECT LINKCOLUMN FROM #TBLTEMP WHERE ID=@I)+' FROM COM_CCCCDATA WHERE COSTCENTERID=88 AND 
 					NODEID='+CONVERT(NVARCHAR,@CampaignID) +') WHERE COSTCENTERID=86 AND [NodeID]='+CONVERT(NVARCHAR,@OpportunityID)  
 				    EXEC(@SOURCEDATA)
 				    
@@ -235,14 +237,23 @@ SELECT @LeadStatusApprove=Value FROM COM_CostCenterPreferences  WITH(nolock) WHE
 				SET @I=@I+1
 				END
 				 
+		       
+    
+    
+    
     
 	  	 IF(@LEADID>0)
 		 BEGIN
 			 
 	         update CRM_LEADS set ConvertFromCampaignID=@CampaignID where leadID=@leadID
-
+	         
+    --        	IF @LeadStatusApprove IS NOT NULL AND @LeadStatusApprove=1 
+				--BEGIN  
+		 	--		UPDATE CRM_LEADS SET IsApproved=1, ApprovedDate=CONVERT(float,getdate()),ApprovedBy=@UserName
+		 	--		 where Leadid=@LeadID 
+				--end
 			SELECT @LinkCostCenterID=isnull([Value],0) FROM COM_CostCenterPreferences WITH(NOLOCK) 
-			WHERE FeatureID=86 AND [Name]='LinkDimension'
+			WHERE FeatureID=86 AND [Name]='LeadLinkDimension'
  
 			IF @LinkCostCenterID>0
 			BEGIN
@@ -263,15 +274,15 @@ SELECT @LeadStatusApprove=Value FROM COM_CostCenterPreferences  WITH(nolock) WHE
 					  
 					
 					  
-					  IF(EXISTS(SELECT VALUE FROM COM_COSTCENTERPREFERENCES with(nolock) WHERE COSTCENTERID=86 AND NAME='LinkDimension'))
+					  IF(EXISTS(SELECT VALUE FROM COM_COSTCENTERPREFERENCES WHERE COSTCENTERID=86 AND NAME='LEADLINKDIMENSION'))
 					  BEGIN
 							
 							SET @DIMID=0
-							SELECT @DIMID=VALUE-50000 FROM COM_COSTCENTERPREFERENCES with(nolock) WHERE COSTCENTERID=86 AND NAME='LinkDimension'
+							SELECT @DIMID=VALUE-50000 FROM COM_COSTCENTERPREFERENCES WHERE COSTCENTERID=86 AND NAME='LEADLINKDIMENSION'
 							IF(@DIMID>0)
 							BEGIN
 									SET @UpdateSql=' UPDATE COM_CCCCDATA SET CCNID'+CONVERT(NVARCHAR(30),@DIMID)+'=
-									(SELECT CCLEADID FROM CRM_LEADS with(nolock) WHERE LEADID='+convert(nvarchar,@leadID) + ') 
+									(SELECT CCLEADID FROM CRM_LEADS WHERE LEADID='+convert(nvarchar,@leadID) + ') 
 													WHERE NodeID = '+convert(nvarchar,@leadID) + ' AND CostCenterID = 86'
 									  exec(@UpdateSql)  
 							END
@@ -336,7 +347,7 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 		insert into #temp1
 		EXEC [spCOM_GetCodeData] 89,@SelectedNodeID,''  
 		--select * from #temp1
-		select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1 with(nolock)
+		select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1
     END  
     
   ---CHECKING AUTO GENERATE CODE
@@ -352,35 +363,40 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 			INSERT INTO #TBLTMP
 			 select 
 			 l.SysColumnName, b.SysColumnName 
-			 from COM_DocumentLinkDetails dl WITH(nolock)
-			 left join ADM_CostCenterDef b WITH(nolock) on dl.CostCenterColIDBase=b.CostCenterColID
-			 left join ADM_CostCenterDef l WITH(nolock) on dl.CostCenterColIDLinked=l.CostCenterColID
-			where DocumentLinkDeFID in (select DocumentLinkDeFID from COM_DocumentLinkDef WITH(nolock) where CostCenterIDBase=88   )
+			 from COM_DocumentLinkDetails dl
+			 left join ADM_CostCenterDef b on dl.CostCenterColIDBase=b.CostCenterColID
+			 left join Com_LanguageResources C on C.ResourceID=b.ResourceID   AND C.LanguageID=1
+			 left join ADM_CostCenterDef l on dl.CostCenterColIDLinked=l.CostCenterColID
+			where DocumentLinkDeFID in (select DocumentLinkDeFID from COM_DocumentLinkDef where CostCenterIDBase=88   )
 			and l.costcenterid=89
 				 
 			
+			--DECLARE @ACOUNT INT,@I INT,@SOURCEDATA NVARCHAR(MAX),@DESTDATA NVARCHAR(MAX)
+			
+			
+		 
 			DELETE FROM #TBLTMP WHERE LINKCOLUMN IN ('FirstName','Code','StatusID','MiddleName','LastName','JobTitle','Phone1','Phone2','Email','Fax','Department','SalutationID')
 			
-		 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTMP with(nolock)    
+		 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTMP    
 	--FIRST INSERT INTO MAIN TABLE 
 			SET @DESTDATA=''
 			SET @SOURCEDATA=''
 			SET @OpportunityID=0
 			SET @SOURCEDATA=' INSERT INTO crm_opportunities (DetailsContactID,ConvertFromCampaignID,Code,CodePrefix,CodeNumber,StatusID,' 
-			SET @DESTDATA='SELECT 1,'+CONVERT(NVARCHAR(300),@CampaignID) +','''+@Code+''','''+isnull(@CodePrefix,'')+''','+CONVERT(NVARCHAR(300),isnull(@CodeNumber,0)) +',1,'  
+			SET @DESTDATA='(SELECT 1,'+CONVERT(NVARCHAR(300),@CampaignID) +','''+@Code+''','''+isnull(@CodePrefix,'')+''','+CONVERT(NVARCHAR(300),isnull(@CodeNumber,0)) +',1,'  
 			 --MAIN TABLE 
 				WHILE @I<=@ACOUNT
 				BEGIN
 				
-				IF(  exists (SELECT * FROM #TBLTMP with(nolock) WHERE ID=@I and (BASECOLUMN NOT likE '%CCNID%' AND BASECOLUMN NOT likE '%opAlpha%' AND
+				IF(  exists (SELECT * FROM #TBLTMP WHERE ID=@I and (BASECOLUMN NOT likE '%CCNID%' AND BASECOLUMN NOT likE '%opAlpha%' AND
 				LINKCOLUMN NOT likE '%CCNID%' AND LINKCOLUMN NOT likE '%LDAlpha%')))
 				begin
 				 
-					SET @SOURCEDATA= @SOURCEDATA + (SELECT BASECOLUMN FROM #TBLTMP with(nolock) WHERE ID=@I) 				 
-					IF((SELECT LINKCOLUMN FROM #TBLTMP with(nolock) WHERE ID=@I)='Company')
-						 SET @DESTDATA =@DESTDATA + 'CRM_CAMPAIGNS.'+(SELECT LINKCOLUMN FROM #TBLTMP with(nolock) WHERE ID=@I)   
+					SET @SOURCEDATA= @SOURCEDATA + (SELECT BASECOLUMN FROM #TBLTMP WHERE ID=@I) 				 
+					IF((SELECT LINKCOLUMN FROM #TBLTMP WHERE ID=@I)='Company')
+						 SET @DESTDATA =@DESTDATA + 'CRM_CAMPAIGNS.'+(SELECT LINKCOLUMN FROM #TBLTMP WHERE ID=@I)   
 					 else
-					   SET @DESTDATA= @DESTDATA + (SELECT LINKCOLUMN FROM #TBLTMP with(nolock) WHERE ID=@I)
+					   SET @DESTDATA= @DESTDATA + (SELECT LINKCOLUMN FROM #TBLTMP WHERE ID=@I)
 					   
 					--IF(@I<>@ACOUNT)
 					BEGIN
@@ -403,8 +419,8 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 				CONVERT(NVARCHAR(300),@rgt) + ',' + CONVERT(NVARCHAR(300),@IsGroup) + ',''' + CONVERT(NVARCHAR(300),@CompanyGUID) + ''',' + 'newid()'
 				+ ',CRM_CAMPAIGNS.CreatedBy' +  ', CRM_CAMPAIGNS.createddate' 
 				
-				SET  @SOURCEDATA=@SOURCEDATA +  @DESTDATA + ' FROM CRM_CAMPAIGNS with(nolock)   
-				 WHERE CRM_CAMPAIGNS.CAMPAIGNID='+CONVERT(NVARCHAR(300),@CampaignID) 
+				SET  @SOURCEDATA=@SOURCEDATA +  @DESTDATA + ' FROM CRM_CAMPAIGNS   
+				 WHERE CRM_CAMPAIGNS.CAMPAIGNID='+CONVERT(NVARCHAR(300),@CampaignID) + ')'
 				 PRINT @SOURCEDATA
 				 
 				 EXEC (@SOURCEDATA) 
@@ -417,18 +433,18 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 				 SET @DESTDATA=''
 				 SET @ACOUNT=0
 				 
-				 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTMP with(nolock) 
+				 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTMP 
 				 
 				 SET @SOURCEDATA=' INSERT INTO crm_opportunitiesEXTENDED (OpportunityID,'
-				 SET @DESTDATA='SELECT '+CONVERT(NVARCHAR(300),@OpportunityID) +','
+				 SET @DESTDATA='(SELECT '+CONVERT(NVARCHAR(300),@OpportunityID) +','
 				 --EXTENDED TABLE
 				WHILE @I<=@ACOUNT
 				BEGIN 
-				IF( exists (SELECT * FROM #TBLTMP with(nolock) WHERE ID=@I and (BASECOLUMN likE '%opAlpha%' AND LINKCOLUMN  likE '%LDAlpha%')))
+				IF( exists (SELECT * FROM #TBLTMP WHERE ID=@I and (BASECOLUMN likE '%opAlpha%' AND LINKCOLUMN  likE '%LDAlpha%')))
 				begin
 			 
-					SET @SOURCEDATA= @SOURCEDATA + (SELECT BASECOLUMN FROM #TBLTMP with(nolock) WHERE ID=@I) 				 
-				    SET @DESTDATA= @DESTDATA + (SELECT LINKCOLUMN FROM #TBLTMP with(nolock) WHERE ID=@I)
+					SET @SOURCEDATA= @SOURCEDATA + (SELECT BASECOLUMN FROM #TBLTMP WHERE ID=@I) 				 
+				    SET @DESTDATA= @DESTDATA + (SELECT LINKCOLUMN FROM #TBLTMP WHERE ID=@I)
 					   
 				 
 					BEGIN
@@ -449,8 +465,8 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 				set @SOURCEDATA=@SOURCEDATA+ ',[CreatedBy],  [CreatedDate] )'  		
 				set @DESTDATA=@DESTDATA + + ',CRM_CAMPAIGNSEXTENDED.CreatedBy' +  ', CRM_CAMPAIGNSEXTENDED.createddate' 
 				
-				SET  @SOURCEDATA=@SOURCEDATA +  @DESTDATA + ' FROM CRM_CAMPAIGNSEXTENDED with(nolock)   
-				 WHERE CRM_CAMPAIGNSEXTENDED.CAMPAIGNID='+CONVERT(NVARCHAR(300),@CampaignID) 
+				SET  @SOURCEDATA=@SOURCEDATA +  @DESTDATA + ' FROM CRM_CAMPAIGNSEXTENDED   
+				 WHERE CRM_CAMPAIGNSEXTENDED.CAMPAIGNID='+CONVERT(NVARCHAR(300),@CampaignID) + ')'
 				 PRINT @SOURCEDATA	
 		         EXEC(@SOURCEDATA)
 		       
@@ -458,19 +474,19 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 				 SET @DESTDATA=''
 				 SET @ACOUNT=0
 				 
-				 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTMP with(nolock)  
+				 SELECT @I=1,@ACOUNT=COUNT(*) FROM #TBLTMP  
 				 
 			 
-			--CCDATA TABLE
-			WHILE @I<=@ACOUNT
-			BEGIN 
+				 --CCDATA TABLE
+				WHILE @I<=@ACOUNT
+				BEGIN 
 			 
-				IF( exists (SELECT * FROM #TBLTMP with(nolock) WHERE ID=@I and  (BASECOLUMN likE '%CCNID%' AND LINKCOLUMN likE '%CCNID%') ))
+				IF( exists (SELECT * FROM #TBLTMP WHERE ID=@I and  (BASECOLUMN likE '%CCNID%' AND LINKCOLUMN likE '%CCNID%') ))
 				begin
 				 
 			 
-					SET @SOURCEDATA= 'UPDATE COM_CCCCDATA SET '+(SELECT BASECOLUMN FROM #TBLTMP with(nolock) WHERE ID=@I)+'=(
-					SELECT '+(SELECT LINKCOLUMN FROM #TBLTMP with(nolock) WHERE ID=@I)+' FROM COM_CCCCDATA with(nolock) WHERE COSTCENTERID=88 AND 
+					SET @SOURCEDATA= 'UPDATE COM_CCCCDATA SET '+(SELECT BASECOLUMN FROM #TBLTMP WHERE ID=@I)+'=(
+					SELECT '+(SELECT LINKCOLUMN FROM #TBLTMP WHERE ID=@I)+' FROM COM_CCCCDATA WHERE COSTCENTERID=88 AND 
 					NODEID='+CONVERT(NVARCHAR,@CampaignID) +') WHERE COSTCENTERID=89 AND [NodeID]='+CONVERT(NVARCHAR,@OpportunityID)  
 				    EXEC(@SOURCEDATA)
 				    
@@ -479,8 +495,13 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 				 
 				end	  
 				SET @I=@I+1
-			END
+				END
 				 
+		       
+    
+    
+    
+    
 	  	 IF(@OpportunityID>0)
 		 BEGIN
 			 
@@ -488,7 +509,7 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 	         
             --DECLARE @return_value int,@LinkCCID INT
 			SELECT @LinkCostCenterID=isnull([Value],0) FROM COM_CostCenterPreferences WITH(NOLOCK) 
-			WHERE FeatureID=89 AND [Name]='LinkDimension'
+			WHERE FeatureID=89 AND [Name]='OppLinkDimension'
  
 			IF @LinkCostCenterID>0
 			BEGIN
@@ -509,15 +530,15 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 					  
 					
 					  
-					  IF(EXISTS(SELECT VALUE FROM COM_COSTCENTERPREFERENCES WITH(NOLOCK) WHERE COSTCENTERID=89 AND NAME='LinkDimension'))
+					  IF(EXISTS(SELECT VALUE FROM COM_COSTCENTERPREFERENCES WHERE COSTCENTERID=89 AND NAME='OPPLINKDIMENSION'))
 					  BEGIN
-							--DECLARE @DIMID INT,@UpdateSql NVARCHAR(MAX)
+							--DECLARE @DIMID BIGINT,@UpdateSql NVARCHAR(MAX)
 							SET @DIMID=0
-							SELECT @DIMID=VALUE-50000 FROM COM_COSTCENTERPREFERENCES WITH(NOLOCK) WHERE COSTCENTERID=89 AND NAME='LinkDimension'
+							SELECT @DIMID=VALUE-50000 FROM COM_COSTCENTERPREFERENCES WHERE COSTCENTERID=89 AND NAME='OPPLINKDIMENSION'
 							IF(@DIMID>0)
 							BEGIN
 									SET @UpdateSql=' UPDATE COM_CCCCDATA SET CCNID'+CONVERT(NVARCHAR(30),@DIMID)+'=
-									(SELECT CCOpportunityID FROM CRM_Opportunities WITH(NOLOCK) WHERE OpportunityID='+convert(nvarchar,@OpportunityID) + ') 
+									(SELECT CCOpportunityID FROM CRM_Opportunities WHERE OpportunityID='+convert(nvarchar,@OpportunityID) + ') 
 													WHERE NodeID = '+convert(nvarchar,@OpportunityID) + ' AND CostCenterID = 89'
 									  exec(@UpdateSql)  
 							END
@@ -530,7 +551,8 @@ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE C
 		END
    END
 	
-
+	--set notification
+	--EXEC spCOM_SetNotifEvent -1001,86,@CampaignID,@CompanyGUID,@UserName,@UserID,-1
 	 
 COMMIT TRANSACTION  
  
@@ -563,5 +585,7 @@ BEGIN CATCH
  ROLLBACK TRANSACTION
  SET NOCOUNT OFF  
  RETURN -999   
-END CATCH
+END CATCH  
+
+
 GO

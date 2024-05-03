@@ -26,80 +26,90 @@ BEGIN TRANSACTION
 BEGIN TRY 
 SET NOCOUNT ON
 
-	DECLARE @Dt float,@ParentCode nvarchar(200),@IsCodeAutoGen bit,@CodePrefix NVARCHAR(300),@CodeNumber BIGINT,@LeadStatusApprove bit
-	DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint
-	DECLARE @SelectedIsGroup bit,@SelectedNodeID INT,@IsGroup BIT,@AccountID BIGINT
-	DECLARE @CampaignID BIGINT, @Code NVARCHAR(300),@LeadID bigint,@OpportunityID BIGINT,@CustomerID BIGINT,@DetailContact BIGINT
-	create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
-	
-	SELECT @CampaignID=CampaignID  FROM CRM_Campaigns with(NOLOCK) WHERE NAME=@CAMPCODE 
+  DECLARE @Dt float,@ParentCode nvarchar(200),@IsCodeAutoGen bit,@CodePrefix NVARCHAR(300),@CodeNumber BIGINT,@LeadStatusApprove bit
+  DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint
+  DECLARE @SelectedIsGroup bit,@SelectedNodeID INT,@IsGroup BIT,@AccountID BIGINT
+  DECLARE @CAMPID BIGINT,@CampaignID BIGINT, @Code NVARCHAR(300),@LeadID bigint,@OpportunityID BIGINT,@CustomerID BIGINT,@DetailContact BIGINT
+   create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+SELECT @CAMPID=CampaignID  FROM CRM_Campaigns WHERE NAME=@CAMPCODE 
+SET @CampaignID=@CAMPID
 
-	SET @Dt=convert(float,getdate())--Setting Current Date  
-	SET @SelectedNodeID=1
+SET @Dt=convert(float,getdate())--Setting Current Date  
+  SET @SelectedNodeID=1
 
 
-	--------INSERT INTO LEADS TABLE  
-	IF (@LEad = 1)  
-	BEGIN
-		 --To Set Left,Right And Depth of Record  
-		SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
-		from CRM_Leads with(NOLOCK) where LeadID=@SelectedNodeID  
-	      
-		--IF No Record Selected or Record Doesn't Exist  
-		if(@SelectedIsGroup is null)   
-		 select @SelectedNodeID=LeadID,@SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
-		 from CRM_Leads with(NOLOCK) where ParentID =0  
-	            
-		if(@SelectedIsGroup = 1)--Adding Node Under the Group  
-		 BEGIN  
-		  UPDATE CRM_Leads SET rgt = rgt + 2 WHERE rgt > @Selectedlft;  
-		  UPDATE CRM_Leads SET lft = lft + 2 WHERE lft > @Selectedlft;  
-		  set @lft =  @Selectedlft + 1  
-		  set @rgt = @Selectedlft + 2  
-		  set @ParentID = @SelectedNodeID  
-		  set @Depth = @Depth + 1  
-		 END  
-		else if(@SelectedIsGroup = 0)--Adding Node at Same level  
-		 BEGIN  
-		  UPDATE CRM_Leads SET rgt = rgt + 2 WHERE rgt > @Selectedrgt;  
-		  UPDATE CRM_Leads SET lft = lft + 2 WHERE lft > @Selectedrgt;  
-		  set @lft =  @Selectedrgt + 1  
-		  set @rgt = @Selectedrgt + 2   
-		 END  
-		else  --Adding Root  
-		 BEGIN  
-		  set @lft =  1  
-		  set @rgt = 2   
-		  set @Depth = 0  
-		  set @ParentID =0  
-		  set @IsGroup=1  
-		 END 
-		 
-		SET @IsGroup=0 
-		SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=86 and  Name='CodeAutoGen'  
-
-		--GENERATE CODE  
-		IF @IsCodeAutoGen IS NOT NULL AND @IsCodeAutoGen=1 
-		BEGIN  
-		--CALL AUTOCODEGEN  
-			if(@SelectedNodeID is null)
-			insert into #temp1
-			EXEC [spCOM_GetCodeData] 86,1,''  
-			else
-			insert into #temp1
-			EXEC [spCOM_GetCodeData] 86,@SelectedNodeID,''  
-			--select * from #temp1
-			select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1 WITH(NOLOCK)
-			--select @AccountCode,@ParentID
-		END  
-		ELSE ---CHECKING AUTO GENERATE CODE
-		BEGIN
-			IF @Code='' OR @Code IS NULL 
-				SET @Code=@CAMPCODE
-		END
-    
+--------INSERT INTO LEADS TABLE  
+   
+	 IF (@LEad = 1)  
+   BEGIN
+     --To Set Left,Right And Depth of Record  
+    SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
+    from CRM_Leads with(NOLOCK) where LeadID=@SelectedNodeID  
+      
+    --IF No Record Selected or Record Doesn't Exist  
+    if(@SelectedIsGroup is null)   
+     select @SelectedNodeID=LeadID,@SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
+     from CRM_Leads with(NOLOCK) where ParentID =0  
+            
+    if(@SelectedIsGroup = 1)--Adding Node Under the Group  
+     BEGIN  
+      UPDATE CRM_Leads SET rgt = rgt + 2 WHERE rgt > @Selectedlft;  
+      UPDATE CRM_Leads SET lft = lft + 2 WHERE lft > @Selectedlft;  
+      set @lft =  @Selectedlft + 1  
+      set @rgt = @Selectedlft + 2  
+      set @ParentID = @SelectedNodeID  
+      set @Depth = @Depth + 1  
+     END  
+    else if(@SelectedIsGroup = 0)--Adding Node at Same level  
+     BEGIN  
+      UPDATE CRM_Leads SET rgt = rgt + 2 WHERE rgt > @Selectedrgt;  
+      UPDATE CRM_Leads SET lft = lft + 2 WHERE lft > @Selectedrgt;  
+      set @lft =  @Selectedrgt + 1  
+      set @rgt = @Selectedrgt + 2   
+     END  
+    else  --Adding Root  
+     BEGIN  
+      set @lft =  1  
+      set @rgt = 2   
+      set @Depth = 0  
+      set @ParentID =0  
+      set @IsGroup=1  
+     END 
+SET @IsGroup=0 
+SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=86 and  Name='CodeAutoGen'  
  
-		INSERT INTO CRM_Leads
+
+ --GENERATE CODE  
+    IF @IsCodeAutoGen IS NOT NULL AND @IsCodeAutoGen=1 
+    BEGIN  
+  
+	--CALL AUTOCODEGEN  
+		if(@SelectedNodeID is null)
+		insert into #temp1
+		EXEC [spCOM_GetCodeData] 86,1,''  
+		else
+		insert into #temp1
+		EXEC [spCOM_GetCodeData] 86,@SelectedNodeID,''  
+		--select * from #temp1
+		select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1
+		--select @AccountCode,@ParentID
+    END  
+   ---CHECKING AUTO GENERATE CODE
+   ELSE
+   BEGIN
+   IF @Code='' OR @Code IS NULL 
+         SET @Code=@CAMPCODE
+   END
+    
+    
+  --  IF EXISTS( SELECT CODE FROM CRM_LEADS WHERE CODE=@Code)
+  --  BEGIN
+		--RAISERROR('-211',16,1)
+  --  END
+  --  ELSE
+	 BEGIN
+		 
+       INSERT INTO CRM_Leads
         (CodePrefix,CodeNumber 
         ,Code
         ,[Subject]
@@ -122,7 +132,7 @@ SET NOCOUNT ON
         ,[GUID]
         ,CreatedBy
         ,CreatedDate)
-		Values 
+    Values 
           (@CodePrefix,@CodeNumber  
           ,@Code
           ,@CAMPCODE
@@ -146,33 +156,34 @@ SET NOCOUNT ON
           ,@UserName
           ,convert(float,@Dt))
      
-		SET @LeadID=SCOPE_IDENTITY() 
+	 SET @LeadID=SCOPE_IDENTITY() 
 
-		INSERT INTO CRM_LeadsExtended([LeadID],[CreatedBy],[CreatedDate])  
+	   INSERT INTO CRM_LeadsExtended([LeadID],[CreatedBy],[CreatedDate])  
 		VALUES(@LeadID, @UserName, @Dt) 
 		
-		DECLARE @return_value int,@LinkCostCenterID INT
-		SELECT @LinkCostCenterID=isnull([Value],0) FROM COM_CostCenterPreferences WITH(NOLOCK) 
-		WHERE FeatureID=86 AND [Name]='LinkDimension'
+			 DECLARE @return_value int,@LinkCostCenterID INT
+			SELECT @LinkCostCenterID=isnull([Value],0) FROM COM_CostCenterPreferences WITH(NOLOCK) 
+			WHERE FeatureID=86 AND [Name]='LeadLinkDimension'
 
-		IF @LinkCostCenterID>0  AND @IsGroup=0  
-		BEGIN
-			EXEC @return_value = [dbo].[spCOM_SetCostCenter]
-				@NodeID = 0,@SelectedNodeID = 0,@IsGroup = 0,
-				@Code = @Code,
-				@Name = @CompanyName,
-				@AliasName=@CompanyName,
-				@PurchaseAccount=0,@SalesAccount=0,@StatusID=85,
-				@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
-				@CustomCostCenterFieldsQuery=NULL,@ContactsXML=NULL,@NotesXML=NULL,
-				@CostCenterID =@LinkCostCenterID,@CompanyGUID=@COMPANYGUID,@GUID='GUID',@UserName=@USERNAME,@RoleID=1,@UserID=@USERID
-				--@return_value 
-				UPDATE CRM_Leads
-				SET CCLeadID=@return_value
-				WHERE LeadID=@LeadID 
-		END    
+			IF @LinkCostCenterID>0  AND @IsGroup=0  
+			BEGIN
+				EXEC @return_value = [dbo].[spCOM_SetCostCenter]
+					@NodeID = 0,@SelectedNodeID = 0,@IsGroup = 0,
+					@Code = @Code,
+					@Name = @CompanyName,
+					@AliasName=@CompanyName,
+					@PurchaseAccount=0,@SalesAccount=0,@StatusID=85,
+					@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
+					@CustomCostCenterFieldsQuery=NULL,@ContactsXML=NULL,@NotesXML=NULL,
+					@CostCenterID =@LinkCostCenterID,@CompanyGUID=@COMPANYGUID,@GUID='GUID',@UserName=@USERNAME,@RoleID=1,@UserID=@USERID
+					--@return_value 
+					UPDATE CRM_Leads
+					SET CCLeadID=@return_value
+					WHERE LeadID=@LeadID 
+					
+			END    
 		
-		insert into CRM_CONTACTS
+		  insert into CRM_CONTACTS
           (FeatureID,FeaturePK,
            FirstName,
            MiddleName,
@@ -217,37 +228,56 @@ SET NOCOUNT ON
            ,CompanyGUID
            ,GUID
            ,CreatedBy
-           ,CreatedDate 
-        FROM CRM_CampaignResponse with(nolock) WHERE CampaignResponseID=@ResponseID
+           ,CreatedDate FROM CRM_CampaignResponse WHERE CampaignResponseID=@ResponseID
+    
+    
+   INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[Guid],[CreatedBy],[CreatedDate])
+     VALUES(86,@LeadID,newid(),  @UserName, @Dt) 
 
-		INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[Guid],[CreatedBy],[CreatedDate])
-		VALUES(86,@LeadID,newid(),  @UserName, @Dt) 
 
-		--INSERT PRIMARY CONTACT  
-		INSERT  [COM_Contacts]([AddressTypeID],[FeatureID],[FeaturePK],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate])  
-		VALUES(1,86,@LeadID,@CompanyGUID,NEWID(),@UserName,@Dt)  
-		
-		INSERT INTO COM_ContactsExtended(ContactID,[CreatedBy],[CreatedDate])
-		VALUES(SCOPE_IDENTITY(), @UserName, convert(float,getdate())) 
+      --INSERT PRIMARY CONTACT  
+    INSERT  [COM_Contacts]  
+    ([AddressTypeID]  
+    ,[FeatureID]  
+    ,[FeaturePK]  
+    ,[CompanyGUID]  
+    ,[GUID]   
+    ,[CreatedBy]  
+    ,[CreatedDate]  
+    )  
+    VALUES  
+    (1  
+    ,86  
+    ,@LeadID  
+    ,@CompanyGUID  
+    ,NEWID()  
+    ,@UserName,@Dt  
+    )  
+    INSERT INTO COM_ContactsExtended(ContactID,[CreatedBy],[CreatedDate])
+			 	VALUES(SCOPE_IDENTITY(), @UserName, convert(float,getdate())) 
 			 	
-		UPDATE  CRM_CampaignResponse SET ConvertedLeadID=@LeadID WHERE CampaignResponseID=@ResponseID
-		
-		DECLARE @SELECTEDCUSTOMERID INT
-		SELECT @SELECTEDCUSTOMERID=ISNULL(CustomerID,0) FROM CRM_CampaignResponse with(nolock) WHERE CampaignResponseID=@ResponseID
-		IF(@SELECTEDCUSTOMERID>0)
-		BEGIN 
-			UPDATE CRM_Leads SET Mode=3,SelectedModeID=@SELECTEDCUSTOMERID WHERE LeadID=@LeadID
-		END
+	UPDATE  CRM_CampaignResponse SET ConvertedLeadID=@LeadID WHERE CampaignResponseID=@ResponseID
+	
+	DECLARE @SELECTEDCUSTOMERID INT
+	SELECT @SELECTEDCUSTOMERID=ISNULL(CustomerID,0) FROM CRM_CampaignResponse WHERE CampaignResponseID=@ResponseID
+	IF(@SELECTEDCUSTOMERID>0)
+	BEGIN 
+		UPDATE CRM_Leads SET Mode=3,SelectedModeID=@SELECTEDCUSTOMERID WHERE LeadID=@LeadID
+	END
 	  
-		IF exists(select * from  dbo.ADM_FeatureActionrolemap with(nolock) where RoleID=@RoleID and FeatureActionID=4829)
+	   IF exists(select * from  dbo.ADM_FeatureActionrolemap with(nolock) where RoleID=@RoleID and FeatureActionID=4829)
 		BEGIN  
 		 	UPDATE CRM_LEADS SET IsApproved=1, ApprovedDate=CONVERT(float,getdate()),ApprovedBy=@UserName
 		 	 where Leadid=@LeadID 
 		end
+	  
+	  
+    
+    END 
    END
     
 -------------INSERT INTO CUSTOMERS TABLE
-IF  EXISTS (SELECT * FROM CRM_CampaignResponse with(nolock)   WHERE CampaignResponseID=@ResponseID AND CustomerID=0)
+IF  EXISTS (SELECT * FROM CRM_CampaignResponse   WHERE CampaignResponseID=@ResponseID AND CustomerID=0)
 BEGIN
 	 IF(@Customer=1)
  
@@ -288,19 +318,19 @@ BEGIN
       set @ParentID =0
       set @IsGroup=1
      END
-	 SET @IsGroup=0
-	 SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=83 and  Name='CodeAutoGen'  
+ SET @IsGroup=0
+ SELECT @IsCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=83 and  Name='CodeAutoGen'  
     --GENERATE CODE
     IF @IsCodeAutoGen IS NOT NULL AND @IsCodeAutoGen=1 
     BEGIN
      	if(@SelectedNodeID is null)
-			insert into #temp1
-			EXEC [spCOM_GetCodeData] 83,1,''  
+		insert into #temp1
+		EXEC [spCOM_GetCodeData] 83,1,''  
 		else
-			insert into #temp1
-			EXEC [spCOM_GetCodeData] 83,@SelectedNodeID,''  
+		insert into #temp1
+		EXEC [spCOM_GetCodeData] 83,@SelectedNodeID,''  
 		--select * from #temp1
-		select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1 WITH(NOLOCK)
+		select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1
 		 
      
     END
@@ -310,7 +340,13 @@ BEGIN
          SET @Code=@ContactName
     END
      
-
+ 
+ --IF EXISTS(SELECT CUSTOMERNAME FROM [CRM_Customer] WHERE CUSTOMERNAME=@ContactName)
+ --   BEGIN
+	--	RAISERROR('-211',16,1)
+ --   END
+ --  ELSE
+	 BEGIN
     -- Insert statements for procedure here
     INSERT INTO [CRM_Customer]
        (CodePrefix,CodeNumber,[CustomerCode],
@@ -354,33 +390,122 @@ BEGIN
     --To get inserted record primary key
     SET @CustomerID=SCOPE_IDENTITY()
   
-	--Handling of Extended Table
+ --Handling of Extended Table
     INSERT INTO [CRM_CustomerExtended]([CustomerID],[CreatedBy],[CreatedDate])
     VALUES(@CustomerID, @UserName, @Dt)
     
     -- Handling of CostCenter Costcenters Extrafields Table
  	INSERT INTO COM_CCCCData ([NodeID],CostCenterID, [CreatedBy],[CreatedDate], [CompanyGUID],[GUID])
-	VALUES(@CustomerID,83, @UserName, @Dt, @CompanyGUID,newid())
+	  VALUES(@CustomerID,83, @UserName, @Dt, @CompanyGUID,newid())
 
-	SET @CustomersID=@CustomerID
+SET @CustomersID=@CustomerID
 
-	UPDATE  CRM_CampaignResponse SET CustomerID=@CustomersID WHERE CampaignResponseID=@ResponseID
+ UPDATE  CRM_CampaignResponse SET CustomerID=@CustomersID WHERE CampaignResponseID=@ResponseID
 
-	insert into com_contacts(ContactTypeID,AddressTypeID,FeatureID,FeaturePK,FirstName,SalutationID,Company,StatusID,Phone1,Email1,Fax,Department,IsVisible,
-				  [Description],Depth,ParentID,CompanyGUID,[GUID],CreatedBy,CreatedDate)
-		   values(54,2,83,@CustomersID,@ContactName,47,@CompanyName,403,@Phone,@Email, @Fax,1,0,
-				 @Description,@Depth,@ParentID,@CompanyGUID,newid(),@UserName,convert(float,@Dt))
+insert into com_contacts
+				 (ContactTypeID,
+				  AddressTypeID,
+				  FeatureID,
+				  FeaturePK,
+				  FirstName,
+				  MiddleName,
+				  LastName,
+				  SalutationID,
+				  JobTitle,
+				  Company,
+				  StatusID,
+				  Phone1,
+				  Phone2,
+				  Email1,
+				  Fax,
+				  Department,
+				  RoleLookUpID,
+				  Address1,
+				  Address2,
+				  Address3,
+				  City,
+				  State,
+				  Zip,
+				  Country,
+				  Gender,
+				  Birthday,
+				  Anniversary,
+				  PreferredID,
+				  PreferredName,
+				  IsEmailOn,
+				  IsBulkEmailOn,
+				  IsMailOn,
+				  IsPhoneOn,
+				  IsFaxOn,
+				  IsVisible,
+				  Description,
+				  Depth,
+				  ParentID,
+				  lft,
+				  rgt,
+				  IsGroup,
+				  CompanyGUID,
+				  GUID,
+				  CreatedBy,
+				  CreatedDate)
+		   values
+				  (54,
+				  2,83,@CustomersID,
+				  @ContactName,
+				  null,
+				  null,
+				  47,
+				  null,
+				  @CompanyName,
+				  403,
+				  @Phone,
+				  null,
+				  @Email,
+				  @Fax,
+				  1,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  null,
+				  0,
+				 @Description,
+				 @Depth,
+				 @ParentID,
+				 null,
+				 null,
+				 null,
+				 @CompanyGUID,
+				 newid(),
+				 @UserName,
+				 convert(float,@Dt))
 
-	set @DetailContact=scope_identity()
+			set @DetailContact=scope_identity()
 			
-	IF NOT EXISTS (SELECT * FROM COM_ContactsExtended with(nolock) WHERE ContactID=@DetailContact)
+				IF(NOT EXISTS (SELECT * FROM COM_ContactsExtended WHERE ContactID=@DetailContact))
 		INSERT INTO COM_ContactsExtended(ContactID,[CreatedBy],[CreatedDate])
-		VALUES(@DetailContact, @UserName, convert(float,getdate()))
+			 	VALUES(@DetailContact, @UserName, convert(float,getdate()))
 
 
-	IF NOT EXISTS (SELECT * FROM COM_CCCCDATA with(nolock) WHERE [CostCenterID]=65 AND [NodeID]=@DetailContact)
-		INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[Guid],[CreatedBy],[CreatedDate])
-		VALUES(65,@DetailContact,newid(),  @UserName, @Dt)   
+	IF(NOT EXISTS (SELECT * FROM COM_CCCCDATA WHERE [CostCenterID]=65 AND [NodeID]=@DetailContact))
+		 INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[Guid],[CreatedBy],[CreatedDate])
+			   VALUES(65,@DetailContact,newid(),  @UserName, @Dt)   
+	  
+    END
+
 END
 END         
 COMMIT TRANSACTION  
@@ -414,5 +539,6 @@ BEGIN CATCH
  ROLLBACK TRANSACTION
  SET NOCOUNT OFF  
  RETURN -999   
-END CATCH
+END CATCH  
+
 GO

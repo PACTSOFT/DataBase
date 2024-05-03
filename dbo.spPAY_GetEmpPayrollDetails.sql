@@ -3,12 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_GetEmpPayrollDetails]
-	@EmpID [int],
+	@EmpID [bigint],
 	@PayrollMonth [datetime],
 	@PayrollStart [datetime],
 	@PayrollEnd [datetime],
-	@UserID [int],
-	@RoleID [int],
+	@UserID [bigint],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -85,7 +85,7 @@ BEGIN
 	AND NodeID=(Select '+@Val2+' From COM_CCCCData WITH(NOLOCK) 
 				WHERE CostcenterID=50051 AND NodeID='+CONVERT(NVARCHAR,@EmpID)+' ) '
 	PRINT @SQL
-	EXEC sp_executesql @SQL
+	EXEC(@SQL)
 	
 END
 ELSE
@@ -139,7 +139,7 @@ BEGIN
 	SET @SQL=@SQL+ @Qry
 END
 PRINT @SQL
-EXEC sp_executesql @SQL
+EXEC (@SQL)
 
 --6-- ALREADY PAYROLL PROCESSED DATA
 SELECT e.Status as DocStatus,* FROM INV_DocDetails a WITH(NOLOCK) 

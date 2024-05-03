@@ -5,16 +5,15 @@ GO
 CREATE PROCEDURE [dbo].[spRPT_DocsTree]
 	@DocNo [nvarchar](max),
 	@IsSummary [int],
-	@IsInv [bit],
 	@UserID [int],
 	@LangID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY  
 SET NOCOUNT ON;
-	declare @Docs nvarchar(max), @I INT,@CNT INT, @costcenterid bigint
+	declare @Docs nvarchar(max), @I INT,@CNT INT
 	DECLARE @ExeQty FLOAT,@IsInventory bit
-	CREATE TABLE #TblDocs (ID INT IDENTITY(1,1) PRIMARY KEY, CostCenterID INT,VoucherNo nvarchar(50),ParentVoucherNo nvarchar(50),VAbbr nvarchar(20),VPrefix nvarchar(40),VNumber int,DetailsID INT,LinkedDetailsID INT,DocDate float)
+	CREATE TABLE #TblDocs (ID INT IDENTITY(1,1) PRIMARY KEY, CostCenterID INT,VoucherNo nvarchar(50),ParentVoucherNo nvarchar(50),VAbbr nvarchar(20),VPrefix nvarchar(40),VNumber int,DetailsID bigint,LinkedDetailsID bigint,DocDate float)
 	set @Docs=''
 	
 if isnumeric(@DocNo)=1
@@ -22,10 +21,9 @@ begin
 	CREATE TABLE #TblDef(ID INT IDENTITY(1,1) PRIMARY KEY,CostCenterID INT,ChildName nvarchar(max),ParentCostCenterID INT,ParentName nvarchar(max))
 	
 	insert into #TblDef(CostCenterID,ChildName,ParentCostCenterID,ParentName)
-	select C.CostCenterID,C.DocumentName,P.CostCenterID,P.DocumentName 
-	from COM_DocumentLinkDef D with(nolock)
-	join ADM_DocumentTypes P with(nolock) on P.CostCenterID=D.CostCenterIDLinked
-	join ADM_DocumentTypes C with(nolock) on C.CostCenterID=D.CostCenterIDBase
+	select C.CostCenterID,C.DocumentName,P.CostCenterID,P.DocumentName from COM_DocumentLinkDef D with(nolock)
+	join ADM_DocumentTypes P on P.CostCenterID=D.CostCenterIDLinked
+	join ADM_DocumentTypes C on C.CostCenterID=D.CostCenterIDBase
 	where CostCenterIDLinked=@DocNo
 
 	--select * from @TblDeff
@@ -56,9 +54,9 @@ begin
 		INSERT INTO #TblDef(CostCenterID,ChildName,ParentCostCenterID,ParentName)
 		select C.CostCenterID,C.DocumentName,P.CostCenterID,P.DocumentName
 		from COM_DocumentLinkDef D with(nolock)
-		join ADM_DocumentTypes C with(nolock) on C.CostCenterID=D.CostCenterIDBase
+		join ADM_DocumentTypes C on C.CostCenterID=D.CostCenterIDBase
 		JOIN #TblDef T with(nolock) ON T.ParentCostCenterID=C.CostCenterID AND ID>@I and ID<=@CNT
-		join ADM_DocumentTypes P with(nolock) on P.CostCenterID=D.CostCenterIDLinked
+		join ADM_DocumentTypes P on P.CostCenterID=D.CostCenterIDLinked
 		left join #TblDef TD with(nolock) ON TD.CostCenterID=P.CostCenterID
 		where TD.CostCenterID IS NULL
 		group by P.CostCenterID,P.DocumentName,C.CostCenterID,C.DocumentName
@@ -66,8 +64,8 @@ begin
 		INSERT INTO #TblDef(CostCenterID,ChildName,ParentCostCenterID,ParentName)
 		select C.CostCenterID,C.DocumentName,P.CostCenterID,P.DocumentName
 		from COM_DocumentLinkDef D with(nolock)
-		join ADM_DocumentTypes P with(nolock) on P.CostCenterID=D.CostCenterIDLinked
-		join ADM_DocumentTypes C with(nolock) on C.CostCenterID=D.CostCenterIDBase
+		join ADM_DocumentTypes P on P.CostCenterID=D.CostCenterIDLinked
+		join ADM_DocumentTypes C on C.CostCenterID=D.CostCenterIDBase
 		JOIN #TblDef T with(nolock) ON T.CostCenterID=P.CostCenterID AND ID>@I and ID<=@CNT
 		left join #TblDef TD with(nolock) ON TD.ParentCostCenterID=P.CostCenterID
 		where TD.CostCenterID IS NULL
@@ -126,8 +124,8 @@ begin
 			FROM INV_DocDetails D with(nolock) 
 			INNER JOIN #TblDocs T with(nolock) on T.LinkedDetailsID=D.InvDocDetailsID AND T.ID>@I
 			LEFT JOIN INV_DocDetails P with(nolock) ON P.InvDocDetailsID=D.LinkedInvDocDetailsID
-			LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo collate database_default=D.VoucherNo collate database_default AND TD.ParentVoucherNo collate database_default=P.VoucherNo collate database_default-- AND TD.ID>@I
-			WHERE T.ParentVoucherNo collate database_default!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0 and D.DynamicInvDocDetailsID is null
+			LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo=D.VoucherNo AND TD.ParentVoucherNo=P.VoucherNo-- AND TD.ID>@I
+			WHERE T.ParentVoucherNo!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0 and D.DynamicInvDocDetailsID is null
 			
 			IF @CNT=(SELECT Count(*) FROM #TblDocs with(nolock))
 				BREAK			
@@ -145,7 +143,7 @@ begin
 				FROM INV_DocDetails INV with(nolock) 
 				INNER JOIN INV_DocDetails TINV with(nolock) on TINV.InvDocDetailsID=INV.LinkedInvDocDetailsID
 				INNER JOIN #TblDocs T with(nolock) ON TINV.InvDocDetailsID=T.DetailsID AND ID>@I and ID=1
-				LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo collate database_default=TINV.VoucherNo collate database_default-- AND TD.ID>@I
+				LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo=TINV.VoucherNo-- AND TD.ID>@I
 				where TD.VoucherNo IS NULL and INV.CostCenterID>0 and INV.DynamicInvDocDetailsID is null
 			ELSE
 				INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
@@ -153,7 +151,7 @@ begin
 				FROM INV_DocDetails INV with(nolock) 
 				INNER JOIN INV_DocDetails TINV with(nolock) on TINV.InvDocDetailsID=INV.LinkedInvDocDetailsID
 				INNER JOIN #TblDocs T with(nolock) ON TINV.InvDocDetailsID=T.DetailsID AND ID>@I and ID<=@CNT
-				LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo collate database_default=TINV.VoucherNo collate database_default-- AND TD.ID>@I
+				LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo=TINV.VoucherNo-- AND TD.ID>@I
 				where TD.VoucherNo IS NULL and INV.CostCenterID>0 and INV.DynamicInvDocDetailsID is null
 			
 			IF @CNT=(SELECT Count(*) FROM #TblDocs with(nolock))
@@ -175,11 +173,11 @@ begin
 		group by T.DetailsID
 			
 		select B.RefDocNo BWDocNo,T.VoucherNo ParentVoucherNo from #TblDocs T with(nolock)
-		join COM_BillWise B with(nolock) on T.VoucherNo collate database_default=B.DocNo collate database_default
+		join COM_BillWise B with(nolock) on T.VoucherNo=B.DocNo
 		where B.RefDocNo is not null
 		union
 		select B.DocNo,T.VoucherNo ParentVoucherNo from #TblDocs T with(nolock)
-		join COM_BillWise B with(nolock) on T.VoucherNo collate database_default=B.RefDocNo collate database_default
+		join COM_BillWise B with(nolock) on T.VoucherNo=B.RefDocNo
 		where B.DocNo is not null
 		order by BWDocNo
 		
@@ -218,8 +216,8 @@ begin
 				FROM INV_DocDetails D with(nolock) 
 				INNER JOIN #TblDocs T with(nolock) on T.LinkedDetailsID=D.InvDocDetailsID AND T.ID>@I
 				LEFT JOIN INV_DocDetails P with(nolock) ON P.InvDocDetailsID=D.LinkedInvDocDetailsID
-				LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo collate database_default=D.VoucherNo collate database_default AND TD.ParentVoucherNo collate database_default=P.VoucherNo collate database_default-- AND TD.ID>@I
-				WHERE T.ParentVoucherNo collate database_default!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0 and D.DynamicInvDocDetailsID is null
+				LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo=D.VoucherNo AND TD.ParentVoucherNo=P.VoucherNo-- AND TD.ID>@I
+				WHERE T.ParentVoucherNo!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0 and D.DynamicInvDocDetailsID is null
 				
 				IF @CNT=(SELECT Count(*) FROM #TblDocs with(nolock))
 					BREAK			
@@ -237,16 +235,16 @@ begin
 					SELECT distinct INV.CostCenterID,INV.VoucherNo,TINV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.InvDocDetailsID,INV.LinkedInvDocDetailsID,INV.DocDate
 					FROM INV_DocDetails INV with(nolock) 
 					INNER JOIN INV_DocDetails TINV with(nolock) on TINV.InvDocDetailsID=INV.LinkedInvDocDetailsID
-					INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID=1
-					LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo collate database_default=TINV.VoucherNo collate database_default-- AND TD.ID>@I
+					INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo=T.VoucherNo AND ID>@I and ID=1
+					LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo=TINV.VoucherNo-- AND TD.ID>@I
 					where TD.VoucherNo IS NULL and INV.CostCenterID>0 and INV.DynamicInvDocDetailsID is null
 				ELSE
 					INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
 					SELECT distinct INV.CostCenterID,INV.VoucherNo,TINV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.InvDocDetailsID,INV.LinkedInvDocDetailsID,INV.DocDate
 					FROM INV_DocDetails INV with(nolock) 
 					INNER JOIN INV_DocDetails TINV with(nolock) on TINV.InvDocDetailsID=INV.LinkedInvDocDetailsID
-					INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID<=@CNT
-					LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo collate database_default=TINV.VoucherNo collate database_default-- AND TD.ID>@I
+					INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo=T.VoucherNo AND ID>@I and ID<=@CNT
+					LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo=TINV.VoucherNo-- AND TD.ID>@I
 					where TD.VoucherNo IS NULL and INV.CostCenterID>0 and INV.DynamicInvDocDetailsID is null
 				
 				IF @CNT=(SELECT Count(*) FROM #TblDocs with(nolock))
@@ -266,6 +264,7 @@ begin
 	select D.VoucherNo FROM INV_DocDetails D with(nolock) 
 	WHERE (DocAbbr+'-'+DocPrefix+DocNumber)=@DocNo)
 	begin
+	
 		set @IsInventory=1
 		INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
 		select distinct D.CostCenterID,D.VoucherNo,P.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber,D.InvDocDetailsID,D.LinkedInvDocDetailsID,D.DocDate
@@ -276,7 +275,7 @@ begin
 		select distinct D.CostCenterID,D.VoucherNo,P.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber,D.InvDocDetailsID,D.LinkedInvDocDetailsID,D.DocDate
 		FROM INV_DocDetails D with(nolock) 
 		LEFT JOIN INV_DocDetails P with(nolock) ON P.InvDocDetailsID=D.LinkedInvDocDetailsID
-		WHERE (D.DocAbbr+'-'+D.DocPrefix+D.DocNumber)=@DocNo and D.DynamicInvDocDetailsID is null		
+		WHERE (D.DocAbbr+'-'+D.DocPrefix+D.DocNumber)=@DocNo and D.DynamicInvDocDetailsID is null
 	end
 	else
 	begin
@@ -304,14 +303,13 @@ begin
 				SET @CNT=(SELECT Count(*) FROM #TblDocs with(nolock))
 				if @CNT>10000
 					break
-					
 				INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
 				select D.CostCenterID,D.VoucherNo,P.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber,D.InvDocDetailsID,D.LinkedInvDocDetailsID,D.DocDate
 				FROM INV_DocDetails D with(nolock) 
 				INNER JOIN #TblDocs T with(nolock) on T.LinkedDetailsID=D.InvDocDetailsID AND T.ID>@I
 				LEFT JOIN INV_DocDetails P with(nolock) ON P.InvDocDetailsID=D.LinkedInvDocDetailsID
-				LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo collate database_default=D.VoucherNo collate database_default AND TD.ParentVoucherNo collate database_default=P.VoucherNo collate database_default-- AND TD.ID>@I
-				WHERE T.ParentVoucherNo collate database_default!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0 and D.DynamicInvDocDetailsID is null
+				LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo=D.VoucherNo AND TD.ParentVoucherNo=P.VoucherNo-- AND TD.ID>@I
+				WHERE T.ParentVoucherNo!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0 and D.DynamicInvDocDetailsID is null
 				
 				IF @CNT=(SELECT Count(*) FROM #TblDocs with(nolock))
 					BREAK			
@@ -325,52 +323,21 @@ begin
 				if @CNT>10000
 					break
 				IF @I=0
-				BEGIN
 					INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
 					SELECT distinct INV.CostCenterID,INV.VoucherNo,TINV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.InvDocDetailsID,INV.LinkedInvDocDetailsID,INV.DocDate
 					FROM INV_DocDetails INV with(nolock) 
 					INNER JOIN INV_DocDetails TINV with(nolock) on TINV.InvDocDetailsID=INV.LinkedInvDocDetailsID
-					INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID=1
-					LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo collate database_default=TINV.VoucherNo collate database_default-- AND TD.ID>@I
+					INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo=T.VoucherNo AND ID>@I and ID=1
+					LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo=TINV.VoucherNo-- AND TD.ID>@I
 					where TD.VoucherNo IS NULL and INV.CostCenterID>0 and INV.DynamicInvDocDetailsID is null
-
-					select @costcenterid=CostCenterID from #TblDocs WITH(NOLOCK)
-
-					IF(ISNULL(@costcenterid,0)=40065)
-					BEGIN
-						UPDATE T SET T.ParentVoucherNo=I.VoucherNo FROM INV_DOCDETAILS I WITH(NOLOCK) 
-						JOIN INV_DocDetails A WITH(NOLOCK) ON A.RefNodeid=I.InvDocDetailsID
-						JOIN #TblDocs T WITH(NOLOCK) ON T.VoucherNo=A.VoucherNo
-						WHERE A.CostCenterID=40065 AND A.RefNodeid>0
-
-						INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
-						SELECT distinct INV.CostCenterID,INV.VoucherNo,NULL,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.InvDocDetailsID,INV.LinkedInvDocDetailsID,INV.DocDate
-						FROM INV_DocDetails INV with(nolock) 
-						INNER JOIN INV_DocDetails TINV with(nolock) on TINV.RefNodeid=INV.InvDocDetailsID
-						INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID=1
-						where INV.CostCenterID>0 
-					END
-					
-					if(ISNULL(@costcenterid,0)=40072 OR ISNULL(@costcenterid,0)=40062 )
-					begin
-						INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
-						SELECT distinct INV.CostCenterID,INV.VoucherNo,TINV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.InvDocDetailsID,INV.LinkedInvDocDetailsID,INV.DocDate
-						FROM INV_DocDetails INV with(nolock) 
-						INNER JOIN INV_DocDetails TINV with(nolock) on TINV.InvDocDetailsID=INV.RefNodeid
-						INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID=1
-						where INV.CostCenterID>0 
-					end
-					
-				END
 				ELSE
 					INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
 					SELECT distinct INV.CostCenterID,INV.VoucherNo,TINV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.InvDocDetailsID,INV.LinkedInvDocDetailsID,INV.DocDate
 					FROM INV_DocDetails INV with(nolock) 
 					INNER JOIN INV_DocDetails TINV with(nolock) on TINV.InvDocDetailsID=INV.LinkedInvDocDetailsID
-					INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID<=@CNT
-					LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo collate database_default=TINV.VoucherNo collate database_default-- AND TD.ID>@I
+					INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo=T.VoucherNo AND ID>@I and ID<=@CNT
+					LEFT JOIN #TblDocs TD with(nolock) on TD.DetailsID=INV.LinkedInvDocDetailsID AND TD.ParentVoucherNo=TINV.VoucherNo-- AND TD.ID>@I
 					where TD.VoucherNo IS NULL and INV.CostCenterID>0 and INV.DynamicInvDocDetailsID is null
-					
 				
 				IF @CNT=(SELECT Count(*) FROM #TblDocs with(nolock))
 					BREAK			
@@ -389,48 +356,22 @@ begin
 				INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DocDate)
 				select D.CostCenterID,D.VoucherNo,P.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber,D.DocDate
 				FROM INV_DocDetails D with(nolock) 
-				INNER JOIN #TblDocs T with(nolock) on T.ParentVoucherNo collate database_default=D.VoucherNo collate database_default AND T.ID>@I
+				INNER JOIN #TblDocs T with(nolock) on T.ParentVoucherNo=D.VoucherNo AND T.ID>@I
 				LEFT JOIN INV_DocDetails P with(nolock) ON P.InvDocDetailsID=D.LinkedInvDocDetailsID
-				LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo collate database_default=D.VoucherNo collate database_default AND TD.ParentVoucherNo collate database_default=P.VoucherNo collate database_default-- AND TD.ID>@I
-				WHERE T.ParentVoucherNo collate database_default!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0 and D.DynamicInvDocDetailsID is null
+				LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo=D.VoucherNo AND TD.ParentVoucherNo=P.VoucherNo-- AND TD.ID>@I
+				WHERE T.ParentVoucherNo!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0 and D.DynamicInvDocDetailsID is null
 				group by D.CostCenterID,D.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber,P.VoucherNo,D.DocDate
 			
 				INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DocDate)
 				SELECT INV.CostCenterID,INV.VoucherNo,TINV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.DocDate
 				FROM INV_DocDetails INV with(nolock) 
 				INNER JOIN INV_DocDetails TINV with(nolock) on TINV.InvDocDetailsID=INV.LinkedInvDocDetailsID
-				INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID<=@CNT
-				LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo collate database_default=INV.VoucherNo collate database_default AND TD.ParentVoucherNo collate database_default=TINV.VoucherNo collate database_default-- AND TD.ID>@I
+				INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo=T.VoucherNo AND ID>@I and ID<=@CNT
+				LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo=INV.VoucherNo AND TD.ParentVoucherNo=TINV.VoucherNo-- AND TD.ID>@I
 				where TD.VoucherNo IS NULL and INV.CostCenterID>0 and INV.DynamicInvDocDetailsID is null
 				group by INV.CostCenterID,INV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,TINV.VoucherNo,INV.DocDate
 				 
-				 select @costcenterid=CostCenterID from #TblDocs WITH(NOLOCK)
-
-					IF(ISNULL(@costcenterid,0)=40065)
-					BEGIN
-						UPDATE T SET T.ParentVoucherNo=I.VoucherNo FROM INV_DOCDETAILS I WITH(NOLOCK) 
-						JOIN INV_DocDetails A WITH(NOLOCK) ON A.RefNodeid=I.InvDocDetailsID
-						JOIN #TblDocs T WITH(NOLOCK) ON T.VoucherNo=A.VoucherNo
-						WHERE A.CostCenterID=40065 AND A.RefNodeid>0
-
-						INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
-						SELECT distinct INV.CostCenterID,INV.VoucherNo,NULL,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.InvDocDetailsID,INV.LinkedInvDocDetailsID,INV.DocDate
-						FROM INV_DocDetails INV with(nolock) 
-						INNER JOIN INV_DocDetails TINV with(nolock) on TINV.RefNodeid=INV.InvDocDetailsID
-						INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID=1
-						where INV.CostCenterID>0 
-					END
-					
-					if(ISNULL(@costcenterid,0)=40072 OR ISNULL(@costcenterid,0)=40062 )
-					begin
-						INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
-						SELECT distinct INV.CostCenterID,INV.VoucherNo,TINV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.InvDocDetailsID,INV.LinkedInvDocDetailsID,INV.DocDate
-						FROM INV_DocDetails INV with(nolock) 
-						INNER JOIN INV_DocDetails TINV with(nolock) on TINV.InvDocDetailsID=INV.RefNodeid
-						INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID=1
-						where INV.CostCenterID>0 
-					end
-
+				 
 				 IF @CNT=(SELECT Count(*) FROM #TblDocs with(nolock))
 					BREAK
 					
@@ -455,8 +396,8 @@ begin
 			FROM ACC_DocDetails D with(nolock) 
 			INNER JOIN #TblDocs T with(nolock) on T.ParentVoucherNo=D.VoucherNo AND T.ID>@I
 			LEFT JOIN ACC_DocDetails P with(nolock) ON D.RefCCID=400 and P.AccDocDetailsID=D.RefNodeID
-			LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo collate database_default=D.VoucherNo collate database_default AND TD.ParentVoucherNo collate database_default=P.VoucherNo collate database_default-- AND TD.ID>@I
-			WHERE T.ParentVoucherNo collate database_default!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0
+			LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo=D.VoucherNo AND TD.ParentVoucherNo=P.VoucherNo-- AND TD.ID>@I
+			WHERE T.ParentVoucherNo!='-1' and TD.VoucherNo IS NULL and D.CostCenterID>0
 			group by D.CostCenterID,D.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber,P.VoucherNo,D.DocDate
 			/*select D.CostCenterID,D.VoucherNo,P.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber
 			FROM ACC_DocDetails D with(nolock) 
@@ -470,8 +411,8 @@ begin
 			SELECT INV.CostCenterID,INV.VoucherNo,TINV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,INV.DocDate
 			FROM ACC_DocDetails INV with(nolock) 
 			INNER JOIN ACC_DocDetails TINV with(nolock) on INV.RefCCID=400 and INV.RefNodeID=TINV.AccDocDetailsID
-			INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo collate database_default=T.VoucherNo collate database_default AND ID>@I and ID<=@CNT
-			LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo collate database_default=INV.VoucherNo collate database_default AND TD.ParentVoucherNo collate database_default=TINV.VoucherNo collate database_default-- AND TD.ID>@I
+			INNER JOIN #TblDocs T with(nolock) ON TINV.VoucherNo=T.VoucherNo AND ID>@I and ID<=@CNT
+			LEFT JOIN #TblDocs TD with(nolock) on TD.VoucherNo=INV.VoucherNo AND TD.ParentVoucherNo=TINV.VoucherNo-- AND TD.ID>@I
 			where TD.VoucherNo IS NULL and INV.CostCenterID>0
 			group by INV.CostCenterID,INV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber,TINV.VoucherNo,INV.DocDate
 			/*SELECT INV.CostCenterID,INV.VoucherNo,TINV.VoucherNo,INV.DocAbbr,INV.DocPrefix,INV.DocNumber
@@ -488,31 +429,26 @@ begin
 			SET @I=@CNT
 		END
 	END
-	----PrePayment Preference
-	INSERT INTO #TblDocs(CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DetailsID,LinkedDetailsID,DocDate)
-		   SELECT DISTINCT D.CostCenterID,D.VoucherNo,P.VoucherNo,D.DocAbbr,D.DocPrefix,D.DocNumber,P.InvDocDetailsID,D.REFNODEID,D.DocDate
-		   FROM Acc_DocDetails D with(nolock) INNER JOIN INV_DocDetails P with(nolock) ON P.DocID=D.REFNODEID
-		   WHERE (P.DocAbbr+'-'+P.DocPrefix+P.DocNumber)=@DocNo and D.REFCCID=300 
-	--
+	
 	select CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,CONVERT(DATETIME,DocDate) DocDate from #TblDocs with(nolock)
 	group by CostCenterID,VoucherNo,ParentVoucherNo,VAbbr,VPrefix,VNumber,DocDate
 	order by VPrefix,VNumber
 	
-	if (@IsInventory=1 or @IsInv=0 )
+	if @IsInventory=1
 	begin
 		select T.*,sum(Quantity) Qty,sum(Gross) Value
 		from (select VoucherNo from #TblDocs with(nolock) group by VoucherNo) T
-		inner join INV_DocDetails D with(nolock) on D.VoucherNo collate database_default=T.VoucherNo collate database_default
+		inner join INV_DocDetails D with(nolock) on D.VoucherNo=T.VoucherNo
 		where (D.DocumentType!=5 or D.VoucherType=1) and D.DynamicInvDocDetailsID is null
 		group by T.VoucherNo
 			
 		select B.RefDocNo BWDocNo,T.VoucherNo ParentVoucherNo,convert(datetime,B.RefDocDate) DocDate from #TblDocs T with(nolock)
-		join COM_BillWise B with(nolock) on T.VoucherNo collate database_default=B.DocNo collate database_default
-		where B.RefDocNo is not null AND B.RefDocNo<>''
+		join COM_BillWise B with(nolock) on T.VoucherNo=B.DocNo
+		where B.RefDocNo is not null
 		union
 		select B.DocNo,T.VoucherNo ParentVoucherNo,convert(datetime,B.DocDate) DocDate from #TblDocs T with(nolock)
-		join COM_BillWise B with(nolock) on T.VoucherNo collate database_default=B.RefDocNo collate database_default
-		where B.DocNo is not null AND B.DocNo<>''
+		join COM_BillWise B with(nolock) on T.VoucherNo=B.RefDocNo
+		where B.DocNo is not null
 		order by BWDocNo
 		
 		--select CostCenterID from #TblDocs with(nolock)

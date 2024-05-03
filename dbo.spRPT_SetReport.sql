@@ -142,14 +142,14 @@ SET NOCOUNT ON;
 				END 
 
 				UPDATE [ADM_RevenUReports]
-				   SET ReportName = @ReportName,[Description]=@Description
+				   SET ReportName = @ReportName,Description=@Description
 					  --,ReportTypeID = @ReportTypeID
-					  ,ReportTypeName = @ReportTypeName
+					  --,ReportTypeName = @ReportTypeName
 					  --,IsUserDefined = @IsUserDefined
 					  ,ReportDefnXML=@ReportDefnXML
 					  ,CustomPreferences=@CustomPreferences
 					  --,[IsGroup] = @IsGroup		
-					  ,[StatusID] = @StatusID
+					  ,[StatusID] = @StatusID	
 					  ,ReportBody=@ReportBody,ReportHeader=@ReportHeader,PageHeader=@PageHeader
 					  ,PageFooter=@PageFooter,ReportFooter=@ReportFooter,KPIXML=@KPIXML,QUERY=@QUERY
 					  ,MatrixXML=@MatrixXML,DashKPIXML=@DashKPIXML,FormulaFields=@FormulaFieldsXML
@@ -164,7 +164,7 @@ SET NOCOUNT ON;
 	BEGIN
 
 		UPDATE [ADM_RevenUReports]
-		   SET [Description]=@Description--ReportName = @ReportName
+		   SET Description=@Description--ReportName = @ReportName
 			  --,ReportTypeID = @ReportTypeID
 			  --,ReportTypeName = @ReportTypeName
 			  --,IsUserDefined = @IsUserDefined

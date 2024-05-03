@@ -3,19 +3,20 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spINV_SetProduct]
-	@ProductID [int],
+	@ProductID [bigint],
 	@ProductCode [nvarchar](200) = NULL,
-	@ProductName [nvarchar](max),
-	@AliasName [nvarchar](max),
+	@ProductName [nvarchar](500),
+	@AliasName [nvarchar](500),
 	@ProductTypeID [int],
 	@StatusID [int],
 	@UOMID [int] = NULL,
 	@BarcodeID [nvarchar](50) = NULL,
 	@Description [nvarchar](max),
-	@SelectedNodeID [int],
+	@SelectedNodeID [bigint],
 	@IsGroup [bit],
 	@CustomFieldsQuery [nvarchar](max) = NULL,
 	@CustomCostCenterFieldsQuery [nvarchar](max),
+	@ProductVehicleXML [nvarchar](max) = null,
 	@ContactsXML [nvarchar](max),
 	@NotesXML [nvarchar](max),
 	@AttachmentsXML [nvarchar](max),
@@ -36,7 +37,7 @@ CREATE PROCEDURE [dbo].[spINV_SetProduct]
 	@ProductWiseUOMData [nvarchar](max) = null,
 	@ProductWiseUOMData1 [nvarchar](max) = null,
 	@CodePrefix [nvarchar](50) = NULL,
-	@CodeNumber [int] = 0,
+	@CodeNumber [bigint] = 0,
 	@IsOffline [bit] = 0,
 	@ProductStaticFieldsQuery [nvarchar](max) = NULL,
 	@TestcasesXML [nvarchar](max) = NULL,
@@ -48,7 +49,7 @@ CREATE PROCEDURE [dbo].[spINV_SetProduct]
 	@UserName [nvarchar](50),
 	@WID [int] = 0,
 	@RoleID [int] = 0,
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -56,19 +57,18 @@ BEGIN TRANSACTION
 BEGIN TRY  
 	SET NOCOUNT ON;
 	--Declaration Section 
-	DECLARE @Dt FLOAT ,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsDuplicateCodeAllowed BIT,@BarcodID INT,
-	@MaintainUniqueProductDescription bit,@ProductCodeLength INT,@IsMultipleProductinSameBin bit
+	DECLARE @Dt FLOAT ,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsDuplicateCodeAllowed BIT,
+	@MaintainUniqueProductDescription bit,@ProductCodeLength bigint,@IsMultipleProductinSameBin bit
 	declare @ProductCodeIgnoreText nvarchar(50),@IsProductLinkDimension bit,@multiBarcodes NVARCHAR(MAX) 
 	DECLARE @UpdateSql NVARCHAR(MAX),@XML XML,@TempGuid NVARCHAR(50),@CCCCCData XML
-	DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth INT,@ParentID INT 
+	DECLARE @lft BIGINT,@rgt BIGINT,@Selectedlft BIGINT,@Selectedrgt BIGINT,@Depth INT,@ParentID BIGINT 
 	DECLARE @SelectedIsGroup BIT, @ParentCode NVARCHAR(MAX), @VCOUNT int
-	DECLARE @TblSubstitue TABLE(ID int identity(1,1),GroupID INT,GroupName nvarchar(50), SProductID INT)
-	DECLARE @I int,@Cnt int,@SubGroupID INT,@SubGroupName nvarchar(50),@SubItemID INT, @SProductID INT
-	DECLARE @ActionType INT
-	declare @isparentcode bit,@DimensionPrefValue INT,@Dimesion INT,@DimTEMPxml nvarchar(max),@return_value int,@IgnoreSpaces bit
-	DECLARE @CCStatusID INT,@VenderID INT,@HistoryStatus NVARCHAR(300),@BARCODE NVARCHAR(100)
-	DECLARE @RefSelectedNodeID INT
-	Declare @level int,@maxLevel int
+	DECLARE @TblSubstitue TABLE(ID int identity(1,1),GroupID bigint,GroupName nvarchar(50), SProductID bigint)
+	DECLARE @I int,@Cnt int,@SubGroupID bigint,@SubGroupName nvarchar(50),@SubItemID BIGINT, @SProductID bigint
+	DECLARE @MakeID int, @ModelID int,@ActionType INT, @Year int, @VariantID int, @SegmentID int, @VehicleID int
+	declare @isparentcode bit,@DimensionPrefValue bigint,@Dimesion bigint,@DimTEMPxml nvarchar(max),@return_value int,@IgnoreSpaces bit
+	DECLARE @CCStatusID bigint,@VenderID bigint,@HistoryStatus NVARCHAR(300),@BARCODE NVARCHAR(100)
+	DECLARE @RefSelectedNodeID BIGINT
 		
 	--SP Required Parameters Check
 	IF @CompanyGUID IS NULL OR @CompanyGUID=''
@@ -108,7 +108,7 @@ BEGIN TRY
 		END
 	END
 
-	declare @TempUOMID INT
+	declare @TempUOMID bigint
 	select @TempUOMID=UOMID from inv_product WITH(NOLOCK) where productid=@ProductID
 	 
 	IF(@ProductID >0 AND @TempUOMID<>@UOMID and EXISTS (SELECT D.ProductID FROM INV_DocDetails D WITH(NOLOCK) 
@@ -179,7 +179,7 @@ BEGIN TRY
 	END
 	select @MaintainUniqueProductDescription=convert(bit,Value) FROM COM_CostCenterPreferences WITH(NOLOCK) 
 	WHERE COSTCENTERID=3 and Name='MaintainUniqueProductDescription'
-	select @ProductCodeLength=convert(INT,Value) FROM COM_CostCenterPreferences WITH(NOLOCK)
+	select @ProductCodeLength=convert(bigint,Value) FROM COM_CostCenterPreferences WITH(NOLOCK)
 	WHERE COSTCENTERID=3 and Name='ProductCodeLength'
 	--@IgnoreSpaces
 	SELECT @IgnoreSpaces=convert(bit,Value)  FROM COM_CostCenterPreferences WITH(nolock) 
@@ -243,9 +243,9 @@ BEGIN TRY
 		BEGIN
 			SET @XML=@BinXML				
 			IF EXISTS (SELECT ProductBinID FROM INV_ProductBins WITH(NOLOCK) 
-						WHERE nodeid<>@ProductID and BinNodeID IN (SELECT X.value('@BinNodeID','INT') 
+						WHERE nodeid<>@ProductID and BinNodeID IN (SELECT X.value('@BinNodeID','BIGINT') 
 						from @XML.nodes('/BinsXML/Row') as Data(X))
-						and BinDimension in (SELECT X.value('@BinDimension','INT') 
+						and BinDimension in (SELECT X.value('@BinDimension','BIGINT') 
 						from @XML.nodes('/BinsXML/Row') as Data(X)))
 			BEGIN
 			
@@ -257,9 +257,9 @@ BEGIN TRY
 	SET @Dt=CONVERT(FLOAT,GETDATE())--Setting Current Date  
 	
 	 --ADDED CODE ON JULY 03 2012 BY HAFEEZ FOR PRODUCTWISE UOM
-	DECLARE @UOMDATA XML,@RUOMID INT,@RPRODUCTID INT,@RCOUNT INT,@BASEDATA XML,@BCOUNT INT,@J INT,@BASEID INT,@Conversion FLOAT,
-	@ACTION NVARCHAR(300),@BASENAME NVARCHAR(300),@TEMPBASEID INT,@BarDim int,
-	@UNITID INT,@UNAME NVARCHAR(300),@CONVERSIONRATE FLOAT,@BarKey INT
+	DECLARE @UOMDATA XML,@RUOMID INT,@RPRODUCTID INT,@RCOUNT INT,@BASEDATA XML,@BCOUNT INT,@J INT,@BASEID BIGINT,@Conversion FLOAT,
+	@ACTION NVARCHAR(300),@BASENAME NVARCHAR(300),@TEMPBASEID BIGINT,@BarDim int,
+	@UNITID INT,@UNAME NVARCHAR(300),@CONVERSIONRATE FLOAT,@BarKey BIGINT
 
 	IF @ProductID=0
 		SET @RPRODUCTID=-100
@@ -281,19 +281,19 @@ BEGIN TRY
 	SET @BASEDATA=@ProductWiseUOMData1
 	
 	declare @TblUomBarcodes TABLE(Barcode NVARCHAR(300))
-	DECLARE @TBLBASE TABLE(ID INT IDENTITY(1,1),BASEID INT,BASENAME NVARCHAR(300),CONVERSION float)
+	DECLARE @TBLBASE TABLE(ID INT IDENTITY(1,1),BASEID BIGINT,BASENAME NVARCHAR(300),CONVERSION float)
 
 	INSERT INTO @TBLBASE
 	SELECT X.value('@BaseID','int'),X.value('@BaseName','NVARCHAR(50)'), X.value('@Conversion','float') 
 	FROM @BASEDATA.nodes('/Data/Row') as Data(X)
 
-	DECLARE @TBLUOM TABLE(ID INT IDENTITY(1,1),UNITID INT,UNITNAME NVARCHAR(300),BASEID INT,BASENAME NVARCHAR(300),CONVERSIONRATE FLOAT,
-	[ACTION] NVARCHAR(300),CONVERSION float,Barcode NVARCHAR(100),BarKey INT,MultiBarcode NVARCHAR(max))
+	DECLARE @TBLUOM TABLE(ID INT IDENTITY(1,1),UNITID BIGINT,UNITNAME NVARCHAR(300),BASEID BIGINT,BASENAME NVARCHAR(300),CONVERSIONRATE FLOAT,
+	[ACTION] NVARCHAR(300),CONVERSION float,Barcode NVARCHAR(100),BarKey BIGINT,MultiBarcode NVARCHAR(max))
 
 	INSERT INTO @TBLUOM
 	SELECT X.value('@UnitiD','int'),X.value('@UnitName','NVARCHAR(50)'),X.value('@BaseID','int'),
 	   X.value('@BaseName','NVARCHAR(50)'),X.value('@ConversionUnit','float'),X.value('@Action','nvarchar(300)')  
-	   , X.value('@Conversion','float') , X.value('@Barcode','NVARCHAR(100)'),isnull(X.value('@BarKey','INT'),0)
+	   , X.value('@Conversion','float') , X.value('@Barcode','NVARCHAR(100)'),isnull(X.value('@BarKey','bigint'),0)
 	   , X.value('@MultiBarcode','NVARCHAR(MAX)')
 	FROM @UOMDATA.nodes('/Data/Row') as Data(X)
 
@@ -315,85 +315,32 @@ BEGIN TRY
 		set @BarDim=convert(int,@BARCODE)
 	else
 		set @BarDim=0
-	
+
 	SELECT @I=1,@RCOUNT=COUNT(*) FROM @TBLUOM
 	SELECT @J=1,@BCOUNT=COUNT(*) FROM @TBLBASE
 	WHILE @J<=@BCOUNT
 	BEGIN
 		SELECT  @TEMPBASEID=BASEID,@BASENAME=BASENAME,@Conversion=CONVERSION FROM @TBLBASE WHERE ID=@J
-		
+
 		IF((SELECT ISNULL(COUNT(*),0) FROM [COM_UOM] with(nolock) WHERE BASEID=@TEMPBASEID)=0)
 		BEGIN
-			select 1
 			SELECT @BASEID=ISNULL(MAX(BASEID),0) FROM [COM_UOM] WITH(NOLOCK)
 			SET @BASEID=@BASEID+1
 			INSERT INTO [COM_UOM] (BASEID,BASENAME,UNITID,UNITNAME,CONVERSION,[GUID],CREATEDBY,CREATEDDATE,ProductID,IsProductWise)
-			VALUES(@BASEID,@BASENAME,@Conversion,@BASENAME,@Conversion,NEWID(),@USERNAME,@Dt,@RPRODUCTID,1) 
+			VALUES(@BASEID,@BASENAME,@Conversion,@BASENAME,@Conversion,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@RPRODUCTID,1) 
 			SET @UOMID=SCOPE_IDENTITY()
 			
 			SELECT @BARCODE=Barcode,@BarKey=BarKey,@multiBarcodes=MultiBarcode FROM @TBLUOM WHERE ID=1 
-			
-			delete from @TblUomBarcodes
-			INSERT INTO @TblUomBarcodes
-			EXEC SPSplitString @multiBarcodes,',' 
 
-			If exists(select Barcode from INV_ProductBarcode with(nolock) 
-			where @BARCODE is not null and @BARCODE<>'' AND BARCODE=@BARCODE)
+			If exists(select Barcode from INV_ProductBarcode with(nolock) where BARCODE=@BARCODE and @BARCODE is not null and @BARCODE<>'')
 				RAISERROR('-130',16,1)
-				
-			If exists(select a.Barcode from INV_ProductBarcode a with(nolock) 
-					join @TblUomBarcodes b on a.BARCODE=b.Barcode
-					where b.Barcode is not null and b.Barcode<>''
-					)
-						RAISERROR('-130',16,1)	
-			
-			-------
-			IF(@BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND @BarcodeID=@BARCODE)		
-				RAISERROR('-130',16,1)
-
-			If exists(select BarcodeID from INV_Product with(nolock) 
-			where @BARCODE is not null and @BARCODE<>'' AND BarcodeID=@BARCODE)
-				RAISERROR('-130',16,1)
-
-			If exists(select a.BarcodeID from INV_Product a with(nolock) 
-				join @TblUomBarcodes b on a.BarcodeID=b.Barcode
-				where b.Barcode is not null and b.Barcode<>'' )
-					RAISERROR('-130',16,1)	
-
-			If exists(select Barcode from INV_ProductBarcode with(nolock) 
-			where @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND BARCODE=@BarcodeID)
-				RAISERROR('-130',16,1)
-				
-			If exists(select Barcode from @TblUomBarcodes
-			where @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND Barcode=@BarcodeID )
-				RAISERROR('-130',16,1)	
-				
-			If exists(select Barcode from @TblUomBarcodes
-			where @BARCODE is not null and @BARCODE<>'' AND Barcode=@BARCODE )
-				RAISERROR('-130',16,1)	
-			-------								
-							
+						
 			insert into INV_ProductBarcode(Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-			VALUES (@BARCODE,@BarKey,0,@UOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt)
-			SET @BarcodID=SCOPE_IDENTITY()
-			--INV_ProductBarcodeHistory
-			insert into INV_ProductBarcodeHistory(BarcodeID,Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-			VALUES (@BarcodID,@BARCODE,@BarKey,0,@UOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt)
+			VALUES (@BARCODE,@BarKey,0,@UOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@USERNAME,CONVERT(FLOAT,GETDATE()))
 			
 			insert into INV_ProductBarcode(Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-			select Barcode,0,0,@UOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt
+			select Barcode,0,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@USERNAME,CONVERT(FLOAT,GETDATE())
 			from @TblUomBarcodes
-			SET @BarcodID=SCOPE_IDENTITY()
-			--INV_ProductBarcodeHistory
-			insert into INV_ProductBarcodeHistory(BarcodeID,Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-			select @BarcodID,Barcode,0,0,@UOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt
-			from @TblUomBarcodes
-			
-			
-			--COM_UOMHISTORY
-			INSERT INTO [COM_UOMHISTORY] (UOMID,BASEID,BASENAME,UNITID,UNITNAME,CONVERSION,[GUID],CREATEDBY,CREATEDDATE,ProductID,IsProductWise)
-			VALUES(@UOMID,@BASEID,@BASENAME,@Conversion,@BASENAME,@Conversion,NEWID(),@USERNAME,@Dt,@RPRODUCTID,1)
-			--COM_UOMHISTORY 
 		END
 		ELSE
 		BEGIN
@@ -405,7 +352,7 @@ BEGIN TRY
 			DELETE FROM [COM_UOM] WHERE UOMID IN (select UNITID from @TBLUOM T where Action='DELETE' and ID>1 and UNITID>0)
 			DELETE FROM [INV_ProductBarcode] WHERE UnitID IN (select UNITID from @TBLUOM T where Action='DELETE' and ID>1 and UNITID>0)
 		END
-		select 	@RCOUNT
+			
 		WHILE @I<=@RCOUNT
 		BEGIN
 			SELECT @ACTION=[ACTION],@RUOMID=UNITID,@UNAME=UNITNAME,@CONVERSIONRATE=CONVERSIONRATE,@Conversion=CONVERSION,@BARCODE=Barcode,@BarKey=BarKey,@multiBarcodes=MultiBarcode
@@ -414,7 +361,7 @@ BEGIN TRY
 			delete from @TblUomBarcodes
 			INSERT INTO @TblUomBarcodes
 			EXEC SPSplitString @multiBarcodes,',' 
-			 select @ACTION
+			 
 			IF (@ACTION=LTRIM(RTRIM('NEW')))
 			BEGIN
 				IF @I>1
@@ -422,68 +369,22 @@ BEGIN TRY
 					If exists(select unitname from Com_uom with(nolock) where BaseID=@BASEID and Unitname=@UNAME AND UnitID>1)
 						RAISERROR('-124',16,1)
 
-					 If exists(select Barcode from INV_ProductBarcode with(nolock) 
-					 where BARCODE=@BARCODE and @BARCODE is not null and @BARCODE<>'')
+					 If exists(select Barcode from INV_ProductBarcode with(nolock) where BARCODE=@BARCODE and @BARCODE is not null and @BARCODE<>'')
 						RAISERROR('-130',16,1)
-						
-					If exists(select a.Barcode from INV_ProductBarcode a with(nolock) 
-					join @TblUomBarcodes b on a.BARCODE=b.Barcode
-					where b.Barcode is not null and b.Barcode<>'')
-						RAISERROR('-130',16,1)
-
-					-------
-					IF(@BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND @BarcodeID=@BARCODE)		
-						RAISERROR('-130',16,1)
-
-					If exists(select BarcodeID from INV_Product with(nolock) 
-					where @BARCODE is not null and @BARCODE<>'' AND BarcodeID=@BARCODE)
-						RAISERROR('-130',16,1)
-
-					If exists(select a.BarcodeID from INV_Product a with(nolock) 
-						join @TblUomBarcodes b on a.BarcodeID=b.Barcode
-						where b.Barcode is not null and b.Barcode<>'' )
-							RAISERROR('-130',16,1)
-
-					If exists(select Barcode from INV_ProductBarcode with(nolock) 
-					where @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND BARCODE=@BarcodeID)
-						RAISERROR('-130',16,1)
-				
-					If exists(select Barcode from @TblUomBarcodes
-					where @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND Barcode=@BarcodeID )
-						RAISERROR('-130',16,1)	
-				
-					If exists(select Barcode from @TblUomBarcodes
-					where @BARCODE is not null and @BARCODE<>'' AND Barcode=@BARCODE )
-						RAISERROR('-130',16,1)	
-					-------
 						  
 					--SELECT UNIT ID MAX FROM TABLE 
 					SELECT @UNITID=ISNULL(MAX(UNITID),0) FROM [COM_UOM] WITH(NOLOCK)
 
 					INSERT INTO [COM_UOM] (BaseID,BASENAME,UNITID,UNITNAME,CONVERSION,GUID,CREATEDBY,CREATEDDATE,ProductID,IsProductWise)
-					VALUES(@BASEID,@BASENAME,(@UNITID+1),@UNAME,@CONVERSIONRATE,NEWID(),@USERNAME,@Dt,@RPRODUCTID,1)
+					VALUES(@BASEID,@BASENAME,(@UNITID+1),@UNAME,@CONVERSIONRATE,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@RPRODUCTID,1)
 					SET @RUOMID=SCOPE_IDENTITY()
 
 					insert into INV_ProductBarcode(Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-					VALUES (@BARCODE,@BarKey,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt)
-					SET @BarcodID=SCOPE_IDENTITY()
-					--INV_ProductBarcodeHistory
-					insert into INV_ProductBarcodeHistory(BarCodeID,Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-					VALUES (@BarcodID,@BARCODE,@BarKey,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt)
+					VALUES (@BARCODE,@BarKey,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@USERNAME,CONVERT(FLOAT,GETDATE()))
 					
 					insert into INV_ProductBarcode(Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-					select Barcode,0,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt
+					select Barcode,0,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@USERNAME,CONVERT(FLOAT,GETDATE())
 					from @TblUomBarcodes
-					SET @BarcodID=SCOPE_IDENTITY()
-					--INV_ProductBarcodeHistory
-					insert into INV_ProductBarcodeHistory(BarCodeID,Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-					select @BarcodID,Barcode,0,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt
-					from @TblUomBarcodes
-					
-					--COM_UOMHISTORY
-					INSERT INTO [COM_UOMHISTORY] (UOMID,BaseID,BASENAME,UNITID,UNITNAME,CONVERSION,GUID,CREATEDBY,CREATEDDATE,ProductID,IsProductWise)
-					VALUES(@RUOMID,@BASEID,@BASENAME,(@UNITID+1),@UNAME,@CONVERSIONRATE,NEWID(),@USERNAME,@Dt,@RPRODUCTID,1)
-					--COM_UOMHISTORY
 				END
 			END	
 			ELSE if(@ACTION=LTRIM(RTRIM('UPDATE')))
@@ -491,70 +392,22 @@ BEGIN TRY
 				If exists(select unitname from Com_uom with(nolock) where BaseID=@BASEID and Unitname=@UNAME AND UnitID>1 AND UOMID<>@RUOMID)
 					RAISERROR('-124',16,1)
 
-				If exists(select Barcode from INV_ProductBarcode with(nolock) 
-				where BARCODE=@BARCODE AND UNITID!=@RUOMID and @BARCODE is not null and @BARCODE<>'')
+				If exists(select Barcode from INV_ProductBarcode with(nolock) where BARCODE=@BARCODE AND UNITID!=@RUOMID and @BARCODE is not null and @BARCODE<>'')
 					RAISERROR('-130',16,1)
-
-				If exists(select a.Barcode from INV_ProductBarcode a with(nolock) 
-					join @TblUomBarcodes b on a.BARCODE=b.Barcode
-					where b.Barcode is not null and b.Barcode<>'' AND A.UNITID!=@RUOMID )
-						RAISERROR('-130',16,1)
-
-				-------
-				IF(@BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND @BarcodeID=@BARCODE)		
-					RAISERROR('-130',16,1)
-
-				If exists(select BarcodeID from INV_Product with(nolock) 
-				where @BARCODE is not null and @BARCODE<>'' AND BarcodeID=@BARCODE)
-					RAISERROR('-130',16,1)
-
-				If exists(select a.BarcodeID from INV_Product a with(nolock) 
-				join @TblUomBarcodes b on a.BarcodeID=b.Barcode
-				where b.Barcode is not null and b.Barcode<>'' )
-						RAISERROR('-130',16,1)
-
-
-				If exists(select Barcode from INV_ProductBarcode with(nolock) 
-				where @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND BARCODE=@BarcodeID)
-					RAISERROR('-130',16,1)
-				
-				If exists(select Barcode from @TblUomBarcodes
-				where @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND Barcode=@BarcodeID )
-					RAISERROR('-130',16,1)	
-				
-				If exists(select Barcode from @TblUomBarcodes
-				where @BARCODE is not null and @BARCODE<>'' AND Barcode=@BARCODE )
-					RAISERROR('-130',16,1)	
-				-------
-							 
+					 
 				UPDATE [COM_UOM]
 				SET  UNITNAME=@UNAME,CONVERSION=@CONVERSIONRATE,BASENAME=@BASENAME,
-					MODIFIEDBY=@USERNAME,ModifiedDate=@Dt
+					MODIFIEDBY=@USERNAME,ModifiedDate=CONVERT(FLOAT,GETDATE())
 				where UOMID=@RUOMID
-				
-				--COM_UOMHISTORY
-				INSERT INTO [COM_UOMHISTORY] (UOMID,BaseID,BASENAME,UNITID,UNITNAME,CONVERSION,GUID,CREATEDBY,CREATEDDATE,ProductID,IsProductWise,MODIFIEDBY,ModifiedDate)
-				SELECT @RUOMID,BaseID,@BASENAME,UNITID,@UNAME,@CONVERSIONRATE,NEWID(),CREATEDBY,CREATEDDATE,ProductID,IsProductWise,@USERNAME,@Dt
-				FROM [COM_UOM] WITH(NOLOCK) WHERE UOMID=@RUOMID
-				--COM_UOMHISTORY
 
 				delete from INV_ProductBarcode
 				where unitID=@RUOMID
 				
 				insert into INV_ProductBarcode(Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-				VALUES (@BARCODE,@BarKey,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt)
-				SET @BarcodID=SCOPE_IDENTITY()
-				--INV_ProductBarcodeHistory
-				insert into INV_ProductBarcodeHistory(BarCodeID,Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-				VALUES (@BarcodID,@BARCODE,@BarKey,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt)
+				VALUES (@BARCODE,@BarKey,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@USERNAME,CONVERT(FLOAT,GETDATE()))
 				
 				insert into INV_ProductBarcode(Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-				select Barcode,0,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt
-				from @TblUomBarcodes
-				SET @BarcodID=SCOPE_IDENTITY()
-				--INV_ProductBarcodeHistory
-				insert into INV_ProductBarcodeHistory(BarCodeID,Barcode,Barcode_Key,venderID,unitID,productID,COMPANYGUID,GUID,CREATEDBY,CREATEDDATE,MODIFIEDBY,MODIFIEDDATE)
-				select @BarcodID,Barcode,0,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,@Dt,@USERNAME,@Dt
+				select Barcode,0,0,@RUOMID,@RPRODUCTID,NULL,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@USERNAME,CONVERT(FLOAT,GETDATE())
 				from @TblUomBarcodes
 					
 				IF @I=1 AND @UOMID=-399
@@ -571,32 +424,8 @@ BEGIN TRY
 		SET @UOMID=NULL	
 	
 	IF @ProductID=0--ProductID will be 0 in ALTER procedureess--  
-	BEGIN--CREATE Product--  	
-			if(@WID>0)
-		begin
-			set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-			where WorkFlowID=@WID and  UserID =@UserID)
-
-			if(@level is null )
-				set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
-				where WorkFlowID=@WID and  RoleID =@RoleID)
-
-			if(@level is null ) 
-				set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-				where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
-
-			if(@level is null )
-				set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
-				where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
-				where RoleID =@RoleID))
-
-			select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
-			
-			if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
-			begin			
-				set @StatusID=1001
-			END
-		END   		 
+	BEGIN--CREATE Product--  
+		
 		--To SET Left,Right And Depth of Record  
 		SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
 		FROM [INV_Product] WITH(NOLOCK) WHERE ProductID=@SelectedNodeID  
@@ -645,12 +474,12 @@ BEGIN TRY
 				(CodePrefix,CodeNumber,[ProductCode],[ProductName],[AliasName],[ProductTypeID],[StatusID]
 				,[UOMID],[BarcodeID],[Description]
 				,[Depth],[ParentID],[lft],[rgt],[IsGroup]  
-				,[GUID],[CreatedBy],[CreatedDate],[ModifiedDate],CompanyGUID,HasSubItem,WFID,WFLevel)  
+				,[GUID],[CreatedBy],[CreatedDate],[ModifiedDate],CompanyGUID,HasSubItem)  
 			VALUES  
 				(@CodePrefix,@CodeNumber,@ProductCode,@ProductName,@AliasName,@ProductTypeID,@StatusID,  
 				@UOMID,@BarcodeID,@Description,
 				@Depth,@ParentID,@lft,@rgt,@IsGroup,  
-				NEWID(),@UserName,@Dt,@Dt,@CompanyGUID,@HasSubItem,@WID,@level)
+				NEWID(),@UserName,@Dt,@Dt,@CompanyGUID,@HasSubItem)
 				--To get inserted record primary key
 				SET @ProductID=SCOPE_IDENTITY()
 		end
@@ -667,11 +496,11 @@ BEGIN TRY
 		    INSERT INTO [INV_Product](ProductID,CodePrefix,CodeNumber,[ProductCode],[ProductName],[AliasName],[ProductTypeID],[StatusID] 
 			,[UOMID],[BarcodeID],[Description]
 			,[Depth],[ParentID],[lft],[rgt],[IsGroup]  
-			,[GUID],[CreatedBy],[CreatedDate],[ModifiedDate],CompanyGUID,HasSubItem,WFID,WFLevel)  
+			,[GUID],[CreatedBy],[CreatedDate],[ModifiedDate],CompanyGUID,HasSubItem)  
 			VALUES(@ProductID,@CodePrefix,@CodeNumber,@ProductCode,@ProductName,@AliasName,@ProductTypeID,@StatusID,  
 			@UOMID,@BarcodeID,@Description,
 			@Depth,@ParentID,@lft,@rgt,@IsGroup,  
-			NEWID(),@UserName,@Dt,@Dt,@CompanyGUID,@HasSubItem,@WID,@level)
+			NEWID(),@UserName,@Dt,@Dt,@CompanyGUID,@HasSubItem)
 			set identity_insert [INV_Product] OFF
 	  	   
 			INSERT INTO ADM_OfflineOnlineIDMap VALUES(3,@ProductID,0)
@@ -686,20 +515,7 @@ BEGIN TRY
 			 
 		UPDATE [COM_UOM] SET PRODUCTID=@ProductID  WHERE PRODUCTID=-100
 		UPDATE [INV_ProductBarcode] SET PRODUCTID=@ProductID  WHERE PRODUCTID=-100
-		--INV_ProductBarcodeHistory
-		UPDATE [INV_ProductBarcodeHistory] SET PRODUCTID=@ProductID  WHERE PRODUCTID=-100
-		--
-		--COM_UOMHISTORY
-		UPDATE [COM_UOMHISTORY] SET PRODUCTID=@ProductID  WHERE PRODUCTID=-100
-		--COM_UOMHISTORY
-
-		if(@WID>0)
-	BEGIN	 
-		INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)     
-		VALUES(3,@ProductID,@StatusID,CONVERT(FLOAT,getdate()),'',@UserID,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
-	end
-
-
+				
 	END--CREATE Product--  
 	ELSE--UPDATE Product--  
 	BEGIN  
@@ -712,7 +528,7 @@ BEGIN TRY
 		SELECT @TempGuid=[GUID] FROM [INV_Product]  WITH(NOLOCK)   
 		WHERE ProductID=@ProductID  
 
-	    IF(@Guid IS NOT NULL AND @Guid <> '' AND @TempGuid!=@Guid)  
+	    IF(@TempGuid!=@Guid)  
 	    BEGIN  
 		  	RAISERROR('-101',16,1)
 	    END  		
@@ -738,16 +554,8 @@ BEGIN TRY
 		  WHERE ProductID=@ProductID      
 	END  
 	
-	If exists(select BarcodeID from INV_Product with(nolock) 
-	where ProductID<>@ProductID AND @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND BarcodeID=@BarcodeID)
-		RAISERROR('-130',16,1)
-
-	If exists(select Barcode from INV_ProductBarcode with(nolock) 
-	where @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND BARCODE=@BarcodeID)
-		RAISERROR('-130',16,1)
-
 	--Series Check
-	declare @retSeries INT
+	declare @retSeries bigint
 	EXEC @retSeries=spCOM_ValidateCodeSeries 3,@ProductID,@LangID
 	if @retSeries>0
 	begin
@@ -756,7 +564,25 @@ BEGIN TRY
 		RETURN -999
 	end
 
-	
+	/* Insert Customer Vehicle Details */
+	IF @ProductVehicleXML IS NOT NULL AND @ProductVehicleXML<>''
+	BEGIN
+		set @XML=@ProductVehicleXML
+		INSERT INTO SVC_ProductVehicle(ProductID, VehicleID, CompanyGUID, GUID, Createdby, CreatedDate)
+		SELECT  @ProductID,X.value('@VehicleID','bigint'),@CompanyGUID, @GUID,@UserName,@Dt
+		from @XML.nodes('Row') as DATA(X)
+	    WHERE X.value('@Action','NVARCHAR(10)')='NEW'	
+		
+		UPDATE SVC_ProductVehicle
+		SET VehicleID=X.value('@VehicleID','bigint')
+		from @XML.nodes('Row') as DATA(X)
+		WHERE ProductVehicleID = X.value('@ProductVehicleID','bigint') and X.value('@Action','NVARCHAR(10)')='MODIFY'	
+	   
+		DELETE FROM SVC_ProductVehicle
+		WHERE ProductVehicleID in (select X.value('@ProductVehicleID','bigint')
+		FROM @XML.nodes('Row') as DATA(X)
+		WHERE X.value('@Action','NVARCHAR(10)')='DELETE') 
+	END
 
 	--SETTING ACCOUNT CODE EQUALS ProductID IF EMPTY
 	IF(@ProductCode IS NULL OR @ProductCode='')
@@ -783,8 +609,8 @@ BEGIN TRY
 	BEGIN
 		select @ProductCode=ProductCode from inv_product with(nolock) where ProductID=@ProductID
 		--Ignore special character in ProductCode while verifying duplicate check 
-		declare  @len INT
-		set @UpdateSql='ProductCode'
+		declare  @len bigint,@CodeSQL NVARCHAR(MAX)
+		set @CodeSQL='ProductCode'
 		set @len=len(@ProductCodeIgnoreText) 
 		if(@len>0)
 		begin
@@ -797,14 +623,15 @@ BEGIN TRY
 				set @n=@ProductCodeIgnoreText
 				set @ProductCodeIgnoreText=replace(@ProductCodeIgnoreText,@n,'')
 				set @tempCode=replace(@tempCode,@n,'')
-				set @UpdateSql='replace('+@UpdateSql+','''+@n+''','''')'
+				set @CodeSQL='replace('+@CodeSQL+','''+@n+''','''')'
 				set @i1=@i1+1
 			end  
-			declare @count1 int
-			set @UpdateSql='set @count1=(select count('+@UpdateSql+') from INV_Product with(nolock) 
-				where '+@UpdateSql+' = '''+@tempCode+''' and Isgroup='+convert(nvarchar,@IsGroup)+' and Productid<>'+convert(nvarchar,@ProductID)+')'
+			declare @str1 nvarchar(max) , @count1 int
+			set @str1='@count1 int output'
+			set @CodeSQL='set @count1=(select count('+@CodeSQL+') from INV_Product with(nolock) 
+				where '+@CodeSQL+' = '''+@tempCode+''' and Isgroup='+convert(nvarchar,@IsGroup)+' and Productid<>'+convert(nvarchar,@ProductID)+')'
 			 
-			exec sp_executesql @UpdateSql,'@count1 int output', @count1 OUTPUT 	
+			exec sp_executesql @CodeSQL, @str1, @count1 OUTPUT 	
 			IF (@count1>0)  
 				RAISERROR('-116',16,1)
 			--set @ProductCode=@tempCode  
@@ -871,7 +698,7 @@ BEGIN TRY
 		BEGIN  
 
 			BEGIN try  
-				select @Dimesion=convert(INT,@DimensionPrefValue)  
+				select @Dimesion=convert(BIGINT,@DimensionPrefValue)  
 			end try  
 			BEGIN catch  
 				set @Dimesion=0   
@@ -881,10 +708,10 @@ BEGIN TRY
 			BEGIN  
 				select @CCStatusID=statusid from com_status with(nolock) where costcenterid=@Dimesion and status = 'Active'
 				
-				declare @ccCode nvarchar(20),@ccCodeNumber INT,@ccCodePrefix nvarchar(20)
+				declare @ccCode nvarchar(20),@ccCodeNumber bigint,@ccCodePrefix nvarchar(20)
 				set @ccCode=@ProductCode
 				
-				declare @NID INT, @CCIDAcc INT
+				declare @NID bigint, @CCIDAcc bigint
 				select @NID = isnull(CCNodeID,0), @CCIDAcc=CCID  from INV_PRODUCT WITH(NOLOCK) where ProductID=@ProductID   
 				if(@CCIDAcc<>@Dimesion)
 					set @NID=0	
@@ -975,7 +802,7 @@ BEGIN TRY
 
 			INSERT INTO @TblCC(CC)
 			EXEC SPSplitString @CC,',' 
-			declare @value nvarchar(max),@BasedOnValue INT
+			declare @value nvarchar(max),@BasedOnValue bigint
 			set @i=1
 			set @CCStatusID=1 
 			select @cnt=count(*) from @TblCC
@@ -1118,12 +945,12 @@ BEGIN TRY
 			ModifiedDate=@Dt
 		FROM COM_Contacts C with(nolock)
 		INNER JOIN @XML.nodes('/ContactsXML/Row') as Data(X) 	
-		ON convert(INT,X.value('@ContactID','INT'))=C.ContactID
+		ON convert(bigint,X.value('@ContactID','bigint'))=C.ContactID
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'
 
 		--If Action is DELETE then delete contacts
 		DELETE FROM COM_Contacts
-		WHERE ContactID IN(SELECT X.value('@ContactID','INT')
+		WHERE ContactID IN(SELECT X.value('@ContactID','bigint')
 			FROM @XML.nodes('/ContactsXML/Row') as Data(X)
 			WHERE X.value('@Action','NVARCHAR(10)')='DELETE')
 	END
@@ -1135,27 +962,25 @@ BEGIN TRY
 
 		--If Action is NEW then insert new Notes
 		INSERT INTO COM_Notes(FeatureID,CostCenterID,FeaturePK,Note,[GUID],CreatedBy,CreatedDate)
-		SELECT 3,3,@ProductID,Replace(X.value('@Note','NVARCHAR(MAX)'),'@~','
-'),  
+		SELECT 3,3,@ProductID,Replace(X.value('@Note','NVARCHAR(MAX)'),'@~',''),  
 		newid(),@UserName,@Dt
 		FROM @XML.nodes('/NotesXML/Row') as Data(X)
 		WHERE X.value('@Action','NVARCHAR(10)')='NEW'
 
 		--If Action is MODIFY then update Notes
 		UPDATE COM_Notes
-		SET Note=Replace(X.value('@Note','NVARCHAR(MAX)'),'@~','
-'),  		
+		SET Note=Replace(X.value('@Note','NVARCHAR(MAX)'),'@~',''),  		
 			[GUID]=newid(),
 			ModifiedBy=@UserName,
 			ModifiedDate=@Dt
 		FROM COM_Notes C with(nolock)
 		INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X) 	
-		ON convert(INT,X.value('@NoteID','INT'))=C.NoteID
+		ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'
 
 		--If Action is DELETE then delete Notes
 		DELETE FROM COM_Notes
-		WHERE NoteID IN(SELECT X.value('@NoteID','INT')
+		WHERE NoteID IN(SELECT X.value('@NoteID','bigint')
 			FROM @XML.nodes('/NotesXML/Row') as Data(X)
 			WHERE X.value('@Action','NVARCHAR(10)')='DELETE')
 
@@ -1173,7 +998,7 @@ BEGIN TRY
 		if exists(SELECT 1 from @XML.nodes('/SubstituteType') as Data(X))
 		begin
 			INSERT INTO [INV_ProductSubstitutes](ProductID,SProductID,SubstituteGroupID,SubstituteGroupName,[GUID],[CreatedBy],[CreatedDate])
-			SELECT @ProductID,X.value('@SID','INT'),X.value('@TID','NVARCHAR(50)'),'',NEWID(),@UserName,@Dt
+			SELECT @ProductID,X.value('@SID','bigint'),X.value('@TID','NVARCHAR(50)'),'',NEWID(),@UserName,@Dt
 			from @XML.nodes('/SubstituteType/TP') as Data(X)		
 		end
 		else
@@ -1188,11 +1013,11 @@ BEGIN TRY
 	BEGIN
 			SET @XML=@BinXML
 			if exists(select bn.BinID from 
-			(select a.BinNodeID from [INV_ProductBins] a with(nolock)
-			left join @XML.nodes('/BinsXML/Row') as Data(X) on a.BinNodeID= X.value('@BinNodeID','INT')
-			where CostcenterID=3 and NodeID=@ProductID and  X.value('@BinNodeID','INT') is null ) as t
-			join INV_BinDetails bn with(nolock) on bn.BinID=t.BinNodeID
-			join  INV_DocDetails a with(nolock) on bn.InvDocDetailsID=a.InvDocDetailsID
+			(select a.BinNodeID from [INV_ProductBins] a
+			left join @XML.nodes('/BinsXML/Row') as Data(X) on a.BinNodeID= X.value('@BinNodeID','BIGINT')
+			where CostcenterID=3 and NodeID=@ProductID and  X.value('@BinNodeID','BIGINT') is null ) as t
+			join INV_BinDetails bn on bn.BinID=t.BinNodeID
+			join  INV_DocDetails a on bn.InvDocDetailsID=a.InvDocDetailsID
 			where bn.IsQtyIgnored=0 and a.ProductID=@ProductID and a.statusid in(369,441,371)
 			group by bn.BinID
 			having isnull(sum(bn.VoucherType* bn.Quantity),0)<-0.01)
@@ -1200,9 +1025,9 @@ BEGIN TRY
 	END	
 	else
 	BEGIN
-			if exists(select bn.BinID from [INV_ProductBins] t with(nolock)						 
-			join INV_BinDetails bn with(nolock) on bn.BinID=t.BinNodeID
-			join  INV_DocDetails a with(nolock) on bn.InvDocDetailsID=a.InvDocDetailsID
+			if exists(select bn.BinID from [INV_ProductBins] t						 
+			join INV_BinDetails bn on bn.BinID=t.BinNodeID
+			join  INV_DocDetails a on bn.InvDocDetailsID=a.InvDocDetailsID
 			where bn.IsQtyIgnored=0 and a.ProductID=@ProductID and a.statusid in(369,441,371)
 			and t.CostcenterID=3 and t.NodeID=@ProductID
 			group by bn.BinID
@@ -1220,11 +1045,11 @@ BEGIN TRY
 	 
 			INSERT INTO [INV_ProductBins](CostcenterID,NodeID,Location,Division
 				,BinDimension,BinNodeID,IsDefault,DimCCID,DimNodeID
-				,[CreatedBy],[CreatedDate],Serialno,Capacity,StatusID)  			  
-			SELECT 3,@ProductID,X.value('@Location','INT'),X.value('@Division','INT')
-				,X.value('@BinDimension','INT'),X.value('@BinNodeID','INT'),X.value('@Default','bit')
-				,X.value('@DimCCID','INT'),X.value('@DimNodeID','INT')
-				,@UserName,@Dt,X.value('@Serialno','INT'),X.value('@Capacity','float'),X.value('@Status','INT')
+				,[CreatedBy],[CreatedDate],Serialno,Capacity)  			  
+			SELECT 3,@ProductID,X.value('@Location','BIGINT'),X.value('@Division','BIGINT')
+				,X.value('@BinDimension','BIGINT'),X.value('@BinNodeID','BIGINT'),X.value('@Default','bit')
+				,X.value('@DimCCID','BIGINT'),X.value('@DimNodeID','BIGINT')
+				,@UserName,@Dt,X.value('@Serialno','BIGINT'),X.value('@Capacity','float')
 			from @XML.nodes('/BinsXML/Row') as Data(X)
 			
 			if exists( select BinDimension from [INV_ProductBins] with(NOLOCK) where CostcenterID=3 and NodeID=@ProductID
@@ -1257,10 +1082,10 @@ BEGIN TRY
 			Variance,
 			SampleType,
 			RetestDays)  			  
-		SELECT @ProductID,X.value('@TestCaseID','INT'),X.value('@Min','float')
+		SELECT @ProductID,X.value('@TestCaseID','BIGINT'),X.value('@Min','float')
 			,X.value('@Max','float'),X.value('@Iteration','INT'),X.value('@Sample','float')
-			,X.value('@CostCenterID','INT'),X.value('@CCNodeID','INT')
-			,X.value('@DocumentID','INT')
+			,X.value('@CostCenterID','BIGINT'),X.value('@CCNodeID','BIGINT')
+			,X.value('@DocumentID','BIGINT')
 			,X.value('@TestType','INT')
 			,X.value('@ProbableValues','NVARCHAR(max)')
 			,X.value('@Variance','float')
@@ -1272,25 +1097,25 @@ BEGIN TRY
 	--Inserts Multiple Vendors
 	IF (@VendorsXML IS NOT NULL AND @VendorsXML <> '')
 	BEGIN
-		declare @VendorTable table(id int identity(1,1),VendorID INT, AccountID INT,Priorty INT,LeadTime float,
+		declare @VendorTable table(id int identity(1,1),VendorID bigint, AccountID bigint,Priorty bigint,LeadTime float,
 		Barcode nvarchar(100),[Action] NVARCHAR(10), MinOrderQty float,[Weight] float,Volume float, Remarks NVARCHAR(MAX))
-		declare @VVendorID INT,@VAccountID INT,@VPriorty INT,@VLeadTime float, @VMinOrderQty float,@Remarks NVARCHAR(MAX), 
-		@VBarcode nvarchar(100),@VAction nvarchar(10),@Vid INT,@Vcnt INT,@Weight float,@Volume float
+		declare @VVendorID bigint,@VAccountID bigint,@VPriorty bigint,@VLeadTime float, @VMinOrderQty float,@Remarks NVARCHAR(MAX), 
+		@VBarcode nvarchar(100),@VAction nvarchar(10),@Vid bigint,@Vcnt bigint,@Weight float,@Volume float
 		SET @XML=@VendorsXML
 		
 		declare @vtable table(id int identity(1,1),bar nvarchar(100))
-		declare @VVid INT,@VVcnt INT,@VVbar nvarchar(100)
+		declare @VVid bigint,@VVcnt bigint,@VVbar nvarchar(100)
 
 		insert into @VendorTable(VendorID,AccountID,Priorty,LeadTime,Barcode,[Action],MinOrderQty,Weight,Volume,Remarks)
-		SELECT DISTINCT X.value('@VendorID','INT'),Grp.AccountID,X.value('@Priority','INT'),X.value('@LeadTime','FLOAT'), 
+		SELECT DISTINCT X.value('@VendorID','bigint'),Grp.AccountID,X.value('@Priority','INT'),X.value('@LeadTime','FLOAT'), 
 		X.value('@Barcode','NVARCHAR(100)'),X.value('@Action','NVARCHAR(10)'),X.value('@MinOrderQty','FLOAT')
 		,X.value('@Weight','Float'),X.value('@Volume','Float'),X.value('@Remarks','NVARCHAR(MAX)')
 		FROM @XML.nodes('/VendorsXML/Row') as Data(X) 
-		JOIN ACC_ACCOUNTS ACC WITH(NOLOCK) ON ACC.AccountID=X.value('@AccountID','INT')
+		JOIN ACC_ACCOUNTS ACC WITH(NOLOCK) ON ACC.AccountID=X.value('@AccountID','BIGINT')
 		JOIN ACC_ACCOUNTS Grp WITH(NOLOCK) ON ACC.lft <= Grp.lft and  ACC.rgt >= Grp.rgt AND Grp.ISGROUP=0
 		
 		insert into @VendorTable(VendorID,[Action])
-		SELECT X.value('@VendorID','INT'),X.value('@Action','NVARCHAR(10)')
+		SELECT X.value('@VendorID','bigint'),X.value('@Action','NVARCHAR(10)')
 		FROM @XML.nodes('/VendorsXML/Row') as Data(X) 
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE'
 		
@@ -1362,46 +1187,13 @@ BEGIN TRY
 				BEGIN
 					select @VVbar=bar from @vtable where id=@VVid
 					
-					if exists(select * from INV_ProductBarcode WITH(NOLOCK) 
-					where Barcode=@VVbar and @VVbar is not null and @VVbar<>'')
+					if exists(select * from INV_ProductBarcode WITH(NOLOCK) where Barcode=@VVbar and @VVbar is not null and @VVbar<>'')
 					BEGIN
 						raiserror('-130',16,1)
 					END
-
-					-------
-					IF(@BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND @BarcodeID=@VVbar)		
-						RAISERROR('-130',16,1)
-
-					If exists(select BarcodeID from INV_Product with(nolock) 
-					where @BARCODE is not null and @BARCODE<>'' AND BarcodeID=@BARCODE)
-						RAISERROR('-130',16,1)
-
-					If exists(select a.BarcodeID from INV_Product a with(nolock) 
-					join @TblUomBarcodes b on a.BarcodeID=b.Barcode
-					where b.Barcode is not null and b.Barcode<>'' )
-						RAISERROR('-130',16,1)
-
-					If exists(select Barcode from INV_ProductBarcode with(nolock) 
-					where @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND BARCODE=@BarcodeID)
-						RAISERROR('-130',16,1)
-				
-					If exists(select bar from @vtable
-					where @BarcodeID is not null and @BarcodeID<>'' AND @BarcodeID<>'1' AND bar=@BarcodeID )
-						RAISERROR('-130',16,1)	
-				
-					If exists(select bar from @vtable
-					where @BARCODE is not null and @BARCODE<>'' AND bar=@BARCODE )
-						RAISERROR('-130',16,1)	
-					-------
 				
 					insert into INV_ProductBarcode(Barcode,VenderID,UnitID,ProductID,CompanyGUID,[GUID],CreatedBy,CreatedDate,ModifiedBy,ModifiedDate)
 					select @VVbar,@VAccountID,0,@ProductID,@CompanyGUID,newid(),@UserName,@Dt,@UserName,@Dt 
-					
-					SET @BarcodID=SCOPE_IDENTITY()
-					--INV_ProductBarcodeHistory
-					insert into INV_ProductBarcodeHistory(BarCodeID,Barcode,VenderID,UnitID,ProductID,CompanyGUID,[GUID],CreatedBy,CreatedDate,ModifiedBy,ModifiedDate)
-					select @BarcodID,@VVbar,@VAccountID,0,@ProductID,@CompanyGUID,newid(),@UserName,@Dt,@UserName,@Dt 
-					--
 					set @VVid=@VVid+1
 				END
 			end	
@@ -1415,8 +1207,8 @@ BEGIN TRY
 			set @XML=@ProdSpecs
 			insert into INV_ProductSpecification(ProductID,GroupName,FldType,LookUpID,Val,ShowinHeader,LookUpVal,DisplayOrder)
 			select @ProductID,X.value('@GroupName','nvarchar(max)'),X.value('@FldType','int')
-			,X.value('@LookUpID','INT'),X.value('@Val','nvarchar(max)'),X.value('@ShowinHeader','int')
-			,X.value('@LookUpVal','INT'),X.value('@DisplayOrder','INT')
+			,X.value('@LookUpID','bigint'),X.value('@Val','nvarchar(max)'),X.value('@ShowinHeader','int')
+			,X.value('@LookUpVal','BIGint'),X.value('@DisplayOrder','BIGint')
 			FROM @XML.nodes('/XML/Row') as Data(X) 
 	END
 	
@@ -1431,7 +1223,7 @@ BEGIN TRY
 				join inv_docdetails kitdoc WITH(NOLOCK) on d.invdocdetailsid=kitdoc.dynamicinvdocdetailsid 
 				and pb.productid=kitdoc.productid and d.voucherno=kitdoc.voucherno 
 				where kitdoc.productid is not null  and d.productid= @ProductID and kitdoc.productid not in 
-				(select A.value('@Product','INT') from @DATA.nodes('/XML/Row') as DATA(A) ))
+				(select A.value('@Product','BIGINT') from @DATA.nodes('/XML/Row') as DATA(A) ))
 			RAISERROR('-110',16,1)
 
 		EXEC [spINV_SetProductBundle] @KitXML,@ProductID,@CompanyGUID,@UserName,@UserID,@LangID 
@@ -1482,12 +1274,12 @@ BEGIN TRY
 		[ValuationID] [int] NOT NULL,
 		[StatusID] [int] NOT NULL,
 		[IsLotwise] [bit] NOT NULL  ,
-		[UOMID] [INT] NULL,
-		[CurrencyID] [INT] NULL,
-		[SalesAccountID] [INT] NULL,
-		[PurchaseAccountID] [INT] NULL,
-		[COGSAccountID] [INT] NULL,
-		[ClosingStockAccountID] [INT] NULL,
+		[UOMID] [bigint] NULL,
+		[CurrencyID] [bigint] NULL,
+		[SalesAccountID] [bigint] NULL,
+		[PurchaseAccountID] [bigint] NULL,
+		[COGSAccountID] [bigint] NULL,
+		[ClosingStockAccountID] [bigint] NULL,
 		CustomFieldCCMapXML nvarchar(max))
 		
 		--DELETE FROM INV_Product WHERE ParentProductID=@ProductID 
@@ -1495,7 +1287,7 @@ BEGIN TRY
 
 		INSERT INTO #TBLProduct([ProductCode] ,[ProductName],[AliasName],[ValuationID],[StatusID],[IsLotwise],[UOMID],[CurrencyID]
 		,[SalesAccountID],[PurchaseAccountID],[COGSAccountID],[ClosingStockAccountID],CustomFieldCCMapXML)  
-		SELECT X.value('@ProductCode','NVARCHAR(500)'),X.value('@ProductName','NVARCHAR(max)'),X.value('@AliasName','NVARCHAR(max)'),
+		SELECT X.value('@ProductCode','NVARCHAR(500)'),X.value('@ProductName','NVARCHAR(500)'),X.value('@AliasName','NVARCHAR(500)'),
 		X.value('@Valuation','INT'),X.value('@ProductStatus','INT'),X.value('@LotWise','BIT'),
 		X.value('@UOM','INT'),X.value('@Currency','INT'),X.value('@SalesAccount','INT'),X.value('@PurchaseAccount','INT'),X.value('@COGSAccount','INT'),
 		X.value('@ClosingStockAccount','INT'),X.value('@CustomFieldCCMapXML','NVARCHAR(max)')
@@ -1508,7 +1300,7 @@ BEGIN TRY
 			
 			SELECT TOP 1 @DUPName=T.ProductName 
 			FROM INV_Product P WITH(NOLOCK)
-			INNER JOIN #TBLProduct T with(nolock) ON P.ProductCode=T.ProductCode
+			INNER JOIN #TBLProduct T ON P.ProductCode=T.ProductCode
 			IF @DUPName IS NOT NULL
 			BEGIN
 				SET @DUPName='Duplicate Code "'+@DUPName+'"'
@@ -1528,7 +1320,7 @@ BEGIN TRY
 			END
 		END
  
-		SELECT @COUNT=COUNT(*) FROM #TBLProduct with(nolock)
+		SELECT @COUNT=COUNT(*) FROM #TBLProduct
 		
 		set @SelectedNodeID=@ProductID
 			 
@@ -1585,7 +1377,7 @@ BEGIN TRY
 				0,0,NEWID(),   			 
 				@UserName,@Dt,@CompanyGUID
 				
-				FROM #TBLProduct with(nolock) 
+				FROM #TBLProduct 
 				WHERE ID=@I
 
 			set @SubItemID =@@identity
@@ -1617,7 +1409,7 @@ BEGIN TRY
 				exec(@UpdateSql)
 			END
 
-			SELECT @AttCCCCMap=CustomFieldCCMapXML FROM #TBLProduct with(nolock) WHERE ID=@I
+			SELECT @AttCCCCMap=CustomFieldCCMapXML FROM #TBLProduct WHERE ID=@I
 
 			set @UpdateSql='UPDATE COM_CCCCDATA	SET '+@AttCCCCMap+'[ModifiedBy] ='''+ @UserName+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' 
 			WHERE NodeID='+convert(nvarchar,@SubItemID) + ' AND CostCenterID = 3'
@@ -1626,7 +1418,7 @@ BEGIN TRY
 			--Insert Stock Code
 			if(select Value from ADM_GlobalPreferences with(nolock) where Name='POSEnable')='True'
 			begin
-				select @UpdateSql=ProductCode from #TBLProduct with(nolock) WHERE ID=@I
+				select @UpdateSql=ProductCode from #TBLProduct WHERE ID=@I
 				exec spDoc_SetStockCode 0,1,@UpdateSql,@SubItemID,null,0,0,null,@UserName
 			end
 			SET  @I=@I+1
@@ -1635,21 +1427,13 @@ BEGIN TRY
 
 	--Insert Notifications
 	EXEC spCOM_SetNotifEvent @ActionType,3,@ProductID,@CompanyGUID,@UserName,@UserID,@RoleID
-	--validate Data External function
-	DECLARE @tempCCCode NVARCHAR(200)
-	set @tempCCCode=''
-	select @tempCCCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=3 and Mode=9
-	if(@tempCCCode<>'')
-	begin
-		exec @tempCCCode 3,@ProductID,@UserID,@LangID
-	end  
+	
 	--INSERT INTO HISTROY   
 	EXEC [spCOM_SaveHistory]  
 		@CostCenterID =3,    
 		@NodeID =@ProductID,
 		@HistoryStatus =@HistoryStatus,
-		@UserName=@UserName,
-		@DT=@DT
+		@UserName=@UserName
 		
 	COMMIT TRANSACTION
 --	ROLLBACK TRANSACTION
@@ -1663,8 +1447,7 @@ BEGIN TRY
 		SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) 
 		WHERE ErrorNumber=100 AND LanguageID=@LangID   
 	SET NOCOUNT OFF;  
-	RETURN @ProductID 		
-	
+	RETURN @ProductID  
 END TRY
 BEGIN CATCH  
 
@@ -1676,7 +1459,7 @@ BEGIN CATCH
 		IF(ISNUMERIC(ERROR_MESSAGE())=1 and ERROR_MESSAGE()=-536)    
 		BEGIN    
 			set @ProductName=(SELECT ProductName FROM [INV_Product] WITH(NOLOCK) WHERE ProductID IN (SELECT NodeID FROM INV_ProductBins WITH(NOLOCK) 
-						WHERE BinNodeID IN (SELECT X.value('@BinNodeID','INT')
+						WHERE BinNodeID IN (SELECT X.value('@BinNodeID','BIGINT')
 						from @XML.nodes('/BinsXML/Row') as Data(X))))    
 			   
 			SELECT ErrorMessage+' '+@ProductName as ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) 
@@ -1705,6 +1488,4 @@ BEGIN CATCH
 	SET NOCOUNT OFF  
 	RETURN -999   
 END CATCH
-
-
 GO

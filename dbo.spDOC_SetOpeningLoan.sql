@@ -4,14 +4,14 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SetOpeningLoan]
 	@CostCenterID [int],
-	@DocID [int],
-	@invID [int],
-	@LocationID [int],
-	@DivisionID [int],
+	@DocID [bigint],
+	@invID [bigint],
+	@LocationID [bigint],
+	@DivisionID [bigint],
 	@DocDate [datetime],
 	@DocNo [nvarchar](10),
 	@UserName [nvarchar](200),
-	@Userid [int],
+	@Userid [bigint],
 	@langID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -19,7 +19,7 @@ BEGIN TRANSACTION
 BEGIN TRY      
 SET NOCOUNT ON;  
   declare @Amt float,@InstAmt float,@NoOfins int,@ActInst Float,@tot float,@totUsed float,@i int,@dM datetime,@Prefix nvarchar(200),@DOCNumber nvarchar(10),@dMStart datetime
-  declare @VoucherNO nvarchar(500),@DocumentType int,@ABBR nvarchar(50),@InvDocDetailsID INT,@DocumentTypeID INT,@IM datetime,@sql nvarchar(max)
+  declare @VoucherNO nvarchar(500),@DocumentType int,@ABBR nvarchar(50),@InvDocDetailsID bigint,@DocumentTypeID bigint,@IM datetime
   declare @tab table(seq int,ins float,mnth datetime)
   set @Amt=0
   set @InstAmt=0
@@ -28,28 +28,28 @@ SET NOCOUNT ON;
   set @totUsed=0
   set @i=0
   
-IF((SELECT COUNT(*) FROM INV_DOCDETAILS WITH(NOLOCK) WHERE COSTCENTERID=40056 AND REFNODEID IN (SELECT INVDOCDETAILSID FROM INV_DOCDETAILS WITH(NOLOCK) WHERE DOCID=@DOCID))>0)
+  PRINT 'TT'
+  PRINT @CostCenterID
+  PRINT @DocID
+  PRINT @invID
+  
+IF((SELECT COUNT(*) FROM INV_DOCDETAILS WITH(NOLOCK) WHERE COSTCENTERID=40056 AND REFNODEID IN (SELECT INVDOCDETAILSID FROM INV_DOCDETAILS WHERE DOCID=@DOCID))>0)
 BEGIN
-	IF((SELECT COUNT(*) FROM INV_DOCDETAILS WITH(NOLOCK) WHERE COSTCENTERID=40057 AND REFNODEID IN (SELECT INVDOCDETAILSID FROM INV_DOCDETAILS WITH(NOLOCK) WHERE DOCID=@DOCID))=0)
+	IF((SELECT COUNT(*) FROM INV_DOCDETAILS WITH(NOLOCK) WHERE COSTCENTERID=40057 AND REFNODEID IN (SELECT INVDOCDETAILSID FROM INV_DOCDETAILS WHERE DOCID=@DOCID))=0)
 	BEGIN
 		DECLARE @DOCPREFIX NVARCHAR(50),@DCNO INT
-		SELECT @DOCPREFIX=DOCPREFIX,@DCNO=DOCNUMBER FROM INV_DOCDETAILS WITH(NOLOCK) WHERE COSTCENTERID=40056 AND REFNODEID IN (SELECT INVDOCDETAILSID FROM INV_DOCDETAILS WITH(NOLOCK) WHERE DOCID=@DOCID)
-		UPDATE INV_DOCDETAILS SET REFNODEID=0 WHERE COSTCENTERID=40056 AND REFNODEID IN (SELECT INVDOCDETAILSID FROM INV_DOCDETAILS WITH(NOLOCK) WHERE DOCID=@DOCID)
-		EXEC spDOC_DeleteInvDocument 40056,@DOCPREFIX,@DCNO,0,' and (a.CostCenterID=c.DocumentID or c.DocumentID=1) and (b.dcCCNID2=c.CCNID2 or c.CCNID2=0)','','',1,'Admin',1,1
+		SELECT @DOCPREFIX=DOCPREFIX,@DCNO=DOCNUMBER FROM INV_DOCDETAILS WITH(NOLOCK) WHERE COSTCENTERID=40056 AND REFNODEID IN (SELECT INVDOCDETAILSID FROM INV_DOCDETAILS WHERE DOCID=@DOCID)
+		UPDATE INV_DOCDETAILS SET REFNODEID=0 WHERE COSTCENTERID=40056 AND REFNODEID IN (SELECT INVDOCDETAILSID FROM INV_DOCDETAILS WHERE DOCID=@DOCID)
+		EXEC spDOC_DeleteInvDocument 40056,@DOCPREFIX,@DCNO,0,' and (a.CostCenterID=c.DocumentID or c.DocumentID=1) and (b.dcCCNID2=c.CCNID2 or c.CCNID2=0)',1,'Admin',1,1
 	END
 END
 
-  SET @SQL='select @dM=convert(datetime,dcAlpha1) from COM_DocTextData WITH(NOLOCK)
-  where InvDocDetailsID='+CONVERT(VARCHAR,@invID)+' and dcAlpha1 is not null and dcAlpha1<>'''''
-  
-  EXEC sp_executesql @SQL,N'@dM datetime OUTPUT',@dM OUTPUT
-  
+  select @dM=convert(datetime,dcAlpha1) from COM_DocTextData
+  where InvDocDetailsID=@invID and dcAlpha1 is not null and dcAlpha1<>''
   set @dMStart=convert(datetime,@dM)
   
-  SET @SQL='select @tot=dcNum1,@Amt=dcNum2,@InstAmt=dcNum3 from COM_DocNumData WITH(NOLOCK)
-  where InvDocDetailsID='+CONVERT(VARCHAR,@invID)
-  
-  EXEC sp_executesql @SQL,N'@tot float OUTPUT,@Amt float OUTPUT ,@InstAmt float OUTPUT',@tot OUTPUT,@Amt OUTPUT ,@InstAmt OUTPUT  
+  select @tot=dcNum1,@Amt=dcNum2,@InstAmt=dcNum3 from COM_DocNumData
+  where InvDocDetailsID=@invID 
 	IF(@tot>0)
 	BEGIN  
 		set @NoOfins=@tot/@InstAmt
@@ -121,6 +121,7 @@ END
 					([AccDocDetailsID]      
 					,[DocID]      
 					,[CostCenterID]      
+					,[DocumentTypeID]      
 					,[DocumentType],DocOrder      
 					,[VoucherType]      
 					,[VoucherNo]      
@@ -156,13 +157,16 @@ END
 					,[CurrencyID]      
 					,[ExchangeRate]     
 					,[GrossFC]    
-					,[StockValueFC] 
+					,[StockValueFC]       
+					,[CompanyGUID]      
+					,[GUID]      
 					,[CreatedBy]      
 					,[CreatedDate],ModifiedBy,ModifiedDate,UOMConversion       
-					,UOMConvertedQty,WorkflowID , WorkFlowStatus , WorkFlowLevel,RefCCID,RefNodeid,ParentSchemeID,RefNo)    
+					,UOMConvertedQty,WorkflowID , WorkFlowStatus , WorkFlowLevel,RefCCID,RefNodeid,ParentSchemeID,RefNo,SysInfo)    
 					SELECT [AccDocDetailsID]      
 					,@DocID      
-					,40056           
+					,40056      
+					,@DocumentTypeID      
 					,@DocumentType,DocOrder      
 					,[VoucherType]      
 					,@VoucherNO      
@@ -199,45 +203,83 @@ END
 					,[ExchangeRate]     
 					,[GrossFC]    
 					,[StockValueFC]       
-					      
+					,[CompanyGUID]      
+					,[GUID]      
 					,[CreatedBy]      
 					,[CreatedDate],ModifiedBy,ModifiedDate,UOMConversion       
-					,UOMConvertedQty,WorkflowID , WorkFlowStatus , WorkFlowLevel,300,@invID,ParentSchemeID,RefNo
-					from [INV_DocDetails] WITH(NOLOCK)				
+					,UOMConvertedQty,WorkflowID , WorkFlowStatus , WorkFlowLevel,300,@invID,ParentSchemeID,RefNo,SysInfo
+					from [INV_DocDetails]				
 					where InvDocDetailsID=@invID
 					
 					SET @InvDocDetailsID=@@IDENTITY  
 
-			
-			declare @cols nvarchar(max)
-			SET @SQL=''
-			set @cols=''
-			select @cols=@cols+name+',' from sys.columns
-			where object_id('COM_DocCCData')=object_id
-			and name like 'dcCCNID%'
-
-			SET @SQL='INSERT INTO [COM_DocCCData]    
-			('+@cols+'InvDocDetailsID)
-			
-			SELECT '+@cols +CONVERT(NVARCHAR,@InvDocDetailsID)+'
-			from [COM_DocCCData] with(nolock)   where  InvDocDetailsID='+CONVERT(NVARCHAR,@invID)
-			PRINT @SQL
-			EXEC(@SQL)
+			INSERT INTO [COM_DocCCData]    
+			(InvDocDetailsID
+          ,[dcCCNID1],[dcCCNID2],[dcCCNID3],[dcCCNID4],[dcCCNID5]    
+          ,[dcCCNID6],[dcCCNID7],[dcCCNID8],[dcCCNID9],[dcCCNID10]    
+          ,[dcCCNID11],[dcCCNID12],[dcCCNID13],[dcCCNID14],[dcCCNID15]    
+          ,[dcCCNID16],[dcCCNID17],[dcCCNID18],[dcCCNID19],[dcCCNID20]    
+          ,[dcCCNID21],[dcCCNID22],[dcCCNID23],[dcCCNID24],[dcCCNID25]    
+          ,[dcCCNID26],[dcCCNID27],[dcCCNID28],[dcCCNID29],[dcCCNID30]    
+          ,[dcCCNID31]    
+          ,[dcCCNID32]    
+          ,[dcCCNID33]    
+          ,[dcCCNID34]    
+          ,[dcCCNID35]    
+          ,[dcCCNID36]    
+          ,[dcCCNID37]    
+          ,[dcCCNID38]    
+          ,[dcCCNID39]    
+          ,[dcCCNID40]    
+          ,[dcCCNID41]    
+          ,[dcCCNID42]    
+          ,[dcCCNID43]    
+          ,[dcCCNID44]    
+          ,[dcCCNID45]    
+          ,[dcCCNID46]    
+          ,[dcCCNID47]    
+          ,[dcCCNID48]    
+          ,[dcCCNID49]    
+          ,[dcCCNID50],dcCCNID51,dcCCNID52,dcCCNID53 )    
+           
+          SELECT     
+         @InvDocDetailsID    
+         ,[dcCCNID1],[dcCCNID2],[dcCCNID3],[dcCCNID4],[dcCCNID5]    
+          ,[dcCCNID6],[dcCCNID7],[dcCCNID8],[dcCCNID9],[dcCCNID10]    
+          ,[dcCCNID11],[dcCCNID12],[dcCCNID13],[dcCCNID14],[dcCCNID15]    
+          ,[dcCCNID16],[dcCCNID17],[dcCCNID18],[dcCCNID19],[dcCCNID20]    
+          ,[dcCCNID21],[dcCCNID22],[dcCCNID23],[dcCCNID24],[dcCCNID25]    
+          ,[dcCCNID26],[dcCCNID27],[dcCCNID28],[dcCCNID29],[dcCCNID30]    
+          ,[dcCCNID31]    
+          ,[dcCCNID32]    
+          ,[dcCCNID33]    
+          ,[dcCCNID34]    
+          ,[dcCCNID35]    
+          ,[dcCCNID36]    
+          ,[dcCCNID37]    
+          ,[dcCCNID38]    
+          ,[dcCCNID39]    
+          ,[dcCCNID40]    
+          ,[dcCCNID41]    
+          ,[dcCCNID42]    
+          ,[dcCCNID43]    
+          ,[dcCCNID44]    
+          ,[dcCCNID45]    
+          ,[dcCCNID46]    
+          ,[dcCCNID47]    
+          ,[dcCCNID48]    
+          ,[dcCCNID49]    
+          ,[dcCCNID50] ,dcCCNID51,dcCCNID52,dcCCNID53
+		  from [COM_DocCCData] with(nolock)   where  InvDocDetailsID=@invID
 			
 			select @InstAmt=ins,@IM=mnth from @tab where seq=@i
 			
-			INSERT INTO [COM_DocNumData] ([InvDocDetailsID])     
-			values(@InvDocDetailsID)
+			INSERT INTO [COM_DocNumData] ([InvDocDetailsID],dcNum1,dcCalcNum1,dcCurrID1,dcExchRT1,dcCalcNumFC1,
+			dcNum2,dcCalcNum2,dcCurrID2,dcExchRT2,dcCalcNumFC2)     
+			values(@InvDocDetailsID,@i,@i,1,1,@i,@InstAmt,@InstAmt,1,1,@InstAmt)
 			
-			set @sql='update [COM_DocNumData] set dcNum1='+convert(nvarchar(max),@i)+',dcCalcNum1='+convert(nvarchar(max),@i)+',
-			dcNum2='+convert(nvarchar(max),@InstAmt)+',dcCalcNum2='+convert(nvarchar(max),@InstAmt)+'
-			where [InvDocDetailsID]='+convert(nvarchar(max),@InvDocDetailsID)
-			PRINT @SQL
-			exec (@sql)
-			
-			SET @SQL='INSERT INTO [COM_DocTextData] ([InvDocDetailsID],dcAlpha1,dcAlpha2,dcAlpha3,dcAlpha4,dcAlpha5,dcAlpha6)     
-			values('+CONVERT(NVARCHAR,@InvDocDetailsID)+','''+CONVERT(NVARCHAR(MAX),@tot)+''','''+CONVERT(NVARCHAR(MAX),@tot)+''','''+CONVERT(NVARCHAR(MAX),@InstAmt)+''','''+CONVERT(NVARCHAR(MAX),@NoOfins)+''',CONVERT(nvarchar,'''+CONVERT(NVARCHAR(MAX),@dMStart)+''',100),CONVERT(nvarchar,'''+CONVERT(NVARCHAR(MAX),@IM)+''',100))'
-			exec (@sql)	
+			INSERT INTO [COM_DocTextData] ([InvDocDetailsID],dcAlpha1,dcAlpha2,dcAlpha3,dcAlpha4,dcAlpha5,dcAlpha6)     
+			values(@InvDocDetailsID,@tot,@tot,@InstAmt,@NoOfins,CONVERT(nvarchar,@dMStart,100),CONVERT(nvarchar,@IM,100))	
 					
 		END
 COMMIT TRANSACTION
@@ -248,7 +290,4 @@ BEGIN CATCH
  SET NOCOUNT OFF      
  RETURN -999       
 END CATCH 
-
-----spDOC_SetOpeningLoan
---40055,2857,17185,0,0,'2022-06-08 00:00:00.000',1,'admin',1,1
 GO

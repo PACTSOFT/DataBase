@@ -10,12 +10,8 @@ AS
 BEGIN TRY  
 SET NOCOUNT ON;  
 
-	select DocumentName,CostCenterID from ADM_DocumentTypes with(nolock)
+	select DocumentName,CostCenterID from ADM_DocumentTypes
 	where DocumentType in (19,14)
-	
-	select Name,FeatureID from ADM_Features with(nolock)
-	where IsEnabled=1 and FeatureID>50002
-
 
 	
 SET NOCOUNT OFF;  
@@ -33,5 +29,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH 
 GO

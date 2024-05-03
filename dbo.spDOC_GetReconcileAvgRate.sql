@@ -5,7 +5,7 @@ GO
 CREATE PROCEDURE [dbo].[spDOC_GetReconcileAvgRate]
 	@ProductXML [nvarchar](max),
 	@DocDate [datetime],
-	@DocID [int],
+	@DocID [bigint],
 	@IsFromReconcile [bit],
 	@UserID [int] = 0,
 	@LangID [int] = 1
@@ -15,15 +15,15 @@ BEGIN TRANSACTION
 BEGIN TRY        
 SET NOCOUNT ON        
         
-      DECLARE @TblProducts AS TABLE(ID INT IDENTITY(1,1),PID INT,qty float,invid INT,rowcc nvarchar(max))  
-      DECLARE @TblRates AS TABLE(PID INT ,invid INT ,AvgRate Float)  
-      declare @i int,@cnt int,@XML xml,@rowcc nvarchar(max) ,@AvgWHERE  nvarchar(max),@PrefValue nvarchar(100),@NID INT
-   declare @value INT,@QOH float,@AvgRate float,@HOLDQTY FLOAT,@RESERVEQTY FLOAT,@DocQty float, @DocDetailsID INT  
-      DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID INT,NodeId INT)        
+      DECLARE @TblProducts AS TABLE(ID INT IDENTITY(1,1),PID bigint,qty float,invid bigint,rowcc nvarchar(max))  
+      DECLARE @TblRates AS TABLE(PID bigint ,invid bigint ,AvgRate Float)  
+      declare @i int,@cnt int,@XML xml,@rowcc nvarchar(max) ,@AvgWHERE  nvarchar(max),@PrefValue nvarchar(100),@NID bigint
+   declare @value bigint,@QOH float,@AvgRate float,@HOLDQTY FLOAT,@RESERVEQTY FLOAT,@DocQty float, @DocDetailsID BIGINT  
+      DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID bigint,NodeId BIGINT)        
 
    set @XML=@ProductXML  
   INSERT INTO @TblProducts  
-   SELECT X.value('@ProductID','INT'), X.value('@QTY','float'),   X.value('@DETAILSID','INT'),X.value('@avgwhere','nvarchar(max)')
+   SELECT X.value('@ProductID','bigint'), X.value('@QTY','float'),   X.value('@DETAILSID','bigint'),X.value('@avgwhere','nvarchar(max)')
   FROM @XML.nodes('/PXML/Row') as Data(X)  
          
               
@@ -61,5 +61,7 @@ BEGIN CATCH
 ROLLBACK TRANSACTION        
 SET NOCOUNT OFF          
 RETURN -999           
-END CATCH
+END CATCH     
+  
+    
 GO

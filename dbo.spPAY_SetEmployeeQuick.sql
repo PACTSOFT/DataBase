@@ -3,13 +3,13 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_SetEmployeeQuick]
-	@NodeID [int],
+	@NodeID [bigint],
 	@EmpCode [nvarchar](200),
 	@EmpName [nvarchar](500),
 	@IsGroup [bit],
 	@StatusID [int],
 	@CodePrefix [nvarchar](200),
-	@CodeNumber [int],
+	@CodeNumber [bigint],
 	@StaticFieldsQuery [nvarchar](max),
 	@CustomFieldsQuery [nvarchar](max),
 	@CustomCostCenterFieldsQuery [nvarchar](max),
@@ -149,7 +149,7 @@ SET NOCOUNT ON;
 		SET '+@StaticFieldsQuery+'[GUID]= NEWID(), [ModifiedBy] ='''+ @UserName
 		  +''',[ModifiedDate] =' + convert(NVARCHAR,@Dt) +' WHERE NodeID='+convert(NVARCHAR,@NodeID)
 		print (@SQL)
-		EXEC sp_executesql @SQL
+		exec(@SQL)
 	END
 	
 	
@@ -162,17 +162,17 @@ SET NOCOUNT ON;
 		  +''',[ModifiedDate] =' + convert(NVARCHAR,@Dt) +' WHERE NodeID='+convert(NVARCHAR,@NodeID)
 	
 		print (@SQL)
-			EXEC sp_executesql @SQL
+			exec(@SQL)
 	END
 
 	--Update CostCenter Extra Fields
 	set @SQL='update COM_CCCCDATA
 	SET '+@CustomCostCenterFieldsQuery+' [ModifiedBy] ='''+ @UserName+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID='+convert(nvarchar,@NodeID) + ' AND COSTCENTERID ='+convert(nvarchar,@CostCenterID)
 	print (@SQL)
-	EXEC sp_executesql @SQL
+	exec(@SQL)
  
 	set @SQL='update COM_CC50051 SET NAME=RTRIM(LTRIM(NAME)) WHERE NodeID='+convert(NVARCHAR,@NodeID)
-	EXEC sp_executesql @SQL
+	exec(@SQL)
 
 	declare @LoginUserID NVARCHAR(250)
 	SELECT @LoginUserID=LoginUserID FROM COM_CC50051 WITH(NOLOCK) WHERE NodeID=@NodeID

@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spRPT_GetReportCategoryandField]
-	@Category [int] = 0,
-	@Field [int] = 0,
-	@Type [int] = 0,
+	@Category [bigint] = 0,
+	@Field [bigint] = 0,
+	@Type [bigint] = 0,
 	@Letter [nvarchar](max) = null,
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -41,8 +41,7 @@ SET NOCOUNT ON
 	FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS i1  INNER JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE i2 ON i1.CONSTRAINT_NAME = i2.CONSTRAINT_NAME  WHERE i1.CONSTRAINT_TYPE = 'PRIMARY KEY') PT ON PT.TABLE_NAME = PK.TABLE_NAME
 	UNION 
 	SELECT 'PRD_BILLOFMATERIALEXTENDED','BOMID','PRD_BILLOFMATERIAL','BOMID'
-	UNION 
-	SELECT 'CRM_ActivityLog','ActivityID','CRM_Activities','ActivityID'
+	
 	
 	--Status Field Info
 	SELECT TOP 1 R.ResourceData UserColumnName ,C.CostCenterID,C.CostCenterName,C.SysTableName,C.SysColumnName,C.CostCenterColID,upper(C.ColumnDataType) ColumnDataType,
@@ -85,5 +84,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

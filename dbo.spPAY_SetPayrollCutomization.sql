@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_SetPayrollCutomization]
-	@GradeID [int],
+	@GradeID [bigint],
 	@PayrollDate [datetime],
 	@XML [nvarchar](max) = null,
 	@PTXML [nvarchar](max) = null,
@@ -91,7 +91,7 @@ SET NOCOUNT ON;
 		   ,CONVERT(FLOAT,@PayrollDate)
 		   ,X.value('@Type','INT')
 		   ,X.value('@SNo','INT')
-		   ,X.value('@ComponentID','INT')
+		   ,X.value('@ComponentID','BIGINT')
 		   ,X.value('@Formula','NVARCHAR(MAX)')
 		   ,X.value('@AddToNet','NVARCHAR(50)')
 		   ,ISNULL(X.value('@ShowInDuesEntry','NVARCHAR(50)'),'Yes')
@@ -102,12 +102,12 @@ SET NOCOUNT ON;
 		   ,X.value('@Behaviour','NVARCHAR(50)')
 		   ,X.value('@MaxOTHrs','FLOAT')
 		   ,X.value('@ROff','FLOAT')
-		   ,X.value('@TaxMap','INT')
+		   ,X.value('@TaxMap','BIGINT')
 		   ,X.value('@Expression','NVARCHAR(500)')
 		   ,X.value('@Message','NVARCHAR(500)')
 		   ,X.value('@Action','INT')
-		   ,isnull(X.value('@DrAccount','INT'),0)
-		   ,isnull(X.value('@CrAccount','INT'),0)
+		   ,isnull(X.value('@DrAccount','BIGINT'),0)
+		   ,isnull(X.value('@CrAccount','BIGINT'),0)
 		   ,X.value('@Percentage','FLOAT')
 		   ,X.value('@MaxLeaves','FLOAT')
 		   ,X.value('@AtATime','FLOAT')
@@ -130,7 +130,7 @@ SET NOCOUNT ON;
 		IF (@PTXML IS NOT NULL AND @PTXML <> '')  
 		BEGIN
 			SET @DATAXML=@PTXML
-			DECLARE @PayrollPTDimension INT
+			DECLARE @PayrollPTDimension BIGINT
 			SELECT @PayrollPTDimension=VALUE FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='PayrollPTDimension'
 			INSERT INTO [PAY_PayrollPT]
 			   ([PayrollDate]
@@ -146,7 +146,7 @@ SET NOCOUNT ON;
 			   ,[ModifiedDate])
 			SELECT CONVERT(FLOAT,@PayrollDate)
 				,@PayrollPTDimension
-				,X.value('@NodeID','INT')
+				,X.value('@NodeID','BIGINT')
 				,X.value('@FromSlab','FLOAT')
 				,X.value('@ToSlab','FLOAT')
 				,X.value('@Amount','FLOAT')
@@ -160,7 +160,7 @@ SET NOCOUNT ON;
 		
 		IF (@sDBAlter IS NOT NULL AND @sDBAlter <> '' AND LEN(@sDBAlter)>0)  
 		BEGIN
-			EXEC sp_executesql @sDBAlter
+			EXEC(@sDBAlter)
 		END
 		
 	END

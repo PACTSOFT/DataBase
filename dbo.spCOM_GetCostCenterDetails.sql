@@ -4,8 +4,8 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetCostCenterDetails]
 	@CostCenterID [int] = 0,
-	@NodeID [int] = 0,
-	@UserID [int],
+	@NodeID [bigint] = 0,
+	@UserID [bigint],
 	@RoleID [int],
 	@LangID [int] = 1,
 	@CallType [int] = NULL,
@@ -19,7 +19,7 @@ SET NOCOUNT ON;
 
 	IF(@CallType=1)  
 	BEGIN
-		SELECT a.*,b.GroupName as RibbonGroupName,b.TabID as RibbonTabID,FeatureActionID FROM ADM_FEATURES a with(nolock) 
+		SELECT a.*,b.GroupName as RibbonGroupName,b.TabID as RibbonTabID FROM ADM_FEATURES a with(nolock) 
 		LEFT JOIN ADM_RibbonView b WITH(NOLOCK) on b.FeatureID=a.FeatureID
 		WHERE a.FEATUREID>=50000
 	END 	  
@@ -43,7 +43,7 @@ SET NOCOUNT ON;
 			INNER JOIN ADM_Features F with(nolock) ON CC.ParentCostCenterID=F.FeatureID
 			WHERE CC.CostCenterID=@CostCenterId AND CC.NodeID=@NodeID AND CC.ParentCostCenterID=@AssignedDim
 			GROUP BY CC.ParentCostCenterID,F.TableName 
-		exec sp_executesql @SQL
+		exec(@SQL)
 	END
 	ELSE  
 	BEGIN  
@@ -66,7 +66,7 @@ SET NOCOUNT ON;
 		SELECT Top 1 @Table=SysTableName FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterId  
 
 		SET @SQL='SELECT * FROM '+@Table+' WITH(nolock) WHERE NodeID='+convert(nvarchar,@NodeID)    
-		exec sp_executesql @SQL
+		EXEC(@SQL)    
 
 		--Getting Contacts    
 		EXEC [spCom_GetFeatureWiseContacts] @CostCenterID,@NodeID,2,1,1 
@@ -89,21 +89,77 @@ SET NOCOUNT ON;
 		--Getting ADDRESS 
 		EXEC spCom_GetAddress @CostCenterId,@NodeID,1,1
 
-		SELECT * FROM COM_CCCCData WITH(NOLOCK)
-		WHERE CostCenterID=@CostCenterId AND NODEID=@NodeID  
+		SELECT R.* ,
+		NID1.NAME as NAME1,NID2.NAME as NAME2,NID3.NAME as NAME3,NID4.NAME as NAME4,NID5.NAME as NAME5,NID6.NAME as NAME6,NID7.NAME as NAME7,NID8.NAME as NAME8,NID9.NAME as NAME9,NID10.NAME  AS NAME10,
+		NID11.NAME  AS NAME11,NID12.NAME  AS NAME12,NID13.NAME  AS NAME13,NID14.NAME  AS NAME14,NID15.NAME  AS NAME15,NID16.NAME  AS NAME16,NID17.NAME  AS NAME17,NID18.NAME  AS NAME18,NID19.NAME  AS NAME19,NID20.NAME  AS NAME20,
+		NID21.NAME  AS NAME21,NID22.NAME  AS NAME22,NID23.NAME  AS NAME23,NID24.NAME  AS NAME24,NID25.NAME  AS NAME25,NID26.NAME  AS NAME26,NID27.NAME  AS NAME27,NID28.NAME  AS NAME28,NID29.NAME  AS NAME29,NID30.NAME  AS NAME30,
+		NID31.NAME  AS NAME31,NID32.NAME  AS NAME32,NID33.NAME  AS NAME33,NID34.NAME  AS NAME34,NID35.NAME  AS NAME35,NID36.NAME  AS NAME36,NID37.NAME  AS NAME37,NID38.NAME  AS NAME38,NID39.NAME  AS NAME39,NID40.NAME  AS NAME40,
+		NID41.NAME  AS NAME41,NID42.NAME  AS NAME42,NID43.NAME  AS NAME43,NID44.NAME  AS NAME44,NID45.NAME  AS NAME45,NID46.NAME  AS NAME46,NID47.NAME  AS NAME47,NID48.NAME  AS NAME48,NID49.NAME  AS NAME49,NID50.NAME  AS NAME50 
+		FROM COM_CCCCData R WITH(NOLOCK)
+		 LEFT JOIN COM_DIVISION NID1 WITH(NOLOCK) on R.CCNID1=NID1.NODEID
+				LEFT JOIN COM_Location NID2 WITH(NOLOCK) on R.CCNID2=NID2.NODEID
+				LEFT JOIN COM_Branch NID3 WITH(NOLOCK) on R.CCNID3=NID3.NODEID
+				LEFT JOIN COM_Department NID4 WITH(NOLOCK) on R.CCNID4=NID4.NODEID
+				LEFT JOIN COM_Salesman NID5 WITH(NOLOCK) on R.CCNID5=NID5.NODEID
+				LEFT JOIN COM_Category NID6 WITH(NOLOCK) on R.CCNID6=NID6.NODEID
+				LEFT JOIN COM_Area NID7 WITH(NOLOCK) on R.CCNID7=NID7.NODEID
+				LEFT JOIN COM_Teritory NID8 WITH(NOLOCK) on R.CCNID8=NID8.NODEID
+				LEFT JOIN COM_CC50009 NID9 WITH(NOLOCK) on R.CCNID9=NID9.NODEID
+				LEFT JOIN COM_CC50010 NID10 WITH(NOLOCK) on R.CCNID10=NID10.NODEID
+				LEFT JOIN COM_CC50011 NID11 WITH(NOLOCK) on R.CCNID11=NID11.NODEID
+				LEFT JOIN COM_CC50012 NID12 WITH(NOLOCK) on R.CCNID12=NID12.NODEID
+				LEFT JOIN COM_CC50013 NID13 WITH(NOLOCK) on R.CCNID13=NID13.NODEID
+				LEFT JOIN COM_CC50014 NID14 WITH(NOLOCK) on R.CCNID14=NID14.NODEID
+				LEFT JOIN COM_CC50015 NID15 WITH(NOLOCK) on R.CCNID15=NID15.NODEID
+				LEFT JOIN COM_CC50016 NID16 WITH(NOLOCK) on R.CCNID16=NID16.NODEID
+				LEFT JOIN COM_CC50017 NID17 WITH(NOLOCK) on R.CCNID17=NID17.NODEID
+				LEFT JOIN COM_CC50018 NID18 WITH(NOLOCK) on R.CCNID18=NID18.NODEID
+				LEFT JOIN COM_CC50019 NID19 WITH(NOLOCK) on R.CCNID19=NID19.NODEID 
+				LEFT JOIN COM_CC50020 NID20 WITH(NOLOCK) ON R.CCNID20=NID20.NODEID
+				LEFT JOIN COM_CC50021 NID21 WITH(NOLOCK) ON R.CCNID21=NID21.NODEID
+				LEFT JOIN COM_CC50022 NID22 WITH(NOLOCK) ON R.CCNID22=NID22.NODEID
+				LEFT JOIN COM_CC50023 NID23 WITH(NOLOCK) ON R.CCNID23=NID23.NODEID
+				LEFT JOIN COM_CC50024 NID24 WITH(NOLOCK) ON R.CCNID24=NID24.NODEID
+				LEFT JOIN COM_CC50025 NID25 WITH(NOLOCK) ON R.CCNID25=NID25.NODEID
+				LEFT JOIN COM_CC50026 NID26 WITH(NOLOCK) ON R.CCNID26=NID26.NODEID
+				LEFT JOIN COM_CC50027 NID27 WITH(NOLOCK) ON R.CCNID27=NID27.NODEID
+				LEFT JOIN COM_CC50028 NID28 WITH(NOLOCK) ON R.CCNID28=NID28.NODEID
+				LEFT JOIN COM_CC50029 NID29 WITH(NOLOCK) ON R.CCNID29=NID29.NODEID 
+				LEFT JOIN COM_CC50030 NID30 WITH(NOLOCK) ON R.CCNID30=NID30.NODEID
+				LEFT JOIN COM_CC50031 NID31 WITH(NOLOCK) ON R.CCNID31=NID31.NODEID
+				LEFT JOIN COM_CC50032 NID32 WITH(NOLOCK) ON R.CCNID32=NID32.NODEID
+				LEFT JOIN COM_CC50033 NID33 WITH(NOLOCK) ON R.CCNID33=NID33.NODEID
+				LEFT JOIN COM_CC50034 NID34 WITH(NOLOCK) ON R.CCNID34=NID34.NODEID
+				LEFT JOIN COM_CC50035 NID35 WITH(NOLOCK) ON R.CCNID35=NID35.NODEID
+				LEFT JOIN COM_CC50036 NID36 WITH(NOLOCK) ON R.CCNID36=NID36.NODEID
+				LEFT JOIN COM_CC50037 NID37 WITH(NOLOCK) ON R.CCNID37=NID37.NODEID
+				LEFT JOIN COM_CC50038 NID38 WITH(NOLOCK) ON R.CCNID38=NID38.NODEID
+				LEFT JOIN COM_CC50039 NID39 WITH(NOLOCK) ON R.CCNID39=NID39.NODEID 
+				LEFT JOIN COM_CC50040 NID40 WITH(NOLOCK) ON R.CCNID40=NID40.NODEID
+				LEFT JOIN COM_CC50041 NID41 WITH(NOLOCK) ON R.CCNID41=NID41.NODEID
+				LEFT JOIN COM_CC50042 NID42 WITH(NOLOCK) ON R.CCNID42=NID42.NODEID
+				LEFT JOIN COM_CC50043 NID43 WITH(NOLOCK) ON R.CCNID43=NID43.NODEID
+				LEFT JOIN COM_CC50044 NID44 WITH(NOLOCK) ON R.CCNID44=NID44.NODEID
+				LEFT JOIN COM_CC50045 NID45 WITH(NOLOCK) ON R.CCNID45=NID45.NODEID
+				LEFT JOIN COM_CC50046 NID46 WITH(NOLOCK) ON R.CCNID46=NID46.NODEID
+				LEFT JOIN COM_CC50047 NID47 WITH(NOLOCK) ON R.CCNID47=NID47.NODEID
+				LEFT JOIN COM_CC50048 NID48 WITH(NOLOCK) ON R.CCNID48=NID48.NODEID
+				LEFT JOIN COM_CC50049 NID49 WITH(NOLOCK) ON R.CCNID49=NID49.NODEID 
+				LEFT JOIN COM_CC50050 NID50 WITH(NOLOCK) ON R.CCNID50=NID50.NODEID
+		WHERE R.CostCenterID=@CostCenterId AND R.NODEID=@NodeID  
 
 		set @SQL='select Code,Name from '+@Table+' WITH(nolock) WHERE NodeID in 
 		(select ParentID from '+@Table+' with(nolock) where NodeID= '+convert(nvarchar,@NodeID)+')'
-		exec sp_executesql @SQL
 		 
+		exec (@SQL)
 		SELECT ConvertedCRMProduct FROM INV_PRODUCT WITH(nolock) WHERE ConvertedCRMProduct=@NodeID
 
 		 --CCmap display data 
-		CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),COSTCENTERID INT,NODEID INT)
-		CREATE TABLE #TBLTEMP1 (CostCenterId INT,CostCenterName nvarchar(max),NodeID INT,[Value] NVARCHAR(300), Code nvarchar(300))
+		CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),COSTCENTERID BIGINT,NODEID BIGINT)
+		CREATE TABLE #TBLTEMP1 (CostCenterId bigint,CostCenterName nvarchar(max),NodeID BIGINT,[Value] NVARCHAR(300), Code nvarchar(300))
 		INSERT INTO #TBLTEMP
 		SELECT CostCenterID,NODEID  FROM COM_CostCenterCostCenterMap with(nolock) WHERE ParentCostCenterID=@CostCenterId AND ParentNodeID=@NodeID
-		DECLARE @COUNT INT,@I INT,@TABLENAME NVARCHAR(300), @CCID INT,@ccNODEID INT,@FEATURENAME NVARCHAR(300), @IsGroup bit
+		DECLARE @COUNT INT,@I INT,@TABLENAME NVARCHAR(300), @CCID BIGINT,@ccNODEID BIGINT,@FEATURENAME NVARCHAR(300), @IsGroup bit
 		SELECT @I=1,@COUNT=COUNT(*) FROM #TBLTEMP
 		WHILE @I<=@COUNT
 		BEGIN
@@ -112,25 +168,8 @@ SET NOCOUNT ON;
 			 
 			IF @CCID=7
 			BEGIN
-				SET @SQL='INSERT INTO #TBLTEMP1 
-				SELECT '+CONVERT(VARCHAR,@CCID)+','''+@FEATURENAME+''',UserID,UserName,UserName FROM '+@TABLENAME +'  with(nolock)
+				SET @SQL='INSERT INTO #TBLTEMP1 SELECT '+CONVERT(VARCHAR,@CCID)+','''+@FEATURENAME+''',UserID,UserName,UserName FROM '+@TABLENAME +'  with(nolock)
 						WHERE UserID='+CONVERT(VARCHAR,@ccNODEID) 
-			END
-			ELSE IF @CCID=6
-			BEGIN
-				SET @SQL='INSERT INTO #TBLTEMP1 
-				SELECT '+CONVERT(VARCHAR,@CCID)+','''+@FEATURENAME+''',RoleID,Name,Name FROM '+@TABLENAME +'  with(nolock)
-						WHERE RoleID='+CONVERT(VARCHAR,@ccNODEID) 
-			END
-			ELSE IF @CCID=8
-			BEGIN
-				SET @SQL='INSERT INTO #TBLTEMP1 SELECT Top 1 '+CONVERT(VARCHAR,@CCID)+','''+@FEATURENAME+''',CostCenterID NODEID,CostCenterName NAME,CostCenterName Code FROM '+@TABLENAME +'  with(nolock)
-						WHERE CostCenterID='+CONVERT(VARCHAR,@ccNODEID) 
-			END
-			ELSE IF @CCID=300
-			BEGIN
-				SET @SQL='INSERT INTO #TBLTEMP1 SELECT '+CONVERT(VARCHAR,@CCID)+','''+@FEATURENAME+''',CostCenterID NODEID,DOCUMENTNAME NAME,DOCUMENTNAME Code FROM '+@TABLENAME +'  with(nolock)
-						WHERE CostCenterID='+CONVERT(VARCHAR,@ccNODEID) 
 			END
 			ELSE
 			BEGIN
@@ -142,7 +181,8 @@ SET NOCOUNT ON;
 						INSERT INTO #TBLTEMP1 SELECT '+CONVERT(VARCHAR,@CCID)+','''+@FEATURENAME+''',NODEID,NAME,Code FROM '+@TABLENAME +'  with(nolock)
 						WHERE ParentID='+CONVERT(VARCHAR,@ccNODEID) 
 			END
-			exec sp_executesql @SQL
+			print(@SQL)
+			EXEC (@SQL)
 			SET @I=@I+1
 		END
 
@@ -161,7 +201,7 @@ SET NOCOUNT ON;
 			set @dim=''
 			select @dim=TableName from COM_CostCenterPreferences a with(nolock) 
 			join ADM_Features f  with(nolock) on a.Value=f.FeatureID
-			where a.Name='JobFilterDim' and isnumeric(a.Value)=1 and convert(INT,a.Value)>50000
+			where a.Name='JobFilterDim' and isnumeric(a.Value)=1 and convert(bigint,a.Value)>50000
 
 			if(LEN(@StageDim)>0 and ISNUMERIC(@StageDim)=1 and convert(int,@StageDim)>50000)
 			begin
@@ -182,7 +222,7 @@ SET NOCOUNT ON;
 					SET @SQL=@SQL+' left join '+@dim+' dt with(nolock) on j.DimID=dt.NodeID '
 					
 				SET @SQL=@SQL+' where j.CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+ 'and j.NodeID='++CONVERT(NVARCHAR,@NodeID)
-				exec sp_executesql @SQL
+				exec(@SQL)
 			END
 			ELSE
 			BEGIN
@@ -195,11 +235,9 @@ SET NOCOUNT ON;
 				where j.CostCenterID=@CostCenterID and j.NodeID=@NodeID
 			END
 		END
-		ELSE
-			SELECT 1 'BomID' where 1!=1
-			
-		declare @rptid INT, @tempsql nvarchar(500)
-		select @rptid=CONVERT(INT,value) from ADM_GlobalPreferences with(nolock) where Name='Report Template Dimension'
+		
+		declare @rptid bigint, @tempsql nvarchar(500)
+		select @rptid=CONVERT(bigint,value) from ADM_GlobalPreferences with(nolock) where Name='Report Template Dimension'
 		if(@rptid=@CostCenterID)
 			select * from ACC_ReportTemplate with(nolock) where drnodeid =@NodeID or crnodeid=@NodeID or templatenodeid =@NodeID
 		else
@@ -216,163 +254,6 @@ SET NOCOUNT ON;
 		from [COM_CostCenterStatusMap] with(nolock)
 		where CostCenterID=@CostCenterID and NodeID=@NodeID
 		order by FromDate,ToDate
-
-		----16,17 -- GETTING WORKFLOWS
-		 if(@CostCenterID>50000 AND @CostCenterID<=50008)
-		 BEGIN
-		 declare @TableName1 varchar(200)
-		select @TableName1 = TableName from ADM_Features  WITH(NOLOCK) where FeatureID=@CostCenterID
-		Declare @WID INT,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@Type int,@escDays int,@CreatedDate datetime
-		declare @sqlSelect nvarchar(max)		
-		
-		--SELECT @StatusID=StatusID,@WID=WFID,@Level=WFLevel,@CreatedDate=CONVERT(datetime,createdDate)
-		--FROM COM_Division WITH(NOLOCK) where  NodeId=@NodeID
-
-		
-
-		set @sqlSelect=' SELECT @StatusID=StatusID,@WID=WFID,@Level=WFLevel,@CreatedDate=CONVERT(datetime,createdDate)
-		FROM  '+@TableName1+' WITH(NOLOCK) where  NodeId='+ convert(nvarchar,@NodeID) +' '
-			print (@sqlSelect)
-				EXEC sp_executesql @sqlSelect,N'@StatusID int output,@WID int output,@Level int output,@CreatedDate datetime output',@StatusID output, @WID output,@Level output,@CreatedDate  output
-		 --exec(@sqlSelect)
-		
-		if(@WID is not null and @WID>0)  
-		BEGIN  
-			SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]   WITH(NOLOCK)   
-			where WorkFlowID=@WID and  UserID =@UserID
-
-			if(@Userlevel is null )  
-				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]  WITH(NOLOCK)    
-				where WorkFlowID=@WID and  RoleID =@RoleID
-
-			if(@Userlevel is null )       
-				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
-				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
-				where g.UserID=@UserID and WorkFlowID=@WID
-
-			if(@Userlevel is null )  
-				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
-				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
-				where g.RoleID =@RoleID and WorkFlowID=@WID
-			
-			if(@Userlevel is null )  	
-				SELECT @Type=[type] FROM [COM_WorkFlow] WITH(NOLOCK) where WorkFlowID=@WID
-		end 
-     
-		set @canEdit=1  
-       
-		if(@StatusID =1002)  
-		begin  
-			if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
-			begin  
-				set @canEdit=0   
-			end    
-		end
-		ELSE if(@StatusID=1003)
-		BEGIN
-		    if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
-			begin  
-				set @canEdit=1
-			end
-			ELSE
-				set @canEdit=0
-		END
-     
-		if(@StatusID=1001 or @StatusID=1002)  
-		begin    
-			if(@Userlevel is not null and  @Level is not null and @Userlevel>@level)  
-			begin
-				if(@Type=1 or @Level+1=@Userlevel)
-					set @canApprove=1   
-				ELSE
-				BEGIN
-					if exists(select EscDays FROM [COM_WorkFlow]
-					where workflowid=@WID and ApprovalMandatory=1 and LevelID<@Userlevel and LevelID>@Level)
-						set @canApprove=0
-					ELSE
-					BEGIN	
-						select @escDays=sum(escdays) from (select max(escdays) escdays from [COM_WorkFlow] WITH(NOLOCK) 
-						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
-						group by LevelID) as t
-						 
-						set @CreatedDate=dateadd("d",@escDays,@CreatedDate)
-						
-						select @escDays=sum(escdays) from (select max(eschours) escdays from [COM_WorkFlow] WITH(NOLOCK) 
-						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
-						group by LevelID) as t
-						
-						set @CreatedDate=dateadd("HH",@escDays,@CreatedDate)
-						
-						if (@CreatedDate<getdate())
-							set @canApprove=1   
-						ELSE
-							set @canApprove=0
-					END	
-				END	
-			end   
-			else  
-				set @canApprove= 0   
-		end  
-		else  
-			set @canApprove= 0   
-
-		IF @WID is not null and @WID>0
-		begin
-				
-			
-			SELECT CONVERT(DATETIME, A.CreatedDate) Date,A.WorkFlowLevel,
-			(SELECT TOP 1 LevelName FROM COM_WorkFlow L with(nolock) WHERE L.WorkFlowID=@WID AND L.LevelID=A.WorkFlowLevel) LevelName,
-			A.CreatedBy,A.StatusID,S.Status,A.Remarks,U.FirstName,U.LastName
-			FROM COM_Approvals A with(nolock),COM_Status S with(nolock),ADM_Users U with(nolock)
-			WHERE A.RowType=1 AND S.StatusID=A.StatusID AND CCID=@CostCenterID AND CCNodeID=@NodeID AND A.USERID=U.USERID
-			ORDER BY A.CreatedDate
-			
-			select @WID WID,levelID,LevelName from COM_WorkFlow with(nolock) 
-			where WorkFlowID=@WID
-			group by levelID,LevelName
-
-			select @canEdit canEdit,@canApprove canApprove
-		end
-
-	ELSE
-
-		BEGIN
-		  
-			select 1 WF where 1!=1
-			select 1 WFL where 1!=1
-			 select 0 canEdit,0 canApprove
-		END
-		 END
-		 ELSE
-		 BEGIN
-			 select 1 WF where 1!=1
-			 select 1 WFL where 1!=1
-			 select 0 canEdit,0 canApprove
-		 END
-
-
-		
-		--DECLARE @WID INT
-		--SELECT @WID= WorkflowID From COM_CCWorkFlow WITH(NOLOCK) where CostCenterID=@CostCenterID and NodeID=@NodeID
-		--IF(@WID is not null and @WID>0)
-		--BEGIN
-		--	SELECT CONVERT(DATETIME, A.CreatedDate) Date,A.WorkFlowLevel,
-		--	(SELECT TOP 1 LevelName FROM COM_WorkFlow L with(nolock) WHERE L.WorkFlowID=@WID AND L.LevelID=A.WorkFlowLevel) LevelName,
-		--	A.CreatedBy,A.StatusID,S.Status,A.Remarks,U.FirstName,U.LastName
-		--	FROM COM_CCWorkFlow A with(nolock),COM_Status S with(nolock),ADM_Users U with(nolock)
-		--	WHERE S.StatusID=A.StatusID AND A.CostCenterID=@CostCenterID AND A.NodeID=@NodeID AND A.USERID=U.USERID
-		--	ORDER BY A.CreatedDate
-			
-		--	select @WID WID,levelID,LevelName from COM_WorkFlow with(nolock) 
-		--	where WorkFlowID=@WID
-		--	group by levelID,LevelName	
-		--END
-		--ELSE
-		--BEGIN
-		--	select 1 WF where 1!=1
-		--	select 1 WFL where 1!=1
-		--END
-
 	END  
   
 SET NOCOUNT OFF;  
@@ -392,7 +273,4 @@ BEGIN CATCH
 SET NOCOUNT OFF    
 RETURN -999     
 END CATCH
-
-
-
 GO

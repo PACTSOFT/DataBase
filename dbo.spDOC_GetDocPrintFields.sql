@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetDocPrintFields]
-	@DocumentID [int],
-	@UserID [int],
+	@DocumentID [bigint],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -169,9 +169,9 @@ SET NOCOUNT ON;
         	LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
         	WHERE C.CostCenterID=146 AND C.IsColumnInUse=1 
         	
-        	declare @table table(id INT identity(1,1),CostCenterID INT,ResourceData nvarchar(50),UserColumnName nvarchar(50),SysColumnName nvarchar(50),SysTableName nvarchar(50),UserColumnType nvarchar(50),ColumnDataType nvarchar(50),IsColumnUserDefined INT,ColumnCostCenterID INT)
-			declare @table1 table(id INT identity(1,1),CostCenterID INT,ResourceData nvarchar(50),UserColumnName nvarchar(50),SysColumnName nvarchar(50),SysTableName nvarchar(50),UserColumnType nvarchar(50),ColumnDataType nvarchar(50),IsColumnUserDefined INT,ColumnCostCenterID INT)
-			declare @i int,@cnt int,@type nvarchar(50),@CostCenterID INT ,@ResourceData nvarchar(50),@UserColumnName nvarchar(50),@SysColumnName nvarchar(50),@SysTableName nvarchar(50),@UserColumnType nvarchar(50),@ColumnDataType nvarchar(50),@IsColumnUserDefined INT,@ColumnCostCenterID INT
+        	declare @table table(id bigint identity(1,1),CostCenterID bigint,ResourceData nvarchar(50),UserColumnName nvarchar(50),SysColumnName nvarchar(50),SysTableName nvarchar(50),UserColumnType nvarchar(50),ColumnDataType nvarchar(50),IsColumnUserDefined bigint,ColumnCostCenterID bigint)
+			declare @table1 table(id bigint identity(1,1),CostCenterID bigint,ResourceData nvarchar(50),UserColumnName nvarchar(50),SysColumnName nvarchar(50),SysTableName nvarchar(50),UserColumnType nvarchar(50),ColumnDataType nvarchar(50),IsColumnUserDefined bigint,ColumnCostCenterID bigint)
+			declare @i int,@cnt int,@type nvarchar(50),@CostCenterID bigint ,@ResourceData nvarchar(50),@UserColumnName nvarchar(50),@SysColumnName nvarchar(50),@SysTableName nvarchar(50),@UserColumnType nvarchar(50),@ColumnDataType nvarchar(50),@IsColumnUserDefined bigint,@ColumnCostCenterID bigint
 
 			insert into @table(CostCenterID,ResourceData,UserColumnName,SysColumnName,SysTableName,UserColumnType,ColumnDataType,IsColumnUserDefined,ColumnCostCenterID)
 			SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
@@ -252,8 +252,6 @@ SET NOCOUNT ON;
         	FROM ADM_CostCenterDef C WITH(NOLOCK)
         	LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
         	WHERE C.CostCenterID=114 AND C.IsColumnInUse=1
-			UNION ALL
-			SELECT 114,'UserName','UserName','CreatedBy','CRM_Feedback','TEXT','String', 0,0
 			--To get activity fields	        		        	
 			SELECT    C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
 			C.IsColumnUserDefined,C.ColumnCostCenterID
@@ -301,21 +299,7 @@ SET NOCOUNT ON;
     		WHERE C.CostCenterID=@DocumentID AND C.IsColumnInUse=1 and (C.SysTableName=@TblName1 OR C.SysTableName=@TblName2 OR C.SysTableName='COM_CCCCData')
 			union all
     		SELECT @DocumentID,'sqft','sqft','sqft',@TblName3,'','',0,0
-    		union all
-    		SELECT @DocumentID,'ExcessDaysAmt','ExcessDaysAmt','ExcessDaysAmt',@TblName1,'','',0,0
-			UNION ALL
-			Select 95,b.Name+'_Codes',b.Name+'_Codes','DIMCodes_'+CONVERT(NVARCHAR,QuickViewCCID),b.TableName,'TEXT','String',0,0 
-			From ADM_CostCenterTab a WITH(NOLOCK) 
-			JOIN ADM_Features b WITH(NOLOCK) on b.FeatureID=a.QuickViewCCID
-			WHERE CostCenterID=95
-			AND QuickViewCCID IS NOT NULL AND QuickViewCCID>0
-			UNION ALL
-			Select 95,b.Name+'_Names',b.Name+'_Names','DIMNames_'+CONVERT(NVARCHAR,QuickViewCCID),b.TableName,'TEXT','String',0,0 
-			From ADM_CostCenterTab a WITH(NOLOCK) 
-			JOIN ADM_Features b WITH(NOLOCK) on b.FeatureID=a.QuickViewCCID
-			WHERE CostCenterID=95
-			AND QuickViewCCID IS NOT NULL AND QuickViewCCID>0
-			----    		
+    		
     		SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
 			C.IsColumnUserDefined,C.ColumnCostCenterID
     		FROM ADM_CostCenterDef C WITH(NOLOCK)
@@ -391,7 +375,85 @@ SET NOCOUNT ON;
 			where isenabled=1 and (featureid=4 or featureid > 50000 or featureid in (select ColumnCostCenterID from ADM_CostCenterDef with(nolock) where CostCenterID=@DocumentID and (SysColumnName='ContactID' OR SysColumnName='CustomerID') and IsColumnInUse=1))-- OR SysColumnName='UserID'
 				
 		END
-		ELSE IF @DocumentID>40000 OR @DocumentID=2 OR @DocumentID=3 OR @DocumentID=72 OR @DocumentID>50000 --added for barcode fields
+		ELSE IF (@DocumentID=59)
+		BEGIN 
+		
+			INSERT INTO @Tbl 
+			SELECT REPLACE(SysColumnName, 'dcNum', '') AS Expr1 FROM ADM_CostCenterDef AS C WITH (NOLOCK)
+            WHERE (CostCenterID = 40011) AND (IsColumnInUse = 1) AND (SysColumnName LIKE 'dcNum%')
+			--Getting Document Fields  
+			SELECT  Case when C.SysColumnName like 'dcCalcNum%' then R.ResourceData+'_Calculated' 
+							 else R.ResourceData END ResourceData,
+					C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
+					C.IsColumnUserDefined,C.ColumnCostCenterID, Doc.IsInventory,Doc.DocumentType
+			FROM ADM_CostCenterDef C WITH(NOLOCK)
+			LEFT JOIN ADM_DocumentTypes Doc WITH(NOLOCK) ON C.CostCenterID = Doc.CostCenterID
+			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
+			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
+			WHERE C.CostCenterID = @DocumentID 
+				AND ((C.IsColumnUserDefined=1 AND C.IsColumnInUse=1) OR C.IsColumnUserDefined=0)
+				AND (C.SysColumnName not like 'dcCurrID%'AND C.SysColumnName not like 'dcCalcNum%' AND C.SysColumnName not like 'dcCalcNumFC%' 
+				AND C.SysColumnName not like 'dcExchRT%')
+			UNION
+			SELECT  Case when C.SysColumnName like 'dcCalcNum%' then R.ResourceData+'_Calculated'
+							 else R.ResourceData END ResourceData,
+					C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
+					C.IsColumnUserDefined,C.ColumnCostCenterID, Doc.IsInventory,Doc.DocumentType
+			FROM ADM_CostCenterDef C WITH(NOLOCK)
+			LEFT JOIN ADM_DocumentTypes Doc WITH(NOLOCK) ON C.CostCenterID = Doc.CostCenterID
+			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
+			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
+			WHERE C.CostCenterID = @DocumentID 
+				 AND REPLACE(SysColumnName, 'dcCalcNum', '') IN (SELECT  ID FROM @Tbl)
+			ORDER BY ResourceData
+ 
+			--To Get Product Fields
+			SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
+					C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	--,LVC.CostCenterColID
+			FROM ADM_CostCenterDef C WITH(NOLOCK)
+			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
+			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
+			WHERE C.CostCenterID=3 AND C.IsColumnInUse=1
+
+			-- Get All Costcenter fields
+			SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
+			C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	--,LVC.CostCenterColID
+			FROM ADM_CostCenterDef C WITH(NOLOCK)
+			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
+			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON  DD.CostCenterColID=C.CostCenterColID 
+			WHERE C.IsColumnInUse=1 and C.CostCenterID =50002
+			order by C.CostCenterID
+
+			-- Get All Customer fields
+			SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
+			C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	--,LVC.CostCenterColID
+			FROM ADM_CostCenterDef C WITH(NOLOCK)
+			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
+			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
+			WHERE C.IsColumnInUse=1 and C.CostCenterID =51
+			order by C.CostCenterID
+
+			select featureid, name, tablename  from adm_features where featureid > 50000 and isenabled=1
+			
+			-- Get All Service Details  fields
+			SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
+			C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	--,LVC.CostCenterColID
+			FROM ADM_CostCenterDef C WITH(NOLOCK)
+			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=1
+			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
+			WHERE C.IsColumnInUse=1 and C.CostCenterID =56
+			order by C.CostCenterID
+			
+			--GET Follow Up Fields
+			SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
+			C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues
+			FROM ADM_CostCenterDef C WITH(NOLOCK)
+			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=1
+			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
+			WHERE C.IsColumnInUse=1 and C.CostCenterID =122
+			order by C.CostCenterID
+		END
+		ELSE IF (@DocumentID>40000 AND @DocumentID<50000) OR @DocumentID=2 OR @DocumentID=3 OR @DocumentID=72 OR (@DocumentID>50000 AND @DocumentID<50100)--added for barcode fields
 		BEGIN 
 			INSERT INTO @Tbl 
 			SELECT REPLACE(SysColumnName, 'dcNum', '') AS Expr1 FROM ADM_CostCenterDef AS C WITH (NOLOCK)
@@ -446,46 +508,17 @@ SET NOCOUNT ON;
 			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
 			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
 			WHERE C.CostCenterID=2 AND C.IsColumnInUse=1
-			UNION ALL
-			SELECT  C.CostCenterID,R.ResourceData+' Code',C.UserColumnName,C.SysColumnName+'_Code',C.SysTableName,C.UserColumnType,C.ColumnDataType,			
-					C.IsColumnUserDefined,C.ColumnCostCenterID
-			FROM ADM_CostCenterDef C WITH(NOLOCK)
-			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
-			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
-			WHERE C.CostCenterID=2 AND C.IsColumnInUse=1 AND C.ColumnCostCenterID=44
-			UNION ALL
-			SELECT  C.CostCenterID,R.ResourceData+' AliasName',C.UserColumnName,C.SysColumnName+'_AliasName',C.SysTableName,C.UserColumnType,C.ColumnDataType,			
-					C.IsColumnUserDefined,C.ColumnCostCenterID
-			FROM ADM_CostCenterDef C WITH(NOLOCK)
-			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
-			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
-			WHERE C.CostCenterID=2 AND C.IsColumnInUse=1 AND C.ColumnCostCenterID=44
 			ORDER BY ResourceData
 
 			--To Get Product Fields
 			SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
-					C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	
+					C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	--,LVC.CostCenterColID
 			FROM ADM_CostCenterDef C WITH(NOLOCK)
 			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
 			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
 			WHERE C.CostCenterID=3 AND C.IsColumnInUse=1
-			UNION ALL
-			SELECT  C.CostCenterID,R.ResourceData+' Code',C.UserColumnName,C.SysColumnName+'_Code',C.SysTableName,C.UserColumnType,C.ColumnDataType,			
-					C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	
-			FROM ADM_CostCenterDef C WITH(NOLOCK)
-			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
-			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
-			WHERE C.CostCenterID=3 AND C.IsColumnInUse=1 AND C.ColumnCostCenterID=44
-			UNION ALL
-			SELECT  C.CostCenterID,R.ResourceData+' AliasName',C.UserColumnName,C.SysColumnName+'_AliasName',C.SysTableName,C.UserColumnType,C.ColumnDataType,			
-					C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	
-			FROM ADM_CostCenterDef C WITH(NOLOCK)
-			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
-			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
-			WHERE C.CostCenterID=3 AND C.IsColumnInUse=1 AND C.ColumnCostCenterID=44
 			ORDER BY ResourceData
 
-			
 			-- Get All Costcenter fields
 			SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
 			C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	--,LVC.CostCenterColID
@@ -495,24 +528,7 @@ SET NOCOUNT ON;
 			WHERE C.IsColumnInUse=1 and C.CostCenterID in (select featureid  from adm_features with(nolock) where (featureid=4 or featureid > 50000 or FeatureID=@QtyAdjustments or (featureid=110 and C.IsColumnUserDefined=1)) and isenabled=1
 			union
 			 (select ColumnCostCenterID from ADM_CostCenterDef with(nolock) where CostCenterID=@DocumentID and (SysColumnName='ContactID' OR SysColumnName='CustomerID') and IsColumnInUse=1))-- OR SysColumnName='UserID'
-			
-			UNION ALL
-			SELECT  C.CostCenterID,R.ResourceData+' Code',C.UserColumnName,C.SysColumnName+'_Code',C.SysTableName,C.UserColumnType,C.ColumnDataType,			
-			C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	
-			FROM ADM_CostCenterDef C WITH(NOLOCK)
-			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
-			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
-			WHERE C.IsColumnInUse=1 and C.CostCenterID>50000 AND C.ColumnCostCenterID=44
-			UNION ALL
-			SELECT  C.CostCenterID,R.ResourceData+' AliasName',C.UserColumnName,C.SysColumnName+'_AliasName',C.SysTableName,C.UserColumnType,C.ColumnDataType,			
-			C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	
-			FROM ADM_CostCenterDef C WITH(NOLOCK)
-			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
-			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
-			WHERE C.IsColumnInUse=1 and C.CostCenterID>50000 AND C.ColumnCostCenterID=44
-
 			union all
-
 			SELECT distinct 399 CostCenterID,
 			case when c.Name='TestCaseID' then 'test case' WHEN c.Name='Unit' THEN 'UnitName' WHEN c.Name='LabID' THEN 'LabName' else c.Name end ResourceData,
 			case when c.Name='TestCaseID' then 'TestName' WHEN c.Name='Unit' THEN 'UnitName'  WHEN c.Name='LabID' THEN 'LabName' else c.Name end UserColumnName,
@@ -534,7 +550,7 @@ SET NOCOUNT ON;
 			where EXISTS (SELECT * FROM COM_DocumentPreferences WITH(NOLOCK) WHERE PrefName='EnableTestcase' AND PrefValue='True' and CostCenterID=@DocumentID)
 			order by featureid
 			
-			IF @DocumentID=2 OR @DocumentID=72 OR @DocumentID>50000 
+			IF @DocumentID=2 OR @DocumentID=72 OR (@DocumentID>50000 AND @DocumentID<50100)
 			BEGIN
 				SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
 				C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	--,LVC.CostCenterColID
@@ -570,7 +586,7 @@ SET NOCOUNT ON;
 				--LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
 				WHERE C.CostCenterID=@DocumentID AND (IsColumnInUse = 1) and C.ColumnCostCenterID>50000 AND C.IsTransfer>0
 				
-				select prefname,prefvalue from com_documentpreferences WITH(NOLOCK) where costcenterid=@DocumentID and (prefname='DistributeCost' or prefname='DistributeCostDims' or Prefname='EnableRevision')
+				select prefname,prefvalue from com_documentpreferences WITH(NOLOCK) where costcenterid=@DocumentID and (prefname='DistributeCost' or prefname='DistributeCostDims')
 			END
 							
 		END
@@ -585,18 +601,18 @@ SET NOCOUNT ON;
 		
 		
 		-- Get All Costcenter fields
-		IF @DocumentID IN (2,73,86,88,89,94) 
+		IF @DocumentID IN (2,73,86,88,89,94)
 		BEGIN		
 			SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
 			C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	--,LVC.CostCenterColID
 			FROM ADM_CostCenterDef C WITH(NOLOCK)
 			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
 			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
-			WHERE C.IsColumnInUse=1 and C.CostCenterID in (select featureid  from adm_features with(nolock) where (featureid=4 or featureid > 50000) and isenabled=1)
+			WHERE C.IsColumnInUse=1 and C.CostCenterID in (select featureid  from adm_features with(nolock) where featureid > 50000 and isenabled=1)
 			order by C.CostCenterID
 
 			select featureid, name, tablename  from adm_features WITH(NOLOCK) 
-			where isenabled=1 and (featureid=4 or featureid > 50000)
+			where isenabled=1 and featureid > 50000
 		END
 		
 		
@@ -618,5 +634,4 @@ BEGIN CATCH
  SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
-
 GO

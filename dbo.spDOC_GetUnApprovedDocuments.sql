@@ -4,8 +4,8 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetUnApprovedDocuments]
 	@Location [nvarchar](max),
-	@StatusID [int],
-	@UserID [int],
+	@StatusID [bigint],
+	@UserID [bigint],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -27,7 +27,7 @@ SET NOCOUNT ON;
 			exec SPSplitString @Dimensions,','
 			set @Dimensions=''
 			select @Dimensions=@Dimensions+' INNER JOIN COM_CostCenterCostCenterMap CCMU'+convert(nvarchar,ID)+' with(nolock) on DocCC.dcCCNID'+convert(nvarchar,(Dimension-50000))+'=CCMU'+convert(nvarchar,ID)+'.NodeID and CCMU'+convert(nvarchar,ID)+'.ParentCostCenterID=7 and CCMU'+convert(nvarchar,ID)+'.CostCenterID='+convert(nvarchar,Dimension)+' and CCMU'+convert(nvarchar,ID)+'.ParentNodeID='+convert(nvarchar,@UserID)
-			from #TblUserDims WITH(NOLOCK)
+			from #TblUserDims
 			where Dimension>50000
 		end
 	end
@@ -93,14 +93,14 @@ SET NOCOUNT ON;
 		set @WHERE='I.StatusID=371'
 		--set @WHERE='I.StatusID=371 and I.CreatedBy='''+(SELECT UserName FROM ADM_Users with(nolock) WHERE USERID=@UserID)+''''
 		--set @WHERE='(I.StatusID=371 or I.StatusID=441)'
-		--set @WHERE=@WHERE+' and dbo.[fnRPT_CanApprove](I.WorkflowID,I.WorkFlowLevel,I.StatusID,I.CreatedDate,'+convert(nvarchar,@UserID)+','+convert(nvarchar,@RoleID)+')=1'
+		--set @WHERE=@WHERE+' and dbo.[fnRPT_CanApprove](I.WorkflowID,I.WorkFlowLevel,I.StatusID,I.CreatedDate,'+convert(nvarchar,@UserID)+')=1'
 	end
 	else
 	begin
 		set @WHERE='I.StatusID='+convert(nvarchar,@StatusID)
 	end
    
-   SET @SQL =  'declare @Tbl AS TABLE(featureid INT)
+   SET @SQL =  'declare @Tbl AS TABLE(featureid bigint)
 INSERT INTO @Tbl
 select featureid from adm_featureaction with(nolock) 
 where featureactionid in (select FeatureActionID from adm_featureactionrolemap with(nolock) where RoleID='+Convert(nvarchar,@RoleID)+') 
@@ -132,16 +132,16 @@ WHERE '+@WHERE+' AND I.REFCCID<>95 and d.CostCenterid in (select featureid from 
 +@LocWhere+' GROUP BY I.DocDate,I.VoucherNo,D.DocumentName,I.DocPrefix,I.DocNumber,I.DocID,I.ModifiedBy,I.CostCenterID,ACC.AccountName,ACD.AccountName,I.Amount ,I.ModifiedDate , I.CreatedDate, I.CreatedBy, D.IsInventory'
 
 
-IF (select count(*) from ACC_DocDetails with(nolock) WHERE REFCCID=95)>1
+IF (select count(*) from REN_CONTRACT with(nolock))>1
 BEGIN
 	 SET @SQL = @SQL  + '
 		UNION
 	SELECT CONTRCT.CONTRACTID DocID,max(CONTRCT.ModifiedBy) ModifiedBy, 95 CostCenterID,CONVERT(NVARCHAR,ISNULL(CONTRCT.SNO,0))   
 	,CONVERT(DATETIME, CONTRCT.ContractDate) DocDate,''Sales Contract'' DocumentName,CONTRCT.CONTRACTPREFIX DocPrefix,CONVERT(NVARCHAR,CONTRACTNUMBER) DocNumber      
-	,max(ACC.AccountName) BankAccountID,min(ACD.AccountName) AccountID,max(CONTRCT.TotalAmount) Amount, max(CONTRCT.CreatedBy) CreatedBy
+	,max(ACC.AccountName) BankAccountID,min(ACD.AccountName) AccountID,max(CONTRCT.TotalAmount) Amount, I.CreatedBy
 	,isnull(CONVERT(DATETIME,max(I.ModifiedDate)),max(I.CreatedDate)) ModifiedDate, D.IsInventory'+@DIMCOLS+'
 	FROM ACC_DocDetails I with(nolock)
-	INNER JOIN ADM_DocumentTypes D with(nolock) ON I.CostCenterID=D.CostCenterID      
+	INNER JOIN ADM_DocumentTypes D with(nolock) ON I.DocumentTypeID=D.DocumentTypeID      
 	INNER JOIN REN_CONTRACT CONTRCT with(nolock) ON CONTRCT.CONTRACTID=I.REFNODEID 
 	INNER JOIN ACC_ACCOUNTS ACC with(nolock) ON ACC.ACCOUNTID=I.CreditAccount
 	INNER JOIN ACC_ACCOUNTS ACD with(nolock) ON ACD.ACCOUNTID=I.DebitAccount '+@ACCJOIN+@JOIN+@DIMCOLSJOIN+'  
@@ -169,5 +169,5 @@ BEGIN CATCH
   END        
  SET NOCOUNT OFF          
  RETURN -999           
-END CATCH
+END CATCH         
 GO

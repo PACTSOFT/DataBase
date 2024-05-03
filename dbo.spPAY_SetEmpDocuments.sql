@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_SetEmpDocuments]
-	@NodeID [int],
+	@NodeID [bigint],
 	@DocumentXML [nvarchar](max),
 	@UserName [nvarchar](50)
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -46,7 +46,7 @@ DECLARE @XML XML, @Dt FLOAT,@AttacthList nvarchar(max)=null,@AttachXml XML,@Audi
 					SET '+@DocumentXML+',[ModifiedBy] ='''+ @UserName  
 					+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID='+convert(nvarchar,@PrimaryDocumentID)     
 					--SELECT @UpdateSql 
-					EXEC sp_executesql @UpdateSql 
+					exec(@UpdateSql) 
 					--PRINT @UpdateSql
 				END
 				
@@ -54,7 +54,7 @@ DECLARE @XML XML, @Dt FLOAT,@AttacthList nvarchar(max)=null,@AttachXml XML,@Audi
 				BEGIN 
 					set @UpdateSql='UPDATE PAY_EmpDetail
 					SET '+@ExtraFields+' WHERE NodeID ='+convert(nvarchar,@PrimaryDocumentID)	
-					EXEC sp_executesql @UpdateSql
+					exec(@UpdateSql)
 					--PRINT @UpdateSql
 				END
 				
@@ -63,7 +63,7 @@ DECLARE @XML XML, @Dt FLOAT,@AttacthList nvarchar(max)=null,@AttachXml XML,@Audi
 					set @UpdateSql='UPDATE PAY_EmpDetail
 					SET '+@CCFields+' 
 					WHERE NodeID='+convert(nvarchar,@PrimaryDocumentID)+''
-					EXEC sp_executesql @UpdateSql
+					exec(@UpdateSql)
 				END
 
 					IF(@Audit IS NOT NULL AND @Audit='True')
@@ -81,7 +81,7 @@ DECLARE @XML XML, @Dt FLOAT,@AttacthList nvarchar(max)=null,@AttachXml XML,@Audi
 					SET '+@DocumentXML+',DType='+convert(nvarchar,@DType) +',[ModifiedBy] ='''+ @UserName  
 					+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID='+convert(nvarchar,@DocumentID)     
 					--SELECT @UpdateSql 
-					EXEC sp_executesql @UpdateSql 
+					exec(@UpdateSql) 
 					--PRINT @UpdateSql
 				END
 				
@@ -90,7 +90,7 @@ DECLARE @XML XML, @Dt FLOAT,@AttacthList nvarchar(max)=null,@AttachXml XML,@Audi
 					set @UpdateSql='UPDATE PAY_EmpDetail
 					SET '+@ExtraFields+', [ModifiedBy] ='''+ @UserName
 					+''',[ModifiedDate] =' + convert(nvarchar,convert(float,getdate())) +' WHERE NodeID ='+convert(nvarchar,@DocumentID)	
-					EXEC sp_executesql @UpdateSql
+					exec(@UpdateSql)
 					--PRINT @UpdateSql
 				END
 					
@@ -99,7 +99,7 @@ DECLARE @XML XML, @Dt FLOAT,@AttacthList nvarchar(max)=null,@AttachXml XML,@Audi
 					set @UpdateSql='UPDATE PAY_EmpDetail
 					SET '+@CCFields+' 
 					WHERE NodeID='+convert(nvarchar,@DocumentID)+' '
-					EXEC sp_executesql @UpdateSql
+					exec(@UpdateSql)
 				END
 
 					IF(@Audit IS NOT NULL AND @Audit='True')
@@ -148,12 +148,12 @@ DECLARE @XML XML, @Dt FLOAT,@AttacthList nvarchar(max)=null,@AttachXml XML,@Audi
 				ModifiedBy=@UserName,  
 				ModifiedDate=@Dt  
 				FROM COM_Files C WITH(NOLOCK)  
-				INNER JOIN @AttachXml.nodes('/AttachmentsXML/Row') as Data(X) ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID  
+				INNER JOIN @AttachXml.nodes('/AttachmentsXML/Row') as Data(X) ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID  
 				WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
 
 				--If Action is DELETE then delete Attachments  
 				DELETE FROM COM_Files  
-				WHERE FileID IN(SELECT X.value('@AttachmentID','INT')  
+				WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')  
 				FROM @AttachXml.nodes('/AttachmentsXML/Row') as Data(X)  
 				WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
 			END  
@@ -162,4 +162,5 @@ DECLARE @XML XML, @Dt FLOAT,@AttacthList nvarchar(max)=null,@AttachXml XML,@Audi
 		END
 	END
 RETURN @DocumentID
+ 
 GO

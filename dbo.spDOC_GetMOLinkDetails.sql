@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetMOLinkDetails]
-	@DocumentLinkDefID [int],
+	@DocumentLinkDefID [bigint],
 	@UserID [int] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -12,7 +12,7 @@ BEGIN TRY
 SET NOCOUNT ON
 
 		--Declaration Section
-		DECLARE @HasAccess bit,@LinkCostCenterID int,@SQL NVARCHAR(MAX)
+		DECLARE @HasAccess bit,@LinkCostCenterID int
 	 
 		--SP Required Parameters Check
 		IF (@DocumentLinkDefID <1)
@@ -26,22 +26,20 @@ SET NOCOUNT ON
 
 		
 		--Create temporary table 
-		CREATE TABLE #tblList(ID int identity(1,1),DocDetailsID INT,Val float)  
+		CREATE TABLE #tblList(ID int identity(1,1),DocDetailsID bigint,Val float)  
 		 
-		SET @SQL='INSERT INTO #tblList
+		INSERT INTO #tblList
 		SELECT a.InvDocDetailsID, a.Quantity-isnull(sum(b.Quantity),0) from 
 		INV_DocDetails a with(nolock)
 		left join dbo.PRD_MFGOrderBOMs b with(nolock) on a.InvDocDetailsID =b.DocID
-		where a.CostCenterID= '+CONVERT(NVARCHAR,@LinkCostCenterID)+'
+		where a.CostCenterID= @LinkCostCenterID
 		group by a.InvDocDetailsID,a.Quantity
-		 having a.Quantity-isnull(sum(b.Quantity),0) >0'
-		 
-		 EXEC (@SQL)   
+		 having a.Quantity-isnull(sum(b.Quantity),0) >0   
 		 
  		--GETTING DOCUMENT DETAILS
 		SELECT distinct a.voucherno,a.[DocID], a.DebitAccount, a.CreditAccount 
 		from [INV_DocDetails] a with(nolock)
-		join #tblList c with(nolock) on a.InvDocDetailsID=c.DocDetailsID
+		join #tblList c on a.InvDocDetailsID=c.DocDetailsID
 		where a.statusid=369
 		order by  a.voucherno
 
@@ -63,5 +61,5 @@ BEGIN CATCH
 
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

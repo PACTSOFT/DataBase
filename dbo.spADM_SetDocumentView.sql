@@ -6,13 +6,13 @@ CREATE PROCEDURE [dbo].[spADM_SetDocumentView]
 	@DocumentViewID [int],
 	@ViewName [nvarchar](200),
 	@ViewFor [int],
-	@DocumentTypeID [int],
+	@DocumentTypeID [bigint],
 	@CostCenterID [int],
 	@ViewXml [nvarchar](max),
 	@RoleXml [nvarchar](max),
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](200),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -47,8 +47,8 @@ SET NOCOUNT ON;
 	BEGIN
 		DELETE FROM [ADM_DocumentViewDef]
 		WHERE [DocumentViewID]=@DocumentViewID 
-		and DocumentViewDefID NOT IN (SELECT X.value('@DocumentViewDefID','INT')  from @XML.nodes('/DocViewXML/Row') as Data(X)    
-		WHERE X.value('@DocumentViewDefID','INT') IS NOT NULL AND  X.value('@DocumentViewDefID','INT')>0) 
+		and DocumentViewDefID NOT IN (SELECT X.value('@DocumentViewDefID','BIGINT')  from @XML.nodes('/DocViewXML/Row') as Data(X)    
+		WHERE X.value('@DocumentViewDefID','BIGINT') IS NOT NULL AND  X.value('@DocumentViewDefID','BIGINT')>0) 
 	END
  
 	INSERT INTO [ADM_DocumentViewDef] (
@@ -72,7 +72,7 @@ SET NOCOUNT ON;
 		  ,[GUID]
 		  ,[CreatedBy]
 		  ,[CreatedDate]
-		  ,TabID,description,FieldColor)
+		  ,TabID,description)
 	SELECT @DocumentViewID
 		  ,@DocumentTypeID
 		  ,@CostCenterID
@@ -81,40 +81,38 @@ SET NOCOUNT ON;
 		  ,0
 		  ,isnull(X.value('@ReadOnly','BIT'),0)
 		  ,0
-		  ,X.value('@CostCenterColID','INT') 
+		  ,X.value('@CostCenterColID','BIGINT') 
 		  ,X.value('@IsEditable','BIT') 
-		  ,X.value('@NumFieldEditOptionID','INT') 
+		  ,X.value('@NumFieldEditOptionID','BIGINT') 
 		  ,X.value('@IsVisible','BIT') 
-		  ,X.value('@Expression','NVARCHAR(MAX)') ,X.value('@Mode','INT') 
+		  ,X.value('@Expression','NVARCHAR(MAX)') ,X.value('@Mode','BIGINT') 
 		  ,X.value('@FailureMessage','NVARCHAR(MAX)') 
-		  ,X.value('@ActionOptionID','INT'),X.value('@IsMandatory','INT')
+		  ,X.value('@ActionOptionID','BIGINT'),X.value('@IsMandatory','BIGINT')
 		  ,@CompanyGUID,NEWID()
 		  ,@UserName,CONVERT(FLOAT,GETDATE())
-		  ,X.value('@TabID','INT') ,X.value('@Descr','NVARCHAR(MAX)')
-		  ,X.value('@FieldColor','NVARCHAR(400)')
+		  ,X.value('@TabID','BIGINT') ,X.value('@Descr','NVARCHAR(MAX)')
 	from @XML.nodes('/DocViewXML/Row') as Data(X)    
-	WHERE X.value('@DocumentViewDefID','INT') IS NULL OR X.value('@DocumentViewDefID','INT')=0
+	WHERE X.value('@DocumentViewDefID','BIGINT') IS NULL OR X.value('@DocumentViewDefID','BIGINT')=0
 	
   
 	UPDATE [ADM_DocumentViewDef] set ViewName=@ViewName
 		  ,ViewFor=@ViewFor
-		  ,[CostCenterColID]=X.value('@CostCenterColID','INT') 
+		  ,[CostCenterColID]=X.value('@CostCenterColID','BIGINT') 
 		  ,[IsEditable]=X.value('@IsEditable','BIT') 
-		  ,[NumFieldEditOptionID]=X.value('@NumFieldEditOptionID','INT') 
+		  ,[NumFieldEditOptionID]=X.value('@NumFieldEditOptionID','BIGINT') 
 		  ,[IsVisible]=X.value('@IsVisible','BIT') 
 		  ,Expression=X.value('@Expression','NVARCHAR(MAX)') 
-		  ,Mode=X.value('@Mode','INT') 
+		  ,Mode=X.value('@Mode','BIGINT') 
 		  ,[FailureMessage]=X.value('@FailureMessage','NVARCHAR(MAX)') 
-		  ,[ActionOptionID]=X.value('@ActionOptionID','INT')
-		  ,IsMandatory=X.value('@IsMandatory','INT')
+		  ,[ActionOptionID]=X.value('@ActionOptionID','BIGINT')
+		  ,IsMandatory=X.value('@IsMandatory','BIGINT')
 		  ,IsReadOnly=isnull(X.value('@ReadOnly','BIT'),0)
 		  ,ModifiedBy=@UserName
 		  ,ModifiedDate=CONVERT(FLOAT,GETDATE())
 		  ,description=X.value('@Descr','NVARCHAR(MAX)')
-		  ,FieldColor=X.value('@FieldColor','NVARCHAR(MAX)')
 	from @XML.nodes('/DocViewXML/Row') as Data(X)    
-	WHERE X.value('@DocumentViewDefID','INT') IS NOT NULL AND  X.value('@DocumentViewDefID','INT')>0
-	AND DocumentViewDefID=X.value('@DocumentViewDefID','INT')
+	WHERE X.value('@DocumentViewDefID','BIGINT') IS NOT NULL AND  X.value('@DocumentViewDefID','BIGINT')>0
+	AND DocumentViewDefID=X.value('@DocumentViewDefID','BIGINT')
 
 	DELETE from [ADM_DocViewUserRoleMap] where [DocumentViewID]=@DocumentViewID
   
@@ -123,21 +121,21 @@ SET NOCOUNT ON;
 	if exists(select A.[DocumentViewID] from [ADM_DocViewUserRoleMap] A WITH(NOLOCK) 
 			  LEFT JOIN [ADM_DocumentViewDef] DV WITH(NOLOCK) ON A.[DocumentViewID]=DV.[DocumentViewID] 
 			  where A.DocumentTypeID=@DocumentTypeID AND A.[CostCenterID]=@CostCenterID and  DV.ViewFor=@ViewFor AND
-			  A.RoleID in(SELECT  X.value('@RoleID','INT') from @XML.nodes('/XML/Row') as Data(X) where  X.value('@RoleID','INT') is not null ))
+			  A.RoleID in(SELECT  X.value('@RoleID','BIGINT') from @XML.nodes('/XML/Row') as Data(X) where  X.value('@RoleID','BIGINT') is not null ))
 	begin
 		RAISERROR('-382',16,1)
 	end
 	if exists(select A.[DocumentViewID] from [ADM_DocViewUserRoleMap] A WITH(NOLOCK)
 			  LEFT JOIN [ADM_DocumentViewDef] DV WITH(NOLOCK) ON A.[DocumentViewID]=DV.[DocumentViewID] 
 			  where A.DocumentTypeID=@DocumentTypeID AND A.[CostCenterID]=@CostCenterID and  DV.ViewFor=@ViewFor AND
-			  A.UserID in(SELECT  X.value('@UserID','INT') from @XML.nodes('/XML/Row') as Data(X) where  X.value('@UserID','INT') is not null ))
+			  A.UserID in(SELECT  X.value('@UserID','BIGINT') from @XML.nodes('/XML/Row') as Data(X) where  X.value('@UserID','BIGINT') is not null ))
 	begin
 		RAISERROR('-383',16,1)
 	end
 	if exists(select A.[DocumentViewID] from [ADM_DocViewUserRoleMap] A WITH(NOLOCK)
 			  LEFT JOIN [ADM_DocumentViewDef] DV WITH(NOLOCK) ON A.[DocumentViewID]=DV.[DocumentViewID] 
 			  where A.DocumentTypeID=@DocumentTypeID AND A.[CostCenterID]=@CostCenterID and  DV.ViewFor=@ViewFor AND 
-			  A.GroupID in(SELECT  X.value('@GroupID','INT') from @XML.nodes('/XML/Row') as Data(X) where  X.value('@GroupID','INT') is not null ))
+			  A.GroupID in(SELECT  X.value('@GroupID','BIGINT') from @XML.nodes('/XML/Row') as Data(X) where  X.value('@GroupID','BIGINT') is not null ))
 	begin
 		RAISERROR('-384',16,1)
 	end
@@ -154,9 +152,9 @@ SET NOCOUNT ON;
 			  ,[CreatedDate])
 		  SELECT @DocumentViewID 
 			  ,@DocumentTypeID
-			  ,@CostCenterID,X.value('@UserID','INT')
-			  ,X.value('@RoleID','INT') 
-			  ,X.value('@GroupID','INT') 
+			  ,@CostCenterID,X.value('@UserID','BIGINT')
+			  ,X.value('@RoleID','BIGINT') 
+			  ,X.value('@GroupID','BIGINT') 
 			  ,@CompanyGUID,NEWID()
 			  ,@UserName,CONVERT(FLOAT,GETDATE())
 		  from @XML.nodes('/XML/Row') as Data(X)    
@@ -187,5 +185,5 @@ BEGIN CATCH
 	ROLLBACK TRANSACTION  
 	SET NOCOUNT OFF    
 	RETURN -999     
-END CATCH
+END CATCH  
 GO

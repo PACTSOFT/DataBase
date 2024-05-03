@@ -64,10 +64,10 @@ SET NOCOUNT ON;
 	if(@TermXML is not null and @TermXML<>'')
 	begin
 		INSERT INTO  Acc_PaymentDiscountTerms (ProfileID,percentage,[Days],Discount
-		,[GUID],CreatedBy,CreatedDate,Period,TypeID,BasedOn,Occurences,DateNo,Remarks,Remarks1,DimCCID,DimNodeID)  
+		,[GUID],CreatedBy,CreatedDate,Period,TypeID,BasedOn,Occurences,DateNo,Remarks,DimCCID,DimNodeID)  
 		SELECT  @RowCount,X.value('@percentage','FLOAT'),X.value('@Days','FLOAT'),X.value('@Discount','FLOAT'),newid(),@CreatedBy,@Dt  
 		,isnull(X.value('@Period','int'),1),X.value('@TypeID','int'),isnull(X.value('@BasedOn','int'),1)
-		,X.value('@Occurences','int'),isnull(X.value('@DateNo','int'),0),X.value('@Remarks','nvarchar(max)'),X.value('@Remarks1','nvarchar(max)'),@Dim,X.value('@Dim','INT')
+		,X.value('@Occurences','int'),isnull(X.value('@DateNo','int'),0),X.value('@Remarks','nvarchar(max)'),@Dim,X.value('@Dim','BIGINT')
 		FROM @XML.nodes('/Row') as Data(X) 
 	end	
 
@@ -90,5 +90,11 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH
+END CATCH  
+  
+  
+  
+  
+  
+  
 GO

@@ -4,16 +4,14 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetLinkDocDetails]
 	@VoucherNo [nvarchar](max),
-	@DocumentLinkDefID [int],
-	@DocID [int] = 0,
-	@AccID [int] = 0,
+	@DocumentLinkDefID [bigint],
+	@DocID [bigint] = 0,
+	@AccID [bigint] = 0,
 	@DimWhere [nvarchar](max) = '',
 	@IgnoreSpec [int],
 	@StrJoin [nvarchar](max),
 	@StrWhere [nvarchar](max),
 	@listTypeID [int],
-	@invIDs [nvarchar](max),
-	@CCid [int],
 	@UserID [int] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -23,11 +21,11 @@ SET NOCOUNT ON
     
 	--Declaration Section    
 	DECLARE @Tolerance nvarchar(50),@CostCenterID int,@LinkCostCenterID int,@ColumnName nvarchar(50),@lINKColumnName nvarchar(50),@ProductColName  nvarchar(50)   
-	DECLARE @Query nvarchar(max),@Vouchers nvarchar(max),@ColID INT,@lINKColID INT,@ColHeader nvarchar(200),@PrefValue nvarchar(50),@PackQty nvarchar(50)
-	declare @autoCCID int,@tempDOcID INT,@CrAccID INT,@DbAccID INT,@docType int ,@LinkdocType int,@Join nvarchar(max),@Where nvarchar(max),@GroupFilter nvarchar(max)
+	DECLARE @Query nvarchar(max),@Vouchers nvarchar(max),@ColID BIGINT,@lINKColID BIGINT,@ColHeader nvarchar(200),@PrefValue nvarchar(50),@PackQty nvarchar(50)
+	declare @autoCCID int,@tempDOcID bigint,@CrAccID BIGINT,@DbAccID BIGINT,@docType int ,@LinkdocType int,@Join nvarchar(max),@Where nvarchar(max),@GroupFilter nvarchar(max)
 
 	--SP Required Parameters Check    
-	IF (@VoucherNo ='' or @DocumentLinkDefID < 1) and @invIDs=''   
+	IF (@VoucherNo ='' or @DocumentLinkDefID < 1)    
 	BEGIN    
 		RAISERROR('-100',16,1)    
 	END    
@@ -102,305 +100,261 @@ SET NOCOUNT ON
 	END
 	  
 	--Create temporary table     
-	create  TABLE #tblDocList(ID int identity(1,1),DocDetailsID INT,Val float,PercentValue FLOAT,VoucherType int,DocSeqNo int,alpha nvarchar(max),ProductID INT,QDocID INT)      
-	if(@invIDs<>'')
-	BEGIN
-		insert into #tblDocList(DocDetailsID)
-		EXEC SPSplitString @invIDs,','
-		
-		update #tblDocList
-		set Val=0,PercentValue=0,VoucherType =-1,DocSeqNo=1
-		
-		select @LinkCostCenterID=a.costcenterid	from inv_docdetails a with(nolock)
-		inner join #tblDocList c WITH(NOLOCK) on a.InvDocDetailsID=c.DocDetailsID
-		 
-			SELECT @CostCenterID=[CostCenterIDBase]    
-		,@ColID=[CostCenterColIDBase]    
-		,@LinkCostCenterID=[CostCenterIDLinked]    
-		,@lINKColID=[CostCenterColIDLinked]    
-		,@Vouchers = [LinkedVouchers]     
-		,@docType=b.DocumentType,@LinkdocType=c.DocumentType
-		FROM [COM_DocumentLinkDef]  a WITH(NOLOCK)
-		join ADM_DocumentTypes b  WITH(NOLOCK) on a.CostCenterIDBase=b.CostCenterID
-		join ADM_DocumentTypes c  WITH(NOLOCK) on a.CostCenterIDLinked=c.CostCenterID
-		where [CostCenterIDBase]=@CCid and [CostCenterColIDLinked]=@LinkCostCenterID
-	    
-		SELECT @ColumnName=SysColumnName from ADM_CostCenterDef   WITH(NOLOCK)  
-		where CostCenterColID=@lINKColID    
+	create  TABLE #tblDocList(ID int identity(1,1),DocDetailsID bigint,Val float,PercentValue FLOAT,VoucherType int,DocSeqNo int,alpha nvarchar(max))      
+	set @Tolerance=''	
+	set @PackQty=''
+	
+	select @Tolerance=PrefValue from COM_DocumentPreferences WITH(NOLOCK)       
+	where CostCenterID=@CostCenterID and PrefName='Enabletolerance'          
+	
+	select @PackQty=PrefValue from COM_DocumentPreferences WITH(NOLOCK)
+	where CostCenterID=@CostCenterID and PrefName ='Checkpackedqty' 
 
-		SELECT @lINKColumnName=SysColumnName from ADM_CostCenterDef  WITH(NOLOCK)  
-		where CostCenterColID=@ColID  
 
-		set @ColHeader=(select top 1 r.ResourceData from ADM_CostCenterDef c   WITH(NOLOCK)  
-		join COM_LanguageResources r WITH(NOLOCK)  on r.ResourceID=c.ResourceID and r.LanguageID=@LangID    
-		where CostCenterColID=@lINKColID)    
-		
+	set @Query=''
+  
+	set @Query=@Query+'select InvDocDetailsID,value,PercentValue,VoucherType,DocSeqNo from ('
+	
+	if(@PackQty='true')
+		set @Query=@Query+'SELECT distinct a.InvDocDetailsID,case when p.IsPacking=1 THEN cast(isnull(sum(DE.Quantity),0)-isnull(sum(b.LinkedFieldValue),0) as numeric(36,5)) ELSE cast(a.'+@ColumnName+'-isnull(sum(b.LinkedFieldValue),0) as numeric(36,5)) END as value '
+  	ELSE
+  	BEGIN
+  		set @Query=@Query+'SELECT distinct a.InvDocDetailsID, cast(a.'+@ColumnName+'-isnull(sum('
+  		
+  		set @Query=@Query+' case when b.Statusid=376 or b.DocID='+convert(nvarchar,@DocID)+' then 0 '
+	
+	
+		select @PrefValue=PrefValue from COM_DocumentPreferences  WITH(NOLOCK)       
+		where CostCenterID=@LinkCostCenterID and PrefName='AllowMultipleLinking'                     
+		if(@PrefValue is not null and @PrefValue='True'    ) --FOr Linking Multiple        
+		BEGIN    
+			DECLARE @FinalStr nvarchar(max)
+			if(@Vouchers is not null and @Vouchers <>'')
+			BEGIN
+				SET @FinalStr =@Vouchers
+				SET @FinalStr = @FinalStr +','+convert(nvarchar(5),@CostCenterID)   
+			END 
+			ELSE
+				SET @FinalStr = convert(nvarchar(5),@CostCenterID)       
+				--SET @Query=@Query+' and b.CostCenterid='+convert(nvarchar(5),@CostCenterID)   
+			SET @Query=@Query+' when b.CostCenterid  not in ('+@FinalStr  +') then 0 '
+		END  
+  		
+  		
+		set @Query=@Query+' else b.LinkedFieldValue end ),0)as numeric(36,5)) value '      
+  		
 	END
-	ELSE
+	if(@Tolerance is not null and @Tolerance='True'    )
+		set @Query=@Query+',max(isnull(p.MinTolerancePer,0)) TPercentage,max(isnull(p.MinToleranceVal,0)) TValue
+			,(a.'+@ColumnName+'*max(isnull(p.MaxTolerancePer,0)))/100 PercentValue	,(a.'+@ColumnName+'*max(isnull(p.MinTolerancePer,0)))/100 per,max(isnull(p.MaxTolerancePer,0)) thp,max(isnull(p.MaxToleranceVal,0)) THV '
+    else
+		set @Query=@Query+',0 PercentValue '
+		
+	IF(@ColumnName LIKE 'dcNum%' )    
+		SET @Query=@Query+',d.VoucherType,d.DocSeqNo from COM_DocNumData a with(nolock) ' +      
+		'join INV_DocDetails d with(nolock) on a.InvDocDetailsID =d.InvDocDetailsID  
+		join inv_product p  with(nolock) on d.ProductID=p.ProductID     
+		join COM_DocCCData DC with(nolock) on d.InvDocDetailsID =DC.InvDocDetailsID'      
+	ELSE      
+		SET @Query=@Query+',a.VoucherType,a.DocSeqNo from INV_DocDetails a with(nolock) 
+		join inv_product p  with(nolock) on a.ProductID=p.ProductID
+		join COM_DocCCData DC with(nolock) on a.InvDocDetailsID =DC.InvDocDetailsID'      
+	   
+	SET @Query=@Query+' left join INV_DocDetails B WITH(NOLOCK) on a.InvDocDetailsID =b.LinkedInvDocDetailsID'     
+  
+    if (@listTypeID>0 and @StrWhere='')
+		  SET @Query=@Query+@Join
+
+	set @PrefValue=''
+	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)
+	where CostCenterID=@CostCenterID and PrefName='LinkVendorProducts'        
+          
+	if(@PrefValue is not null and @PrefValue='True')
 	BEGIN
-		
-		set @Tolerance=''	
-		set @PackQty=''
-		
-		select @Tolerance=PrefValue from COM_DocumentPreferences WITH(NOLOCK)       
-		where CostCenterID=@CostCenterID and PrefName='Enabletolerance'          
-		
-		select @PackQty=PrefValue from COM_DocumentPreferences WITH(NOLOCK)
-		where CostCenterID=@CostCenterID and PrefName ='Checkpackedqty' 
+		SET @Query=@Query+' join INV_ProductVendors PV WITH(NOLOCK) ON p.ProductID=pv.ProductID and pv.AccountID='+convert(nvarchar,@AccID)
+	END   
+    
+    if(@PackQty='true')
+	BEGIN
+		SET @Query=@Query+' left join INV_DocExtraDetails DE WITH(NOLOCK) ON a.InvDocDetailsID=DE.InvDocDetailsID and DE.TYPE=2 '
+	END   
 
-
-		set @Query=''
-	  
-		set @Query=@Query+'select InvDocDetailsID,value,PercentValue,VoucherType,DocSeqNo,ProductID,DocID from ('
+	IF(@ColumnName LIKE 'dcNum%' )    
+		SET @Query=@Query+' where d.CostCenterid='+convert(nvarchar(5),@LinkCostCenterID) +' and d.VoucherNo in ('''+@VoucherNo+''')' 
+	ELSE    
+		SET @Query=@Query+' where a.CostCenterid='+convert(nvarchar(5),@LinkCostCenterID) +' and a.VoucherNo in ('''+@VoucherNo+''')'  
+	
+	
+	if (@listTypeID>0 and @StrWhere='')
+		SET @Query=@Query+@where
 		
-		if(@PackQty='true')
-			set @Query=@Query+'SELECT distinct a.InvDocDetailsID,case when p.IsPacking=1 THEN cast(isnull(sum(DE.Quantity),0)-isnull(sum(b.LinkedFieldValue),0) as numeric(36,5)) ELSE cast(a.'+@ColumnName+'-isnull(sum(b.LinkedFieldValue),0) as numeric(36,5)) END as value '
-  		ELSE
-  		BEGIN
-  			set @Query=@Query+'SELECT distinct a.InvDocDetailsID, cast(a.'+@ColumnName+'-isnull(sum('
-	  		
-  			set @Query=@Query+' case when b.Statusid=376 or b.DocID='+convert(nvarchar,@DocID)+' then 0 '
-		
-		
-			select @PrefValue=PrefValue from COM_DocumentPreferences  WITH(NOLOCK)       
-			where CostCenterID=@LinkCostCenterID and PrefName='AllowMultipleLinking'                     
-			if(@PrefValue is not null and @PrefValue='True'    ) --FOr Linking Multiple        
-			BEGIN    
-				DECLARE @FinalStr nvarchar(max)
-				if(@Vouchers is not null and @Vouchers <>'')
-				BEGIN
-					SET @FinalStr =@Vouchers
-					SET @FinalStr = @FinalStr +','+convert(nvarchar(5),@CostCenterID)   
-				END 
-				ELSE
-					SET @FinalStr = convert(nvarchar(5),@CostCenterID)       
-					--SET @Query=@Query+' and b.CostCenterid='+convert(nvarchar(5),@CostCenterID)   
-				SET @Query=@Query+' when b.CostCenterid  not in ('+@FinalStr  +') then 0 '
-			END  
-	  		
-	  		
-			set @Query=@Query+' else b.LinkedFieldValue end ),0)as numeric(36,5)) value '      
-	  		
-		END
-		if(@Tolerance is not null and @Tolerance='True'    )
-			set @Query=@Query+',max(isnull(p.MinTolerancePer,0)) TPercentage,max(isnull(p.MinToleranceVal,0)) TValue
-				,(a.'+@ColumnName+'*max(isnull(p.MaxTolerancePer,0)))/100 PercentValue	,(a.'+@ColumnName+'*max(isnull(p.MinTolerancePer,0)))/100 per,max(isnull(p.MaxTolerancePer,0)) thp,max(isnull(p.MaxToleranceVal,0)) THV '
-		else
-			set @Query=@Query+',0 PercentValue '
-			
-		IF(@ColumnName LIKE 'dcNum%' )    
-			SET @Query=@Query+',d.VoucherType,d.DocSeqNo,d.ProductID,d.DocID from COM_DocNumData a with(nolock) ' +      
-			'join INV_DocDetails d with(nolock) on a.InvDocDetailsID =d.InvDocDetailsID  
-			join inv_product p  with(nolock) on d.ProductID=p.ProductID     
-			join COM_DocCCData DC with(nolock) on d.InvDocDetailsID =DC.InvDocDetailsID'      
-		ELSE      
-			SET @Query=@Query+',a.VoucherType,a.DocSeqNo,a.ProductID,a.DocID from INV_DocDetails a with(nolock) 
-			join inv_product p  with(nolock) on a.ProductID=p.ProductID
-			join COM_DocCCData DC with(nolock) on a.InvDocDetailsID =DC.InvDocDetailsID'      
-		   
-		SET @Query=@Query+' left join INV_DocDetails B WITH(NOLOCK) on a.InvDocDetailsID =b.LinkedInvDocDetailsID'     
-	  
-		if (@listTypeID>0 and @StrWhere='')
-			  SET @Query=@Query+@Join
-
-		set @PrefValue=''
-		select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)
-		where CostCenterID=@CostCenterID and PrefName='LinkVendorProducts'        
-	          
-		if(@PrefValue is not null and @PrefValue='True')
-		BEGIN
-			SET @Query=@Query+' join INV_ProductVendors PV WITH(NOLOCK) ON p.ProductID=pv.ProductID and pv.AccountID='+convert(nvarchar,@AccID)
-		END   
+	set @PrefValue=''  
+	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)     
+	where CostCenterID=@CostCenterID and PrefName='IgnoreTempProduct'        
+        
+	if(@PrefValue is not null and @PrefValue='True')--      
+	begin  		
+		select @PrefValue=Value from COM_CostCenterPreferences WITH(NOLOCK)     
+		where CostCenterID=3 and Name='TempPartProduct'  
+		if(@PrefValue is not null and @PrefValue<>'')--      
+		begin  		
+			IF(@ColumnName LIKE 'dcNum%' )    
+				SET @Query=@Query+' and d.ProductID<>'+@PrefValue      
+			Else    
+				SET @Query=@Query+' and a.ProductID<>'+@PrefValue    
+		end  
+	end
+  
+  	if(@DimWhere is NOT null and @DimWhere<>'') --FOr Dimension filter      
+	BEGIN      		
+		SET @Query=@Query+@DimWhere
+	END
+	
+	set @PrefValue=''	
+	select @PrefValue=PrefValue from COM_DocumentPreferences  WITH(NOLOCK)    
+	where CostCenterID=@CostCenterID and PrefName='onlyTempProduct'        
+	if(@PrefValue is not null and @PrefValue='True')--      
+	begin  		
+		select @PrefValue=Value from COM_CostCenterPreferences  WITH(NOLOCK)    
+		where CostCenterID=3 and Name='TempPartProduct'  
+		if(@PrefValue is not null and @PrefValue<>'')--      
+		begin  		
+			IF(@ColumnName LIKE 'dcNum%' )    
+				SET @Query=@Query+' and d.ProductID='+@PrefValue      
+			Else    
+				SET @Query=@Query+' and a.ProductID='+@PrefValue    
+		end  
+	end 
+  
+	set @PrefValue=''   
+	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)      
+	where CostCenterID=@CostCenterID and PrefName='linkSingleline'        
 	    
-		if(@PackQty='true')
+	if(@PrefValue is not null and @PrefValue='True')--FOr link Single line      
+	begin  
+	  IF(@ColumnName LIKE 'dcNum%' )    
+		SET @Query=@Query+' and d.DocSeqNo=1'      
+	  Else    
+		SET @Query=@Query+' and a.DocSeqNo=1'      
+	end   
+  
+	set @PrefValue=''
+  	select @PrefValue=PrefValue from COM_DocumentPreferences  WITH(NOLOCK)  
+	where CostCenterID=@CostCenterID and PrefName='Debit Account'        
+
+  	if(@PrefValue is NOT null AND  @PrefValue='True'
+  	and @docType in(6,10,7,9,11,12,24)) --FOr Debit Account filter      
+	BEGIN      
+		if((@docType in(6,10) and @LinkdocType not in(6,10)) or (@LinkdocType in(6,10) and @docType not in(6,10)))
 		BEGIN
-			SET @Query=@Query+' left join INV_DocExtraDetails DE WITH(NOLOCK) ON a.InvDocDetailsID=DE.InvDocDetailsID and DE.TYPE=2 '
-		END   
-
-		IF(@ColumnName LIKE 'dcNum%' )    
-			SET @Query=@Query+' where d.CostCenterid='+convert(nvarchar(5),@LinkCostCenterID) +' and d.VoucherNo in ('''+@VoucherNo+''')' 
-		ELSE    
-			SET @Query=@Query+' where a.CostCenterid='+convert(nvarchar(5),@LinkCostCenterID) +' and a.VoucherNo in ('''+@VoucherNo+''')'  
-		
-		
-		if (@listTypeID>0 and @StrWhere='')
-			SET @Query=@Query+@where
-			
-		set @PrefValue=''  
-		select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)     
-		where CostCenterID=@CostCenterID and PrefName='IgnoreTempProduct'        
-	        
-		if(@PrefValue is not null and @PrefValue='True')--      
-		begin  		
-			select @PrefValue=Value from COM_CostCenterPreferences WITH(NOLOCK)     
-			where CostCenterID=3 and Name='TempPartProduct'  
-			if(@PrefValue is not null and @PrefValue<>'')--      
-			begin  		
-				IF(@ColumnName LIKE 'dcNum%' )    
-					SET @Query=@Query+' and d.ProductID<>'+@PrefValue      
-				Else    
-					SET @Query=@Query+' and a.ProductID<>'+@PrefValue    
-			end  
-		end
-	  
-  		if(@DimWhere is NOT null and @DimWhere<>'') --FOr Dimension filter      
-		BEGIN      		
-			SET @Query=@Query+@DimWhere
-		END
-		
-		set @PrefValue=''	
-		select @PrefValue=PrefValue from COM_DocumentPreferences  WITH(NOLOCK)    
-		where CostCenterID=@CostCenterID and PrefName='onlyTempProduct'        
-		if(@PrefValue is not null and @PrefValue='True')--      
-		begin  		
-			select @PrefValue=Value from COM_CostCenterPreferences  WITH(NOLOCK)    
-			where CostCenterID=3 and Name='TempPartProduct'  
-			if(@PrefValue is not null and @PrefValue<>'')--      
-			begin  		
-				IF(@ColumnName LIKE 'dcNum%' )    
-					SET @Query=@Query+' and d.ProductID='+@PrefValue      
-				Else    
-					SET @Query=@Query+' and a.ProductID='+@PrefValue    
-			end  
-		end 
-	  
-		set @PrefValue=''   
-		select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)      
-		where CostCenterID=@CostCenterID and PrefName='linkSingleline'        
-		    
-		if(@PrefValue is not null and @PrefValue='True')--FOr link Single line      
-		begin  
-		  IF(@ColumnName LIKE 'dcNum%' )    
-			SET @Query=@Query+' and d.DocSeqNo=1'      
-		  Else    
-			SET @Query=@Query+' and a.DocSeqNo=1'      
-		end   
-	  
-		set @PrefValue=''
-  		select @PrefValue=PrefValue from COM_DocumentPreferences  WITH(NOLOCK)  
-		where CostCenterID=@CostCenterID and PrefName='Debit Account'        
-
-  		if(@PrefValue is NOT null AND  @PrefValue='True'
-  		and @docType in(6,10,7,9,11,12,24)) --FOr Debit Account filter      
-		BEGIN      
-			if((@docType in(6,10) and @LinkdocType not in(6,10)) or (@LinkdocType in(6,10) and @docType not in(6,10)))
-			BEGIN
-				IF(@ColumnName LIKE 'dcNum%' )       
-				SET @Query=@Query+' and d.CreditAccount = '+convert(nvarchar,@AccID)
-			 else
-				SET @Query=@Query+' and a.CreditAccount = '+convert(nvarchar,@AccID)
-			END
-			ELSE
-			BEGIN
-			 IF(@ColumnName LIKE 'dcNum%' )       
-				SET @Query=@Query+' and d.DebitAccount = '+convert(nvarchar,@AccID)
-			 else
-				SET @Query=@Query+' and a.DebitAccount = '+convert(nvarchar,@AccID)
-			END	
-		END  
-		
-		set @PrefValue=''
-		select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)   
-		where CostCenterID=@CostCenterID and PrefName='Credit Account'        
-
-  		if(@PrefValue is NOT null AND  @PrefValue='True'
-  		and @docType in(1,2,6,3,4,10,25,26,27,13)) --FOr Debit Account filter      
-		BEGIN      
-			if((@docType in(6,10) and @LinkdocType not in(6,10)) or (@LinkdocType in(6,10) and @docType not in(6,10)))
-			BEGIN
-				IF(@ColumnName LIKE 'dcNum%' )       
-				SET @Query=@Query+' and d.DebitAccount = '+convert(nvarchar,@AccID)
-			 else
-				SET @Query=@Query+' and a.DebitAccount = '+convert(nvarchar,@AccID)
-			END
-			ELSE
-			BEGIN
-			 IF(@ColumnName LIKE 'dcNum%' )       
-				SET @Query=@Query+' and d.CreditAccount = '+convert(nvarchar,@AccID)
-			 else
-				SET @Query=@Query+' and a.CreditAccount = '+convert(nvarchar,@AccID)
-			END	
-		END  
-		
-		 set @PrefValue=''
-		 select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)    
-		 where CostCenterID=@LinkCostCenterID and PrefName='LinkUnposted'        
-		 
-		 if(@PrefValue ='true' and @ColumnName LIKE 'dcNum%')
-			SET @Query=@Query+' and d.statusid in(369,372) '
-		 else  if(@PrefValue ='true')
-	 		SET @Query=@Query+' and a.statusid in(369,372) '
-		 else if(@ColumnName LIKE 'dcNum%')
-			SET @Query=@Query+' and d.statusid=369 '
+			IF(@ColumnName LIKE 'dcNum%' )       
+			SET @Query=@Query+' and d.CreditAccount = '+convert(nvarchar,@AccID)
 		 else
-			SET @Query=@Query+' and a.statusid=369 '	
-			
-		set @PrefValue=''
-		select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)     
-		where CostCenterID=@CostCenterID and PrefName='OnlyLinked'        
-	        
-		if(@PrefValue is not null and @PrefValue='True')--FOr link Single line      
-		begin
-		  IF(@ColumnName LIKE 'dcNum%' )    
-			SET @Query=@Query+' and d.LinkedInvDocDetailsID is not null and d.LinkedInvDocDetailsID>0 '      
-		  Else
-			SET @Query=@Query+' and a.LinkedInvDocDetailsID is not null and a.LinkedInvDocDetailsID>0 '      
-		end 
-	  
-		SET @Query=@Query+' group by a.InvDocDetailsID,p.IsPacking,a.'+@ColumnName 
-		
-		 IF(@ColumnName LIKE 'dcNum%' )    
-			SET @Query=@Query+' ,d.VoucherType,d.DocSeqNo,d.ProductID,d.DocID'      
-		  Else
-		   SET @Query=@Query+' ,a.VoucherType,a.DocSeqNo,a.ProductID,a.DocID' 
-		   
-		set @PrefValue=''        
-		select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)       
-		where CostCenterID=@CostCenterID and PrefName='LinkZeroQty'          
-	    
-		if(@PrefValue='true')--FOr Link Zero Qty no validation        
-			SET @Query=@Query+') as t'
+			SET @Query=@Query+' and a.CreditAccount = '+convert(nvarchar,@AccID)
+		END
 		ELSE
-		begin     
-			if(@Tolerance is not null and @Tolerance='True')   
-				SET @Query=@Query+') as t
-				where ( (TPercentage =0 and thp=0 and THV=0 and TValue=0 and value<>0)
-				or (THV >0 and TValue=0 and TPercentage=0 and value>0)
-				or (thp >0 and TValue=0 and TPercentage=0 and value>0)
-				or (TPercentage >0 and value<>0 and round((value),2)>per )
-				or (TValue >0 and value<>0 and round((value),2)>TValue))'
-			else
-				SET @Query=@Query+' ) as t where cast(value as numeric(36,5)) >0 '    
-		end	
-	  
-		print @Query  
-	    
-		--Read XML data into   
-		INSERT INTO #tblDocList  (DocDetailsID ,Val ,PercentValue ,VoucherType ,DocSeqNo,ProductID,QDocID)
-		Exec(@Query)  
-		
-		if(@LinkdocType=5)
 		BEGIN
-			delete from #tblDocList
-			where DocDetailsID in(
-			select min(DocDetailsID)  from #tblDocList WITH(NOLOCK)
-			group by  DocSeqNo
-			having COUNT(*)=1)
-		END    
-	END
+		 IF(@ColumnName LIKE 'dcNum%' )       
+			SET @Query=@Query+' and d.DebitAccount = '+convert(nvarchar,@AccID)
+		 else
+			SET @Query=@Query+' and a.DebitAccount = '+convert(nvarchar,@AccID)
+		END	
+	END  
+	
+	set @PrefValue=''
+	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)   
+	where CostCenterID=@CostCenterID and PrefName='Credit Account'        
+
+  	if(@PrefValue is NOT null AND  @PrefValue='True'
+  	and @docType in(1,2,6,3,4,10,25,26,27,13)) --FOr Debit Account filter      
+	BEGIN      
+		if((@docType in(6,10) and @LinkdocType not in(6,10)) or (@LinkdocType in(6,10) and @docType not in(6,10)))
+		BEGIN
+			IF(@ColumnName LIKE 'dcNum%' )       
+			SET @Query=@Query+' and d.DebitAccount = '+convert(nvarchar,@AccID)
+		 else
+			SET @Query=@Query+' and a.DebitAccount = '+convert(nvarchar,@AccID)
+		END
+		ELSE
+		BEGIN
+		 IF(@ColumnName LIKE 'dcNum%' )       
+			SET @Query=@Query+' and d.CreditAccount = '+convert(nvarchar,@AccID)
+		 else
+			SET @Query=@Query+' and a.CreditAccount = '+convert(nvarchar,@AccID)
+		END	
+	END  
+	
+	 set @PrefValue=''
+	 select @PrefValue=PrefValue from COM_DocumentPreferences    
+	 where CostCenterID=@LinkCostCenterID and PrefName='LinkUnposted'        
+	 
+     if(@PrefValue ='true' and @ColumnName LIKE 'dcNum%')
+		SET @Query=@Query+' and d.statusid in(369,372) '
+	 else  if(@PrefValue ='true')
+	 	SET @Query=@Query+' and a.statusid in(369,372) '
+	 else if(@ColumnName LIKE 'dcNum%')
+		SET @Query=@Query+' and d.statusid=369 '
+	 else
+		SET @Query=@Query+' and a.statusid=369 '	
+		
+	set @PrefValue=''
+	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)     
+	where CostCenterID=@CostCenterID and PrefName='OnlyLinked'        
+        
+	if(@PrefValue is not null and @PrefValue='True')--FOr link Single line      
+	begin
+	  IF(@ColumnName LIKE 'dcNum%' )    
+		SET @Query=@Query+' and d.LinkedInvDocDetailsID is not null and d.LinkedInvDocDetailsID>0 '      
+	  Else
+		SET @Query=@Query+' and a.LinkedInvDocDetailsID is not null and a.LinkedInvDocDetailsID>0 '      
+	end 
+  
+	SET @Query=@Query+' group by a.InvDocDetailsID,p.IsPacking,a.'+@ColumnName 
+	
+	 IF(@ColumnName LIKE 'dcNum%' )    
+		SET @Query=@Query+' ,d.VoucherType,d.DocSeqNo'      
+	  Else
+	   SET @Query=@Query+' ,a.VoucherType,a.DocSeqNo' 
+	   
+	set @PrefValue=''        
+	select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)       
+	where CostCenterID=@CostCenterID and PrefName='LinkZeroQty'          
+    
+	if(@PrefValue<>'true')--FOr Link Zero Qty no validation        
+	begin     
+		if(@Tolerance is not null and @Tolerance='True'    )   
+			SET @Query=@Query+') as t
+			where ( (TPercentage =0 and thp=0 and THV=0 and TValue=0 and value<>0)
+			or (THV >0 and TValue=0 and TPercentage=0 and value>0)
+			or (thp >0 and TValue=0 and TPercentage=0 and value>0)
+			or (TPercentage >0 and value<>0 and round((value),2)>per )
+			or (TValue >0 and value<>0 and round((value),2)>TValue))'
+		else
+			SET @Query=@Query+' ) as t where cast(value as numeric(36,5)) >0 '    
+	end
+	else if(@Tolerance is not null and @Tolerance='True')
+		SET @Query=@Query+') as t'
+  
+	print @Query  
+    
+	--Read XML data into   
+	INSERT INTO #tblDocList  (DocDetailsID ,Val ,PercentValue ,VoucherType ,DocSeqNo )
+	Exec(@Query)  
+	
+	if(@LinkdocType=5)
+	BEGIN
+		delete from #tblDocList
+		where DocDetailsID in(
+		select min(DocDetailsID)  from #tblDocList
+		group by  DocSeqNo
+		having COUNT(*)=1)
+	END    
 	
 	delete from #tblDocList where ID in (
 	select c.id from inv_docdetails a with(nolock)
-	inner join #tblDocList c WITH(NOLOCK) on a.InvDocDetailsID=c.DocDetailsID   
+	inner join #tblDocList c on a.InvDocDetailsID=c.DocDetailsID   
 	left join inv_docdetails b with(nolock) on b.LinkedInvDocDetailsID=a.InvDocDetailsID
 	where isnull(b.docid,-123)<>@docid and a.linkstatusid=445 )
-	
-	set @Query=''
-	select @Query=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=18
-	if(@Query<>'')
-	begin
-		exec @Query @CostCenterID,@DocID,@UserID,@LangID
-	end
 	
 	set @PrefValue=''
     select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)       
@@ -425,11 +379,11 @@ SET NOCOUNT ON
          ,a.[BillNo]    
          ,a.[LinkedInvDocDetailsID]    
          ,a.[CommonNarration]    
-         ,a.LineNarration    
+         ,a.lineNarration    
          ,a.[DebitAccount]     
          ,a.[CreditAccount]   
          ,a.[DocSeqNo]    
-         ,p.[ProductID],p.QtyAdjustType,p.IsPacking,p.IsBillOfEntry,p.ProductTypeID,p.ProductName,p.ProductCode,p.Volume,p.Weight,p.ParentID,p.IsGroup,p.Wastage
+         ,a.[ProductID],p.QtyAdjustType,p.IsPacking,p.IsBillOfEntry,p.ProductTypeID,p.ProductName,p.ProductCode,p.Volume,p.Weight,p.ParentID,p.IsGroup,p.Wastage
          ,isnull(p.MaxTolerancePer,0) ToleranceLimitsPercentage,isnull(p.MaxToleranceVal,0)  ToleranceLimitsValue   
          ,PercentValue
          ,a.[Quantity]    
@@ -445,7 +399,7 @@ SET NOCOUNT ON
          ,a.[CurrencyID]    
          ,a.[ExchangeRate]
          ,a.ParentSchemeID
-         ,a.[CreatedBy],a.VoucherType  
+         ,a.[CreatedBy],a.vouchertype  
          ,a.[CreatedDate],UOMConversion,UOMConvertedQty, Cr.AccountName as CreditAcc, Dr.AccountName as DebitAcc,a.DynamicInvDocDetailsID,a.ReserveQuantity 
          ,case when @PrefValue='true' THEN isnull((select sum(qty) from(
 		select inv.Quantity-isnull(sum(lv.LinkedFieldValue),0) qty from INV_DocDetails inv WITH(NOLOCK)  
@@ -454,51 +408,33 @@ SET NOCOUNT ON
 		and (inv.DocDate<a.DocDate or (inv.DocDate=a.DocDate and inv.VoucherNo<a.VoucherNo))
 		group by inv.InvDocDetailsID, inv.Quantity  )as t),0) else 0 end Fifo
 	FROM  [INV_DocDetails] a   WITH(NOLOCK)  
-	join #tblDocList c WITH(NOLOCK) on a.InvDocDetailsID=c.DocDetailsID  
-	join dbo.INV_Product p WITH(NOLOCK) on  c.ProductID=p.ProductID    
+	join dbo.INV_Product p WITH(NOLOCK) on  a.ProductID=p.ProductID    
 	join dbo.Acc_Accounts Cr  WITH(NOLOCK) on  Cr.AccountID=a.CreditAccount    
 	join dbo.Acc_Accounts Dr WITH(NOLOCK)  on  Dr.AccountID=a.DebitAccount  
-	left join com_uom u WITH(NOLOCK)  on a.Unit=u.UOMID   
-	order by a.VoucherNo,a.DocSeqNo,a.VoucherType  ,a.DynamicInvDocDetailsID
+	left join com_uom u WITH(NOLOCK)  on a.Unit=u.UOMID    
+	join #tblDocList c on a.InvDocDetailsID=c.DocDetailsID  	
+	order by a.VoucherNo,a.DocSeqNo,a.vouchertype  ,a.DynamicInvDocDetailsID
 	
-	set @Query='' 
-	SELECT @Query=@Query+','+CASE WHEN TC.name IS NOT NULL THEN 'T' ELSE 'CC' END +'.'+C.name FROM sys.columns C WITH(NOLOCK)
-	LEFT JOIN tempdb.sys.columns TC WITH(NOLOCK) ON TC.OBJECT_ID=OBJECT_ID('tempdb..#tblDocList') AND TC.name collate database_default=C.name collate database_default
-	WHERE C.OBJECT_ID=OBJECT_ID('COM_DocCCData') and C.name not in ('DocCCDataID')
-	order by C.column_id
-	
-	--GETTING DOCUMENT EXTRA COSTCENTER FEILD DETAILS    
-	set @Query='SELECT CC.DocCCDataID'+@Query+' FROM [COM_DocCCData] CC with(nolock)  
-	join [INV_DocDetails] D WITH(NOLOCK) on CC.InvDocDetailsID=D.InvDocDetailsID     
-	join #tblDocList t on t.DocDetailsID=D.InvDocDetailsID   	
-	order by D.VoucherNo,D.DocSeqNo,D.VoucherType  ,d.DynamicInvDocDetailsID'
-	exec (@Query)
 
-	set @Query='' 
-	SELECT @Query=@Query+','+CASE WHEN TC.name IS NOT NULL THEN 'T' ELSE 'CC' END +'.'+C.name FROM sys.columns C WITH(NOLOCK)
-	LEFT JOIN tempdb.sys.columns TC WITH(NOLOCK) ON TC.OBJECT_ID=OBJECT_ID('tempdb..#tblDocList') AND TC.name collate database_default=C.name collate database_default
-	WHERE C.OBJECT_ID=OBJECT_ID('[COM_DocNumData]') and C.name not in ('DocNumDataID')
-	order by C.column_id
+    --GETTING DOCUMENT EXTRA COSTCENTER FEILD DETAILS    
+	SELECT cc.*,vc.StartYear,vc.EndYear FROM    [COM_DocCCData]  cc with(nolock)  
+	left join SVC_Vehicle vc with(nolock) on cc.VehicleID=vc.VehicleID  
+	join [INV_DocDetails] D WITH(NOLOCK) on cc.InvDocDetailsID=D.InvDocDetailsID     
+	join #tblDocList t on t.DocDetailsID=D.InvDocDetailsID   	
+	order by D.VoucherNo,D.DocSeqNo,D.vouchertype  ,d.DynamicInvDocDetailsID
+
 
 	--GETTING DOCUMENT EXTRA NUMERIC FEILD DETAILS    
-	set @Query='SELECT CC.DocNumDataID'+@Query+' FROM [COM_DocNumData] CC  WITH(NOLOCK) 
-	join [INV_DocDetails] D WITH(NOLOCK) on CC.InvDocDetailsID=D.InvDocDetailsID     
-	join #tblDocList t WITH(NOLOCK) on t.DocDetailsID=D.InvDocDetailsID    	
-	order by D.VoucherNo,D.DocSeqNo,D.VoucherType   ,d.DynamicInvDocDetailsID'
-	exec (@Query)
+	SELECT n.* FROM [COM_DocNumData]  n  WITH(NOLOCK) 
+	join [INV_DocDetails] D WITH(NOLOCK) on n.InvDocDetailsID=D.InvDocDetailsID     
+	join #tblDocList t on t.DocDetailsID=D.InvDocDetailsID    	
+	order by D.VoucherNo,D.DocSeqNo,D.vouchertype   ,d.DynamicInvDocDetailsID
     
-	set @Query='' 
-	SELECT @Query=@Query+','+CASE WHEN TC.name IS NOT NULL THEN 'T' ELSE 'CC' END +'.'+C.name FROM sys.columns C WITH(NOLOCK)
-	LEFT JOIN tempdb.sys.columns TC WITH(NOLOCK) ON TC.OBJECT_ID=OBJECT_ID('tempdb..#tblDocList') AND TC.name collate database_default=C.name collate database_default
-	WHERE C.OBJECT_ID=OBJECT_ID('COM_DocTextData') and C.name not in ('DocTextDataID')
-	order by C.column_id
-
 	--GETTING DOCUMENT EXTRA TEXT FEILD DETAILS    
-	set @Query='SELECT CC.DocTextDataID'+@Query+' FROM [COM_DocTextData] CC  WITH(NOLOCK) 
-	join [INV_DocDetails] D WITH(NOLOCK) on CC.InvDocDetailsID=D.InvDocDetailsID     
-	join #tblDocList t WITH(NOLOCK) on t.DocDetailsID=D.InvDocDetailsID   	  
-	order by D.VoucherNo,D.DocSeqNo,D.VoucherType   ,d.DynamicInvDocDetailsID'
-	exec (@Query)
+	SELECT te.* FROM [COM_DocTextData]  te  WITH(NOLOCK) 
+	join [INV_DocDetails] D WITH(NOLOCK) on te.InvDocDetailsID=D.InvDocDetailsID     
+	join #tblDocList t on t.DocDetailsID=D.InvDocDetailsID   	  
+	order by D.VoucherNo,D.DocSeqNo,D.vouchertype   ,d.DynamicInvDocDetailsID
     
    --Getting Linking Fields    
    SELECT case when A.CostCenterColIDBase <0 THEN 'TO'+B.SysColumnName else B.SysColumnName end BASECOL,L.SysColumnName LINKCOL ,A.[VIEW],A.CostCenterColIDLinked,A.CalcValue  
@@ -514,7 +450,7 @@ SET NOCOUNT ON
 	,CONVERT(datetime,b.[ExpiryDate]) ExpiryDate,b.[MRPRate],b.[RetailRate]  
 	,b.[StockistRate],IsQtyIgnored FROM [inv_DocDetails] a WITH(NOLOCK)   
 	join INV_Batches b WITH(NOLOCK) on a.BatchID=b.BatchID  
-	WHERE a.[BatchID]>1 and a.[InvDocDetailsID] IN (SELECT DocDetailsID FROM  #tblDocList WITH(NOLOCK))  AND a.StatusID=369
+	WHERE a.[BatchID]>1 and a.[InvDocDetailsID] IN (SELECT DocDetailsID FROM  #tblDocList)  AND a.StatusID=369
         
        
 	--GETTING SYSCOLDATA FROM COSTCENTERDEF   
@@ -525,16 +461,15 @@ SET NOCOUNT ON
 	left JOIN ADM_CostCenterDef L WITH(NOLOCK)  ON L.CostCenterColID=A.CostCenterColIDLinked    
 	WHERE A.DocumentLinkDeFID =@DocumentLinkDefID  ) AS TBL ON C.SysColumnName = TBL.SysColumnName  
 	WHERE C.COSTCENTERID = @LinkCostCenterID  AND TBL.[VIEW] = 1 
-  
-     
-   SELECT distinct f.[FileID],f.[FilePath],f.[ActualFileName],f.[RelativeFileName],f.[FileExtension],f.[IsProductImage]  
-   ,RowSeqNo,ColName,f.[FileDescription],f.[CostCenterID],f.[GUID],f.AllowInPrint,f.FeaturePK,f.IsDefaultImage
-   ,CASE WHEN f.RowSeqNo IS NULL THEN NULL ELSE aa.InvDocDetailsID END as InvDocDetailsID 
-   FROM  COM_Files f WITH(NOLOCK)   
-	join [INV_DocDetails] a   WITH(NOLOCK) on   f.FeaturePK=a.DocID
-   join #tblDocList c WITH(NOLOCK) on a.InvDocDetailsID=c.DocDetailsID
-   left join [INV_DocDetails] aa   WITH(NOLOCK) on   aa.DocID=a.DocID AND aa.DocSeqNo=f.RowSeqNo
-   WHERE f.FeatureID=a.CostCenterID 
+   
+   set @autoCCID=0   
+   
+   select @tempDOcID=DocID,@autoCCID=CostCenterID  FROM  [INV_DocDetails] a   WITH(NOLOCK)  
+   join #tblDocList c on a.InvDocDetailsID=c.DocDetailsID 
+   
+   SELECT [FileID],[FilePath],[ActualFileName],[RelativeFileName],[FileExtension],[IsProductImage]  
+   ,[FileDescription],[CostCenterID],[GUID],AllowInPrint,FeaturePK FROM  COM_Files WITH(NOLOCK)   
+   WHERE FeatureID=@autoCCID AND FeaturePK in (select distinct DocID from inv_docdetails d with(nolock) join #tblDocList T on T.DocDetailsID=d.InvDocDetailsID)
 	
 	set @PrefValue=''
     select @PrefValue=PrefValue from COM_DocumentPreferences WITH(NOLOCK)       
@@ -553,7 +488,7 @@ SET NOCOUNT ON
 		  ,a.[IsAvailable]  
 		  ,a.[RefInvDocDetailsID]  
 		  ,a.[Narration] FROM INV_SerialStockProduct A WITH(NOLOCK)  
-   		join #tblDocList t WITH(NOLOCK) on t.DocDetailsID=A.InvDocDetailsID 
+   		join #tblDocList t on t.DocDetailsID=A.InvDocDetailsID 
    		left join inv_docdetails b WITH(NOLOCK) on a.InvDocDetailsID=b.LinkedInvDocDetailsID 
 		left  join INV_SerialStockProduct bs WITH(NOLOCK) on bs.InvDocDetailsID=b.InvDocDetailsID and a. [SerialNumber]=bs.SerialNumber
 		where bs.SerialProductID is null 
@@ -561,36 +496,32 @@ SET NOCOUNT ON
 	ELSE
 		SELECT 1 where 1=2
 		
-	select a.*,'' VoucherNo
-	from COM_DocQtyAdjustments a WITH(NOLOCK)  
-	join #tblDocList t WITH(NOLOCK) on a.InvDocDetailsID=t.DocDetailsID	
-	union
-	select a.*,I.VoucherNo from COM_DocQtyAdjustments a WITH(NOLOCK)
-	JOIN #tblDocList T WITH(NOLOCK) ON T.QDocID=A.DocID
-	JOIN INV_DocDetails I WITH(NOLOCK) ON I.DocID=T.QDocID
-	WHERE A.InvDocDetailsID=0
+	select a.InvDocDetailsID,a.Fld1,a.Fld2,a.Fld3,a.Fld4,a.Fld5,a.Fld6,a.Fld7,a.Fld8,a.Fld9,a.Fld10
+	from   COM_DocQtyAdjustments a WITH(NOLOCK)  
+	join #tblDocList t on a.InvDocDetailsID=t.DocDetailsID	
 	
 	IF exists (SELECT PrefValue  FROM COM_DocumentPreferences WITH(NOLOCK) 
 		WHERE CostCenterID=@CostCenterID and PrefName in('CopyAddresses') and PrefValue='true')
 		and exists (SELECT PrefValue  FROM COM_DocumentPreferences WITH(NOLOCK) 
 		WHERE CostCenterID=@CostCenterID and PrefName in('PrimaryAddress','ShippingAddress','BillingAddress') and PrefValue='true')	 
 	BEGIN 
-		   	select @DbAccID=DebitAccount,@CrAccID=CreditAccount,@tempDOcID=DocID
+		   	select @DbAccID=DebitAccount,@CrAccID=CreditAccount
 			FROM  [INV_DocDetails] a   WITH(NOLOCK)  
-			join #tblDocList c WITH(NOLOCK) on a.InvDocDetailsID=c.DocDetailsID 
-			
+			join #tblDocList c on a.InvDocDetailsID=c.DocDetailsID 
+			 
+	
 			SELECT a.addressid,A.[InvDocDetailsID]  
 			,[AddressHistoryID],[AddressTypeID] 
 			FROM COM_DocAddressData A WITH(NOLOCK)  			
 			WHERE DocID=@tempDOcID  
 						
 			SELECT FEATUREPK,AddressName,Address1,Phone1,AddressID,AddressTypeID,0 
-			,ContactPerson,Address2,Address3,State,Zip,City,IsDefault
+			,ContactPerson,Address2,Address3,State,Zip,City
 			FROM COM_Address WITH(NOLOCK) 
 			WHERE FEATUREID = 2 AND FEATUREPK in(@CrAccID,@DbAccID)
 			UNION
 			SELECT FEATUREPK,AddressName,Address1,Phone1,a.AddressID,a.AddressTypeID,a.AddressHistoryID 
-			,ContactPerson,Address2,Address3,State,Zip,City,IsDefault
+			,ContactPerson,Address2,Address3,State,Zip,City
 			FROM COM_Address_History a WITH(NOLOCK) 
 			join COM_DocAddressData b WITH(NOLOCK) on a.AddressHistoryID=b.AddressHistoryID
 			WHERE FEATUREID = 2 AND FEATUREPK in(@CrAccID,@DbAccID)			
@@ -612,14 +543,14 @@ SET NOCOUNT ON
 	BEGIN
 		select a.InvDocDetailsID,a.BinID,a.Quantity
 		from   INV_BinDetails a WITH(NOLOCK)  
-		join #tblDocList t WITH(NOLOCK) on t.DocDetailsID=A.InvDocDetailsID 
+		join #tblDocList t on t.DocDetailsID=A.InvDocDetailsID 
 	END
 	ELSE
 		SELECT 1 WHERE 1<>1
 	
 	select a.*
 	from   INV_DocExtraDetails a WITH(NOLOCK)  
-	join #tblDocList t WITH(NOLOCK) on t.DocDetailsID=A.InvDocDetailsID 
+	join #tblDocList t on t.DocDetailsID=A.InvDocDetailsID 
 	
 	
 	if exists(select PrefValue from COM_DocumentPreferences WITH(NOLOCK)       
@@ -628,16 +559,16 @@ SET NOCOUNT ON
 		select @autoCCID=value from ADM_GlobalPreferences  WITH(NOLOCK) 
 		where Name='PaytermLinkDim' and ISNUMERIC(value)=1
 		
-		if(@autoCCID>50000 and exists(select DocDetailsID from #tblDocList WITH(NOLOCK)))
+		if(@autoCCID>50000 and exists(select DocDetailsID from #tblDocList))
 		BEGIN
 			set @query=''
-			select @query=@query+convert(nvarchar,DocDetailsID)+',' from #tblDocList WITH(NOLOCK)
+			select @query=@query+convert(nvarchar,DocDetailsID)+',' from #tblDocList
 			
 			set @query=SUBSTRING(@query,0,len(@query))
 			 
 			set @query='select distinct pdid,percentage,Days,Period,TypeID,basedon,Occurences,Remarks,a.dimNodeID,a.dimccid,b.dimNodeID Nodeid from Acc_PaymentDiscountTerms a WITH(NOLOCK)    
 			join Acc_PaymentDiscountProfile b WITH(NOLOCK) on a.ProfileID=b.ProfileID
-			join COM_DocCCData c WITH(NOLOCK) on c.dcCCNID'+convert(nvarchar,@autoCCID-50000)+'=b.dimNodeID
+			join COM_DocCCData c on c.dcCCNID'+convert(nvarchar,@autoCCID-50000)+'=b.dimNodeID
 			where c.InvDocDetailsID in('+@query+')'
 			print @query
 			exec(@query)
@@ -666,13 +597,13 @@ SET NOCOUNT ON
 					set @query=@query+' set alpha='',''+dbo.fnStr_IgnoreSpecialchar('+@PrefValue+')+'','''
 				else
 					set @query=@query+' set alpha='+@PrefValue
-				set @query=@query+' from COM_DoctextData DCA WITH(NOLOCK)
+				set @query=@query+' from COM_DoctextData DCA
 				where DocDetailsID =DCA.InvDocDetailsID'
 				
 				 exec(@query)
 				 
 			   set @query='select distinct d.DocDetailsID,a.[ProductID],a.ProductName,a.ProductCode
-				from #tblDocList d WITH(NOLOCK)				
+				from #tblDocList d				
 				left join INV_Product a WITH(NOLOCK) on   a.isgroup=0
 				LEFT JOIN COM_CCCCData CC with(nolock) ON CC.COSTCENTERID=3 AND CC.NODEID=a.ProductID 
 				LEft JOIN INV_ProductExtended E  WITH(NOLOCK) on  E.ProductID=a.ProductID '+@StrJoin
@@ -703,7 +634,7 @@ SET NOCOUNT ON
 	begin		
 		set @autoCCID=0
 		begin try
-			select @autoCCID=convert(INT,@PrefValue)
+			select @autoCCID=convert(bigint,@PrefValue)
 		end try
 		begin catch
 			set @autoCCID=0
@@ -712,7 +643,7 @@ SET NOCOUNT ON
 		if(@autoCCID>40000)
 		BEGIN
 			select @tempDOcID=DocID  FROM  [INV_DocDetails] a   WITH(NOLOCK)  
-			join #tblDocList c WITH(NOLOCK) on a.InvDocDetailsID=c.DocDetailsID
+			join #tblDocList c on a.InvDocDetailsID=c.DocDetailsID
 			
 			
 			SELECT a.Quantity,a.Unit ,a.ProductID,P.ProductName,P.ProductCOde,U.UnitName,a.voucherno 
@@ -756,13 +687,13 @@ SET NOCOUNT ON
 		 from   [INV_DocDetails] a WITH(NOLOCK)  
 		join INV_ProductBundles pb WITH(NOLOCK) on a.ProductID=pb.parentproductid
 		join INV_Product p WITH(NOLOCK) on p.ProductID=pb.parentproductid
-		join #tblDocList t WITH(NOLOCK) on t.DocDetailsID=a.InvDocDetailsID
+		join #tblDocList t on t.DocDetailsID=a.InvDocDetailsID
 		
 	END	
 	ELSE
 		SELECT 1 WHERE 1<>1	
 	
-	if exists(select LocalReference from ADM_CostCenterDef WITH(NOLOCK) where CostCenterID=@CostCenterID and LocalReference is not null and LocalReference=79 and LinkData=55478)	
+	if exists(select LocalReference from ADM_CostCenterDef where CostCenterID=@CostCenterID and LocalReference is not null and LocalReference=79 and LinkData=55478)	
 	BEGIN
 				declare @tabvchrs table(vchrs nvarchar(200),typ int,ccid int)
 				
@@ -783,7 +714,7 @@ SET NOCOUNT ON
 				END
 				
 				set @Vouchers=''
-				select distinct @Vouchers=@Vouchers+''''+vchrs+''''+',' from @tabvchrs
+				select @Vouchers=@Vouchers+''''+vchrs+''''+',' from @tabvchrs
 					
 				if(LEN(@Vouchers)>1)
 					set @Vouchers=SUBSTRING(@Vouchers,0,len(@Vouchers))
@@ -830,5 +761,4 @@ BEGIN CATCH
 	SET NOCOUNT OFF      
 	RETURN -999       
 END CATCH
-
 GO

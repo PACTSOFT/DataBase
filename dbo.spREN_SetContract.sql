@@ -3,21 +3,21 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_SetContract]
-	@ContractID [int],
+	@ContractID [bigint],
 	@ContractPrefix [nvarchar](50),
-	@ContractNumber [int],
+	@ContractNumber [bigint],
 	@ContractDate [datetime],
-	@LinkedQuotationID [int],
+	@LinkedQuotationID [bigint],
 	@StatusID [int] = 0,
-	@SelectedNodeID [int],
+	@SelectedNodeID [bigint],
 	@IsGroup [bit] = 0,
-	@PropertyID [int] = 0,
-	@UnitID [int] = 0,
+	@PropertyID [bigint] = 0,
+	@UnitID [bigint] = 0,
 	@MultiUnitIds [nvarchar](max),
 	@MultiUnitName [nvarchar](max) = NULL,
-	@TenantID [int] = 0,
-	@RentRecID [int] = 0,
-	@IncomeID [int] = 0,
+	@TenantID [bigint] = 0,
+	@RentRecID [bigint] = 0,
+	@IncomeID [bigint] = 0,
 	@Purpose [nvarchar](500) = NULL,
 	@StartDate [datetime],
 	@EndDate [datetime],
@@ -32,18 +32,18 @@ CREATE PROCEDURE [dbo].[spREN_SetContract]
 	@SIVXML [nvarchar](max) = NULL,
 	@RentRcptXML [nvarchar](max) = NULL,
 	@WONO [nvarchar](500),
-	@LocationID [int],
-	@DivisionID [int],
-	@RoleID [int],
-	@ContractLocationID [int],
-	@ContractDivisionID [int],
-	@ContractCurrencyID [int],
+	@LocationID [bigint],
+	@DivisionID [bigint],
+	@RoleID [bigint],
+	@ContractLocationID [bigint],
+	@ContractDivisionID [bigint],
+	@ContractCurrencyID [bigint],
 	@CustomFieldsQuery [nvarchar](max) = null,
 	@CustomCostCenterFieldsQuery [nvarchar](max) = null,
-	@TermsConditions [nvarchar](max) = NULL,
-	@SalesmanID [int],
-	@AccountantID [int],
-	@LandlordID [int],
+	@TermsConditions [nvarchar](500) = NULL,
+	@SalesmanID [bigint],
+	@AccountantID [bigint],
+	@LandlordID [bigint],
 	@Narration [nvarchar](500),
 	@CostCenterID [int],
 	@AttachmentsXML [nvarchar](max),
@@ -51,15 +51,11 @@ CREATE PROCEDURE [dbo].[spREN_SetContract]
 	@NotesXML [nvarchar](max),
 	@ExtndTill [datetime],
 	@basedon [nvarchar](50),
-	@RentAmt [float],
-	@RenewRefID [int],
+	@RenewRefID [bigint],
 	@WID [int],
 	@RecurDuration [int],
-	@ExpectedEndDate [datetime],
-	@GracePeriod [int],
-	@Refno [int],
-	@IsOpening [bit],
-	@parContractID [int],
+	@Refno [bigint],
+	@parContractID [bigint],
 	@IsExtended [bit],
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
@@ -72,172 +68,74 @@ BEGIN TRANSACTION
 DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE int,@fldsno int
 BEGIN TRY            
 SET NOCOUNT ON;         
-    
-    if(@ExpectedEndDate='1/JAN/1900')
-		set @ExpectedEndDate=NULL    
         
 	DECLARE @Dt float,@XML xml,@TempGuid nvarchar(50),@HasAccess bit,@IsDuplicateNameAllowed bit,@IsAccountCodeAutoGen bit          
 	DECLARE @UpdateSql nvarchar(max),@ParentCode nvarchar(200),@CCCCCData XML,@IsIgnoreSpace bit          
-	DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT          
-	DECLARE @SelectedIsGroup bit,@SNO INT,@Prefix NVARCHAR(500)
-	declare @CNT INT ,  @ICNT INT  ,@level int,@maxLevel int,@Occurrence int,@SinglePDC bit,@InclPostingDate bit
-	DECLARE @DDValue DateTime,@DDXML nvarchar(max),@ScheduleID INT       
-	DECLARE @return_value int,@unitGUId  NVARCHAR(max),@incMontEnd bit      
+	DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint          
+	DECLARE @SelectedIsGroup bit,@SNO BIGINT,@Prefix NVARCHAR(500)
+	declare @CNT INT ,  @ICNT INT  ,@level int,@maxLevel int,@Occurrence int
+	DECLARE @DDValue DateTime,@DDXML nvarchar(max),@ScheduleID BIGINT       
+	DECLARE @return_value int,@unitGUId  NVARCHAR(max)       
 	DECLARE @AccountType xml,@AccValue nvarchar(100),@Documents xml,@DocIDValue nvarchar(100),@TempDocIDValue nvarchar(100)   
-	declare @tempxml xml,@tempAmt Float,@tempSno int  ,@ServiceType nvarchar(max)  
-	DECLARE @DELETEDOCID INT,@DELETECCID INT,@DELETEISACC BIT,@ind int,@indcnt int,@SYSCOL nvarchar(max) ,@ServiceTypeVal INT
-	DECLARE @AUDITSTATUS NVARCHAR(50),@PrefValue NVARCHAR(500),@Dimesion INT ,@ServiceUnitDims INT  
-	SET @AUDITSTATUS= 'EDIT'   
-	
-	if exists(select * from com_costcenterpreferences where costcenterid=95 and name ='PostIncomeMonthEnd' and value='true') 
-		set @incMontEnd=1
-	else
-		set @incMontEnd=0
-			
-    declare @cpref nvarchar(200) ,@CCStatusID int   
-    
-	select  @PrefValue = Value from COM_CostCenterPreferences   WITH(nolock)  where CostCenterID=95 and  Name = 'StopContifnotrefund'
-	set @ServiceUnitDims=0
-	select  @ServiceType = Value from COM_CostCenterPreferences   WITH(nolock)  where CostCenterID=95 and  Name = 'ServiceUnitTypes'
-	select  @ServiceUnitDims = Value from COM_CostCenterPreferences   WITH(nolock) 
-	 where CostCenterID=95 and  Name = 'ServiceUnitDims' and Value<>'' and isnumeric(Value)=1
-	
-	set @ServiceTypeVal=0
-	if(@ServiceUnitDims>0 )
-	BEGIN
-		set @SYSCOL='CCNID'+convert(nvarchar(50),(@ServiceUnitDims-50000))+'='
-		set @ind=Charindex(@SYSCOL,@CustomCostCenterFieldsQuery)
+	declare @tempxml xml,@tempAmt Float,@tempSno int    
+	DECLARE @DELETEDOCID BIGINT,@DELETECCID BIGINT,@DELETEISACC BIT       	     
+	DECLARE @AUDITSTATUS NVARCHAR(50),@PrefValue NVARCHAR(500),@Dimesion bigint   
+	SET @AUDITSTATUS= 'EDIT'    
 
-		if(@ind>0)
-		BEGIN
-			set @ind=Charindex('=',@CustomCostCenterFieldsQuery, Charindex(@SYSCOL,@CustomCostCenterFieldsQuery,0))
-			set @indcnt=Charindex(',',@CustomCostCenterFieldsQuery, Charindex(@SYSCOL,@CustomCostCenterFieldsQuery,0)) 
-			set @indcnt=@indcnt-@ind-1
-			if(@ind>0 and @indcnt>0)				 
-			BEGIN
-				set @ServiceTypeVal= Substring(@CustomCostCenterFieldsQuery,@ind+1,@indcnt) 
-			END	
-		END
-	END					
-	
+    declare @cpref nvarchar(200) ,@CCStatusID int   
+	select  @PrefValue = Value from COM_CostCenterPreferences   WITH(nolock)  where CostCenterID=95 and  Name = 'LinkDocument'   
 	SET @Dt=convert(float,getdate())--Setting Current Date        
-	
-	declare @tble table(NIDs INT)  
-	insert into @tble				
-	exec SPSplitString @ServiceType,','  
+
+	if(@MultiUnitIDs is not null and  @MultiUnitIDs<>'')
+	BEGIN                  
+		set @DDXML ='if exists(SELECT ContractID, ContractPrefix, ContractDate,convert(datetime,StartDate) StartDate,                   
+		convert(datetime, EndDate) EndDate,  ContractNumber, StatusID                       
+		FROM REN_Contract with(nolock)                      
+		WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
+		or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
+	 	or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
+	 	or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''  )             
+		AND UnitID in('+@MultiUnitIDs+') and    StatusID not in(428,451) '
 		
-	if not (@ServiceTypeVal>0 and exists(select * from @tble where NIDs=@ServiceTypeVal))
+		if(@ContractID>0)
+			set @DDXML =@DDXML+' and ContractID<>'+convert(nvarchar,@ContractID)+' and RefContractID<>'+convert(nvarchar,@ContractID)
+		set @DDXML =@DDXML+') RAISERROR(''-520'',16,1)'		 
+	END
+	ELSE
+		set @DDXML='if exists(SELECT ContractID, ContractPrefix, ContractDate,convert(datetime,StartDate) StartDate,                   
+		convert(datetime, EndDate) EndDate,  ContractNumber, StatusID                       
+		FROM REN_Contract with(nolock)                      
+		WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
+		or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
+		or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
+	 	or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''   )             
+		AND UnitID = '+convert(nvarchar,@UnitID)+' and    StatusID <> 428   and    StatusID <> 451   
+		and ContractID<>'+convert(nvarchar,@ContractID )+')
+		RAISERROR(''-520'',16,1)'		 
+
+	if(@CostCenterID=95)
 	BEGIN
-		if(@MultiUnitIDs is not null and  @MultiUnitIDs<>'')
-		BEGIN                  
-			set @DDXML ='if exists(SELECT t.ContractID     FROM '
-			
-			if(@PrefValue is not null and @PrefValue='true')
-				set @DDXML =@DDXML+' (select a.RefContractID,a.UnitID,a.StatusID,a.contractid,a.startdate,
-				case when  b.contractid is null and a.statusid in(426,427) then 73048
-				when a.statusid in(450,478) and a.VacancyDate is not null then a.VacancyDate 
-					when a.statusid in(428,465) then a.TerminationDate else a.enddate end enddate
-				from ren_contract a
-				left join ren_contract b on a.contractid=b.renewrefid and b.statusid<>451
-				where a.statusid<>451) as t  '
-			else
-				set @DDXML =@DDXML+' (select a.RefContractID,a.UnitID,a.StatusID,a.contractid,a.startdate,
-				case when a.statusid in(450,478) and a.VacancyDate is not null then a.VacancyDate when  a.statusid in(428,465) then a.TerminationDate else a.enddate end enddate
-				from ren_contract a WITH(NOLOCK)) as t '
-			
-			if(@ServiceUnitDims>0 and @ServiceType is not null and @ServiceType<>'')
-					set @DDXML =@DDXML+' join COM_ccccdata u with(nolock) on u.NodeID=t.contractid '
-			
-			set @DDXML =@DDXML+' WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
-			or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
-	 		or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
-	 		or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''  )             
-			AND t.UnitID in('+@MultiUnitIDs+') and    t.StatusID not in(477,451) '
-			
-			if(@ServiceUnitDims>0 and @ServiceType is not null and @ServiceType<>'')
-					set @DDXML =@DDXML+' and u.CostCenterID=95 and u.CCNID'+convert(nvarchar(max),(@ServiceUnitDims-50000))+' not in('+@ServiceType+')'
-			
-			if(@ContractID>0)
-				set @DDXML =@DDXML+' and t.ContractID<>'+convert(nvarchar,@ContractID)+' and t.RefContractID<>'+convert(nvarchar,@ContractID)
-			set @DDXML =@DDXML+') RAISERROR(''-520'',16,1)'		 
-		END
-		ELSE
+		print @DDXML
+		exec(@DDXML)
+		 
+		set @DDXML='if exists(SELECT QuotationID from REN_Quotation with(nolock)                      
+		WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
+		or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
+		or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
+	 	or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''   )             
+		AND UnitID = '+convert(nvarchar,@UnitID)+' and StatusID =467
+		and QuotationID<>'+convert(nvarchar,@LinkedQuotationID )+')
+		RAISERROR(''-520'',16,1)'	
+		exec(@DDXML)
+		
+		if(@LinkedQuotationID>0)
 		BEGIN
-			set @DDXML='if exists(SELECT t.ContractID FROM '
-			
-			if(@PrefValue is not null and @PrefValue='true')
-				set @DDXML =@DDXML+' (select a.RefContractID,a.UnitID,a.StatusID,a.contractid,a.startdate,
-				case when a.contractid='+convert(nvarchar,@RenewRefID)+' then a.enddate
-				 when  b.contractid is null and a.statusid in(426,427) then 73048
-					when a.statusid in(450,478) and a.VacancyDate is not null then a.VacancyDate 
-					when a.statusid in(428,465) then a.TerminationDate else a.enddate end enddate
-				from ren_contract a
-				left join ren_contract b on a.contractid=b.renewrefid and b.statusid<>451
-				where a.statusid<>451) as t  '
-			else
-				set @DDXML =@DDXML+' (select a.RefContractID,a.UnitID,a.StatusID,a.contractid,a.startdate,
-				case when a.statusid in(450,478) and a.VacancyDate is not null then a.VacancyDate when  a.statusid in(428,465) then a.TerminationDate else a.enddate end enddate
-				from ren_contract a WITH(NOLOCK)) as t '
-			
-			if(@ServiceUnitDims>0 and @ServiceType is not null and @ServiceType<>'')
-					set @DDXML =@DDXML+' join COM_ccccdata u with(nolock) on u.NodeID=t.contractid '
-		
-			set @DDXML =@DDXML+' WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
-			or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
-			or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
-	 		or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''   )             
-			AND t.UnitID = '+convert(nvarchar,@UnitID)+' and    t.StatusID <> 477   and    t.StatusID <> 451   '
-			
-			if(@ServiceUnitDims>0 and @ServiceType is not null and @ServiceType<>'')
-					set @DDXML =@DDXML+' and u.CostCenterID=95 and u.CCNID'+convert(nvarchar(max),(@ServiceUnitDims-50000))+' not in('+@ServiceType+')'
-		
-			set @DDXML =@DDXML+' and t.ContractID<>'+convert(nvarchar,@ContractID )+')
-			RAISERROR(''-520'',16,1)'		 		
-		END
-		
-		if(@CostCenterID=95)
-		BEGIN
-			print @DDXML
-			exec(@DDXML)
-			if exists(select * from COM_CostCenterPreferences WITh(NOLOCK)
-			where CostCenterID=129 and Name='Validatetillclosedate' and Value='true')
-			BEGIN
-				set @DDXML='if exists(select QuotationID
-				from (SELECT QuotationID,UnitID,StartDate,case when StatusID =467 then EndDate else VacancyDate end as EndDate from REN_Quotation with(nolock)
-				where UnitID = '+convert(nvarchar,@UnitID)+' and costcenterid=129 and StatusID in(467,471)) as t
-				WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
-				or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
-				or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
-	 			or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''   )             				
-				and QuotationID<>'+convert(nvarchar,@LinkedQuotationID )+')
-				RAISERROR(''-520'',16,1)'	
-			END
-			ELSE
-			BEGIN			
-				set @DDXML='if exists(SELECT QuotationID from REN_Quotation with(nolock)                      
-				WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
-				or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
-				or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
-	 			or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''   )             
-				AND UnitID = '+convert(nvarchar,@UnitID)+' and StatusID =467 and costcenterid=129
-				and QuotationID<>'+convert(nvarchar,@LinkedQuotationID )+')
-				RAISERROR(''-520'',16,1)'	
-			END
-			exec(@DDXML)
-			
-			if(@LinkedQuotationID>0)
-			BEGIN
-				update REN_Quotation 
-				set StatusID =468 
-				where QuotationID=@LinkedQuotationID
-			END
+			update REN_Quotation 
+			set StatusID =468 
+			where QuotationID=@LinkedQuotationID
 		END
 	END
-	
-	
   
-  	select  @PrefValue = Value from COM_CostCenterPreferences   WITH(nolock)  where CostCenterID=95 and  Name = 'LinkDocument'   
-
     --User acces check FOR Notes      
 	IF (@NotesXML IS NOT NULL AND @NotesXML <> '')      
 	BEGIN      
@@ -287,7 +185,6 @@ SET NOCOUNT ON;
 		  @AttachmentsXML = '', 
 		  @UnitRateXML = '',         
 		  @CompanyGUID = @CompanyGUID,  
-		  @IsFromContract=1,
 		  @GUID =@unitGUId,  
 		  @UserName = @UserName,  
 		  @UserID = @UserID,  
@@ -298,7 +195,7 @@ SET NOCOUNT ON;
 			set @UnitID=@return_value
 			
 			DECLARE @SQL NVARCHAR(MAX)
-			SET @SQL='DECLARE @UNITTYPEID INT,@ANNAULRENT FLOAT
+			SET @SQL='DECLARE @UNITTYPEID BIGINT,@ANNAULRENT FLOAT
 			SELECT @UNITTYPEID=MAX(NODEID),@ANNAULRENT=SUM(AnnualRent) FROM REN_Units with(nolock) where UNITID IN ('+@MultiUnitIds+')
 			UPDATE REN_Units SET NODEID=@UNITTYPEID ,AnnualRent=@ANNAULRENT WHERE UnitID='+CONVERT(NVARCHAR,@UnitID)
 			EXEC(@SQL)
@@ -362,11 +259,11 @@ SET NOCOUNT ON;
 			IF EXISTS (SELECT * FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='VATVersion' AND Value is not null AND Value<>'')
 			BEGIN
 				SET @SQL='UPDATE DEST
-				   SET DEST.CCNID58 = SRC.CCNID58
-					  ,DEST.CCNID59 = SRC.CCNID59
-					  ,DEST.CCNID60 = SRC.CCNID60
-					  ,DEST.CCNID61 = SRC.CCNID61
-					  ,DEST.CCNID62 = SRC.CCNID62
+				   SET DEST.CCNID58 = SRC.CCNID38
+					  ,DEST.CCNID59 = SRC.CCNID39
+					  ,DEST.CCNID60 = SRC.CCNID40
+					  ,DEST.CCNID61 = SRC.CCNID41
+					  ,DEST.CCNID62 = SRC.CCNID42
 				FROM COM_CCCCData SRC WITH(NOLOCK),COM_CCCCData DEST WITH(NOLOCK)
 				WHERE SRC.CostCenterID=93 AND SRC.NodeID IN ('+@MultiUnitIds+')
 				AND DEST.CostCenterID=93 AND DEST.NodeID='+CONVERT(NVARCHAR,@UnitID)
@@ -465,8 +362,7 @@ SET NOCOUNT ON;
 		SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth          
 		from [REN_Contract] with(NOLOCK) where ContractID=@SelectedNodeID          
 	           
-		select @SNO=ISNULL(max(SNO),0)+1 from [REN_Contract] (holdlock) 
-		WHERE CostCenterID=@CostCenterID and parentContractID=@parContractID
+		select @SNO=ISNULL(max(SNO),0)+1 from [REN_Contract] (holdlock) WHERE CostCenterID=@CostCenterID
 		
 		if (select count(*) from ren_contract with(nolock) where propertyid=@PropertyID and CostCenterID=@CostCenterID and contractnumber=@ContractNumber)>0
 		begin
@@ -516,7 +412,7 @@ SET NOCOUNT ON;
 		begin    
 			set @Dimesion=0      
 			begin try      
-				select @Dimesion=convert(INT,@PrefValue)      
+				select @Dimesion=convert(BIGINT,@PrefValue)      
 			end try      
 			begin catch      
 				set @Dimesion=0      
@@ -526,12 +422,10 @@ SET NOCOUNT ON;
 				select @CCStatusID =statusid from com_status with(nolock) where costcenterid=@Dimesion and [status] = 'Active'    
 				select @cpref = name from [REN_property] with(nolock) where nodeid  =  @ContractPrefix   
 				set @cpref =  @cpref +  '-'+ convert(nvarchar, @ContractNumber)  
-				set @Prefix=@SNO
-				if(@parContractID>0)
-					set @Prefix=convert(nvarchar(max),@Refno)+'/'+convert(nvarchar(max),@SNO)
+
 				EXEC @return_value = [dbo].[spCOM_SetCostCenter]    
 				@NodeID = 0,@SelectedNodeID = 0,@IsGroup = @IsGroup,    
-				@Code = @Prefix,    
+				@Code = @SNO,    
 				@Name = @cpref,    
 				@AliasName=@cpref,    
 				@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,    
@@ -577,9 +471,8 @@ SET NOCOUNT ON;
 			  ,[AccountantID]      
 			  ,[LandlordID]    
 			  ,Narration    
-			  ,[CostCenterID],CCNodeID,CCID,VacancyDate,BasedOn,RentAmt,RenewRefID
-			  ,WorkFlowID,WorkFlowLevel,AgeOfRenewal,RecurDuration,Refno,parentContractID,IsExtended
-			  ,ExpectedEndDate,GracePeriod,IsOpening)
+			  ,[CostCenterID],CCNodeID,CCID,VacancyDate,BasedOn,RenewRefID
+			  ,WorkFlowID,WorkFlowLevel,AgeOfRenewal,RecurDuration,Refno,parentContractID,IsExtended)        
 		VALUES(@ContractPrefix,  @SNO,@LinkedQuotationID,     
 				CONVERT(FLOAT,@ContractDate),        
 				@ContractNumber,        
@@ -613,9 +506,8 @@ SET NOCOUNT ON;
 				@AccountantID,    
 				@LandlordID,    
 				@Narration,    
-				@CostCenterID ,isnull( @return_value ,0) ,@Dimesion, CONVERT(FLOAT,@EndDate),@basedon,@RentAmt,@RenewRefID
-				,@WID,@level,0,@RecurDuration,@Refno,@parContractID,@IsExtended
-				,CONVERT(FLOAT,@ExpectedEndDate),@GracePeriod,@IsOpening)        
+				@CostCenterID ,isnull( @return_value ,0) ,@Dimesion, CONVERT(FLOAT,@EndDate),@basedon,@RenewRefID
+				,@WID,@level,0,@RecurDuration,@Refno,@parContractID,@IsExtended)        
 		IF @@ERROR<>0 BEGIN ROLLBACK TRANSACTION RETURN -101 END        
 			set @ContractID=SCOPE_IDENTITY()        
 		
@@ -685,22 +577,19 @@ SET NOCOUNT ON;
 			,WorkFlowID=@TempDocIDValue,WorkFlowLevel=@level
 			,RecurDuration=@RecurDuration
 			,IsExtended=@IsExtended
-			,RentAmt=@RentAmt	
-			,IsOpening=@IsOpening		
-			,ExpectedEndDate=CONVERT(FLOAT,@ExpectedEndDate),GracePeriod=@GracePeriod
 		WHERE ContractID =  @ContractID      
       
 		if(@PrefValue is not null and @PrefValue<>''  and  @CostCenterID = 95 )      
 		begin     
 			set @Dimesion=0      
 			begin try      
-				select @Dimesion=convert(INT,@PrefValue)      
+				select @Dimesion=convert(BIGINT,@PrefValue)      
 			end try      
 			begin catch      
 				set @Dimesion=0       
 			end catch      
 		      
-			declare @NID INT, @CCIDAcc INT    
+			declare @NID bigint, @CCIDAcc bigint    
 		     
 			select @NID =isnull(CCNodeID,0), @CCIDAcc=CCID  from Ren_Contract with(nolock) where ContractID=@ContractID             
 	  
@@ -723,16 +612,12 @@ SET NOCOUNT ON;
 				select  @CCStatusID =statusid from com_status with(nolock) where costcenterid=@Dimesion and status = 'Active'    
 				select @cpref = name from [REN_property] with(nolock) where nodeid  =   @ContractPrefix  
 				set @cpref =  @cpref + '-'+ convert(nvarchar, @ContractNumber)  
-				
-				set @Prefix=@SNO
-				if(@parContractID>0)
-					set @Prefix=convert(nvarchar(max),@Refno)+'/'+convert(nvarchar(max),@SNO)
-					
+
 				EXEC @return_value = [dbo].[spCOM_SetCostCenter]    
 				@NodeID = @NID,
 				@SelectedNodeID = 1,
 				@IsGroup = @IsGroup,    
-				@Code = @Prefix,    
+				@Code = @SNO,    
 				@Name = @cpref,    
 				@AliasName=@cpref,    
 				@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,    
@@ -770,14 +655,14 @@ SET NOCOUNT ON;
 				,[GUID]        
 				,[CreatedBy]        
 				,[CreatedDate],TasjeelAmount,Detailsxml,AdvanceAccountID,InclChkGen,VatType,TaxCategoryID
-				,RecurInvoice,PostDebit,TaxableAmt,Sqft,Rate,LocationID,SPType,DimNodeID,SalesManID)   
-		SELECT @ContractID , X.value('@CCID','INT'),         
-				X.value('@CCNodeID','INT'),          
-				X.value('@CreditAccID','INT'),         
+				,RecurInvoice,PostDebit,TaxableAmt,Sqft,Rate,LocationID)   
+		SELECT @ContractID , X.value('@CCID','BIGINT'),         
+				X.value('@CCNodeID','BIGINT'),          
+				X.value('@CreditAccID','BIGINT'),         
 				X.value('@ChequeNo','NVARCHAR(200)'),        
 				CONVERT(float,X.value('@ChequeDate','Datetime')),        
 				X.value('@PayeeBank','nvarchar(500)'),        
-				X.value('@DebitAccID','INT'),    
+				X.value('@DebitAccID','BIGINT'),    
 				X.value('@RentAmount','float'),    
 				X.value('@Discount','float'),       
 				X.value('@Amount','float'),        
@@ -789,27 +674,13 @@ SET NOCOUNT ON;
 				newid(),          
 				@UserName,          
 				@Dt,X.value('@TasjeelAmount','float'),convert(nvarchar(max), X.query('XML'))  ,         
-				X.value('@AdvanceAccountID','INT'), X.value('@InclChkGen','INT')
-				, X.value('@VatType','Nvarchar(50)'),X.value('@TaxCategoryID','INT')
+				X.value('@AdvanceAccountID','BIGINT'), X.value('@InclChkGen','INT')
+				, X.value('@VatType','Nvarchar(50)'),X.value('@TaxCategoryID','BIGINT')
 				, X.value('@Recur','BIT'),X.value('@PostDebit','bit'),X.value('@TaxableAmt','float')
 				, X.value('@Sqft','float'),X.value('@Rate','float'),        
-				X.value('@LocationID','INT'),X.value('@SPType','INT')
-				,X.value('@DimNodeID','INT'),X.value('@SalesManID','INT')
+				X.value('@LocationID','BIGINT')
 				
 		FROM @XML.nodes('/ContractXML/Rows/Row') as Data(X) 
-		
-		set @SQL=''
-		select @SQL=X.value('@UpdateQuery','Nvarchar(max)')from @XML.nodes('/ContractXML') as data(X)    
-		
-		if(@SQL!='')
-		BEGIN			
-			set @SQL='update [REN_ContractParticulars] set '+@SQL+'ContractID=ContractID 
-			from @XML.nodes(''/ContractXML/Rows/Row'') as data(X)     
-			where [ContractID]='+convert(nvarchar(max),@ContractID)+' and [CCNodeID]=X.value(''@CCNodeID'',''INT'')'
-			
-			exec sp_executesql @SQL,N'@XML xml',@XML
-		END
-		
 	END        
 
 	IF(@PayTermsXML IS NOT NULL AND @PayTermsXML<>'')        
@@ -830,37 +701,26 @@ SET NOCOUNT ON;
 				,[CompanyGUID]        
 				,[GUID]        
 				,[CreatedBy]        
-				,[CreatedDate],Period,PostingDate,LocationID,Particular,TillDate,DimNodeID,SalesManID )  
+				,[CreatedDate],Period,PostingDate,LocationID,Particular )  
 		SELECT @ContractID  ,        
 				X.value('@ChequeNo','NVARCHAR(200)'),        
 				Convert(float,X.value('@ChequeDate','Datetime')),        
 				X.value('@CustomerBank','nvarchar(500)'),        
-				X.value('@DebitAccID','INT'),        
+				X.value('@DebitAccID','BIGINT'),        
 				X.value('@Amount','float'), X.value('@RentAmount','float'),       
 				X.value('@SNO','int'),      
 				X.value('@Narration','nvarchar(MAX)'),      
 				@CompanyGUID,          
 				newid(),          
 				@UserName,          
-				@Dt         , X.value('@Period','INT'),
+				@Dt         , X.value('@Period','BIGINT'),
 				Convert(float,X.value('@PostingDate','Datetime')),        
-				X.value('@LocationID','INT'),        
-				X.value('@Particular','INT'),Convert(float,X.value('@TillDate','Datetime'))
-				,X.value('@DimNodeID','INT'),X.value('@SalesManID','INT')
-		FROM @XML.nodes('/PayTermXML/Rows/Row') as Data(X)    
-		
-		set @SQL=''
-		select @SQL=X.value('@UpdateQuery','Nvarchar(max)')from @XML.nodes('/PayTermXML') as data(X)    
-		if(@SQL!='')
-		BEGIN
-			set @SQL='update [REN_ContractPayTerms] set '+@SQL+'ContractID=ContractID 
-			from @XML.nodes(''/PayTermXML/Rows/Row'') as data(X)     
-			where [ContractID]='+convert(nvarchar(max),@ContractID)+' and [SNO]=X.value(''@SNO'',''INT'')'
-			exec sp_executesql @SQL,N'@XML xml',@XML
-		END      
+				X.value('@LocationID','BIGINT'),        
+				X.value('@Particular','BIGINT')
+		FROM @XML.nodes('/PayTermXML/Rows/Row') as Data(X)          
 	END    
 	
-	declare @tabPart table(id int identity(1,1),NodeID INT,PartXML nvarchar(max))
+	declare @tabPart table(id int identity(1,1),NodeID bigint,PartXML nvarchar(max))
 	insert into @tabPart
 	select NodeID,Detailsxml from [REN_ContractParticulars] WITH(NOLOCK)       
 	where CONTRACTID = @ContractID and Detailsxml is not null
@@ -879,8 +739,8 @@ SET NOCOUNT ON;
 			([ContractID],ParticularNodeID,FromDate,ToDate,Unit,Period,Amount,Rate,CostCenterID,Discount,ActAmount,Distribute,Narration)  
 			SELECT @ContractID,@ParentID,Convert(float,X.value('@FromDate','Datetime')),        
 			Convert(float,X.value('@ToDate','Datetime')),        
-			X.value('@Unit','INT'),        
-			X.value('@Period','INT'),        
+			X.value('@Unit','BIGINT'),        
+			X.value('@Period','BIGINT'),        
 			X.value('@Amount','float'),
 			ISNULL(X.value('@Rate','float'),0),
 			@CostCenterID,
@@ -894,8 +754,8 @@ SET NOCOUNT ON;
 			([ContractID],ParticularNodeID,FromDate,ToDate,Unit,Period,Amount,Rate,CostCenterID,Discount,ActAmount,Distribute,Narration)  
 			SELECT @ContractID,@ParentID,Convert(float,X.value('@FromDate','Datetime')),        
 			Convert(float,X.value('@ToDate','Datetime')),        
-			X.value('@Unit','INT'),        
-			X.value('@Period','INT'),        
+			X.value('@Unit','BIGINT'),        
+			X.value('@Period','BIGINT'),        
 			X.value('@Amount','float'),
 			ISNULL(X.value('@Rate','float'),0),
 			@CostCenterID,
@@ -927,21 +787,53 @@ SET NOCOUNT ON;
 		ModifiedDate=@Dt      
 		FROM COM_Notes C with(nolock)      
 		INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X)        
-		ON convert(INT,X.value('@NoteID','INT'))=C.NoteID      
+		ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID      
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'      
 
 		--If Action is DELETE then delete Notes      
 		DELETE FROM COM_Notes      
-		WHERE NoteID IN(SELECT X.value('@NoteID','INT')      
+		WHERE NoteID IN(SELECT X.value('@NoteID','bigint')      
 		FROM @XML.nodes('/NotesXML/Row') as Data(X)      
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')      
 
 	END      
       
 	--Inserts Multiple Attachments      
-	IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')  
-		exec [spCOM_SetAttachments] @ContractID,@CostCenterID,@AttachmentsXML,@UserName,@Dt     
-	
+	IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')      
+	BEGIN      
+		SET @XML=@AttachmentsXML      
+
+		INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,    
+		FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,      
+		GUID,CreatedBy,CreatedDate)      
+		SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(50)'),      
+		X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),@CostCenterID,@CostCenterID,@ContractID,      
+		X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt      
+		FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)        
+		WHERE X.value('@Action','NVARCHAR(10)')='NEW'      
+
+		--If Action is MODIFY then update Attachments      
+		UPDATE COM_Files      
+		SET FilePath=X.value('@FilePath','NVARCHAR(500)'),      
+		ActualFileName=X.value('@ActualFileName','NVARCHAR(50)'),      
+		RelativeFileName=X.value('@RelativeFileName','NVARCHAR(50)'),      
+		FileExtension=X.value('@FileExtension','NVARCHAR(50)'),      
+		FileDescription=X.value('@FileDescription','NVARCHAR(500)'),      
+		IsProductImage=X.value('@IsProductImage','bit'),            
+		GUID=X.value('@GUID','NVARCHAR(50)'),      
+		ModifiedBy=@UserName,      
+		ModifiedDate=@Dt      
+		FROM COM_Files C with(nolock)      
+		INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)        
+		ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID      
+		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'      
+
+		--If Action is DELETE then delete Attachments      
+		DELETE FROM COM_Files      
+		WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')      
+		FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)      
+		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')      
+	END      
       
 	if(@ActivityXml<>'')      
 		exec spCom_SetActivitiesAndSchedules @ActivityXml,95,@ContractID,@CompanyGUID,@Guid,@UserName,@dt,@LangID     
@@ -950,26 +842,301 @@ SET NOCOUNT ON;
 	[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID ='+convert(nvarchar,@ContractID) + ' AND CostCenterID = 95'       
           
 	exec(@UpdateSql)      
+      
+  --CHECK AUDIT TRIAL ALLOWED AND INSERTING AUDIT TRIAL DATA        
     
-    DECLARE @AuditTrial BIT        
+	DECLARE @AuditTrial BIT        
 	SET @AuditTrial=0        
 	SELECT @AuditTrial= CONVERT(BIT,VALUE)  FROM [COM_COSTCENTERPreferences] with(nolock)     
-	WHERE CostCenterID=95  AND NAME='AllowAudit'   
-	IF (@AuditTrial=1)      
-	BEGIN 	
-		--INSERT INTO HISTROY   
-		EXEC [spCOM_SaveHistory]  
-			@CostCenterID =@CostCenterID,    
-			@NodeID =@ContractID,
-			@HistoryStatus =@AUDITSTATUS,
-			@UserName=@UserName   
-	END
+	WHERE CostCenterID=95  AND NAME='AllowAudit'      
+	    
+	IF (@AuditTrial=1 AND @CostCenterID=95 )      
+	BEGIN       
+      
+		INSERT INTO  [REN_Contract_History]    
+           ([ContractID]    
+           ,[ContractPrefix]    
+           ,[ContractDate]    
+           ,[ContractNumber]    
+           ,[StatusID]    
+           ,[PropertyID]    
+           ,[UnitID]    
+           ,[TenantID]    
+           ,[RentAccID]    
+           ,[IncomeAccID]    
+           ,[Purpose]    
+           ,[StartDate]    
+           ,[EndDate]    
+           ,[ExtendTill]   
+           ,[TotalAmount]    
+           ,[NonRecurAmount]    
+           ,[RecurAmount]    
+           ,[Depth]    
+           ,[ParentID]    
+           ,[lft]    
+           ,[rgt]    
+           ,[IsGroup]    
+           ,[CompanyGUID]    
+           ,[GUID]    
+           ,[CreatedBy]    
+           ,[CreatedDate]    
+           ,[ModifiedBy]    
+           ,[ModifiedDate]    
+           ,[TerminationDate]    
+           ,[Reason]    
+           ,[LocationID]    
+           ,[DivisionID]    
+           ,[CurrencyID]    
+           ,[TermsConditions]    
+           ,[SalesmanID]    
+           ,[AccountantID]    
+           ,[LandlordID]    
+           ,[Narration]    
+           ,[SNO]    
+           ,[CostCenterID]    
+           ,[HistoryStatus])    
+		  SELECT [ContractID]    
+		  ,[ContractPrefix]    
+		  ,[ContractDate]    
+		  ,[ContractNumber]    
+		  ,[StatusID]    
+		  ,[PropertyID]    
+		  ,[UnitID]    
+		  ,[TenantID]    
+		  ,[RentAccID]    
+		  ,[IncomeAccID]    
+		  ,[Purpose]    
+		  ,[StartDate]    
+		  ,[EndDate]  
+		  ,[ExtendTill]    
+		  ,[TotalAmount]    
+		  ,[NonRecurAmount]    
+		  ,[RecurAmount]    
+		  ,[Depth]    
+		  ,[ParentID]    
+		  ,[lft]    
+		  ,[rgt]    
+		  ,[IsGroup]    
+		  ,[CompanyGUID]    
+		  ,[GUID]    
+		  ,[CreatedBy]    
+		  ,[CreatedDate]    
+		  ,[ModifiedBy]    
+		  ,[ModifiedDate]    
+		  ,[TerminationDate]    
+		  ,[Reason]    
+		  ,[LocationID]    
+		  ,[DivisionID]    
+		  ,[CurrencyID]    
+		  ,[TermsConditions]    
+		  ,[SalesmanID]    
+		  ,[AccountantID]    
+		  ,[LandlordID]    
+		  ,[Narration]    
+		  ,[SNO]    
+		  ,[CostCenterID] , @AUDITSTATUS     
+		FROM [REN_Contract]  with(nolock) 
+		WHERE  [ContractID]  = @ContractID AND COSTCENTERID = 95    
+      
+		INSERT INTO  [REN_ContractParticulars_History]    
+           ([NodeID]    
+           ,[ContractID]    
+           ,[CCID]    
+           ,[CCHistoryID]    
+           ,[CreditAccID]    
+           ,[ChequeNo]    
+           ,[ChequeDate]    
+           ,[PayeeBank]    
+           ,[DebitAccID]    
+           ,[RentAmount]    
+		   ,[Discount]    
+           ,[Amount]    
+           ,[CompanyGUID]    
+           ,[GUID]    
+           ,[CreatedBy]    
+           ,[CreatedDate]    
+           ,[ModifiedBy]    
+           ,[ModifiedDate]    
+           ,[Sno]    
+           ,[Narration]    
+           ,[IsRecurr],TasjeelAmount,Detailsxml,AdvanceAccountID,InclChkGen)    
+		 SELECT [NodeID]    
+		  ,[ContractID]    
+		  ,[CCID]    
+		  ,[CCNodeID]    
+		  ,[CreditAccID]    
+		  ,[ChequeNo]    
+		  ,[ChequeDate]    
+		  ,[PayeeBank]    
+		  ,[DebitAccID]    
+		  ,[RentAmount]    
+		  ,[Discount]    
+		  ,[Amount]    
+		  ,[CompanyGUID]    
+		  ,[GUID]    
+		  ,[CreatedBy]    
+		  ,[CreatedDate]    
+		  ,[ModifiedBy]    
+		  ,[ModifiedDate]    
+		  ,[Sno]    
+		  ,[Narration]    
+		  ,[IsRecurr] ,TasjeelAmount,Detailsxml,AdvanceAccountID ,InclChkGen    
+		FROM  [REN_ContractParticulars] 
+		with(nolock) WHERE  [ContractID]  = @ContractID    
+      
+		INSERT INTO  [REN_ContractPayTerms_History]    
+           ([NodeID]    
+           ,[ContractID]    
+           ,[ChequeNo]    
+           ,[ChequeDate]    
+           ,[CustomerBank]    
+           ,[DebitAccID]    
+           ,[Amount]    
+           ,[CompanyGUID]    
+           ,[GUID]    
+           ,[CreatedBy]    
+           ,[CreatedDate]    
+           ,[ModifiedBy]    
+           ,[ModifiedDate]    
+           ,[Sno]    
+           ,[Narration],Period,PostingDate)
+		SELECT [NodeID]    
+		  ,[ContractID]    
+		  ,[ChequeNo]    
+		  ,[ChequeDate]    
+		  ,[CustomerBank]    
+		  ,[DebitAccID]    
+		  ,[Amount]    
+		  ,[CompanyGUID]    
+		  ,[GUID]    
+		  ,[CreatedBy]    
+		  ,[CreatedDate]    
+		  ,[ModifiedBy]    
+		  ,[ModifiedDate]    
+		  ,[Sno]    
+		  ,[Narration],Period ,PostingDate   
+		FROM  [REN_ContractPayTerms] with(nolock) WHERE  [ContractID]  = @ContractID    
+      
+		INSERT INTO [REN_ContractExtended_History]    
+           ( [NodeID]    
+           ,[CreatedBy]    
+           ,[CreatedDate]    
+           ,[ModifiedBy]    
+           ,[ModifiedDate]    
+           ,[alpha1]    
+           ,[alpha2]    
+           ,[alpha3]    
+           ,[alpha4]    
+           ,[alpha5]    
+           ,[alpha6]    
+           ,[alpha7]    
+           ,[alpha8]    
+           ,[alpha9]    
+           ,[alpha10]    
+           ,[alpha11]    
+           ,[alpha12]    
+           ,[alpha13]    
+           ,[alpha14]    
+           ,[alpha15]    
+           ,[alpha16]    
+           ,[alpha17]    
+           ,[alpha18]    
+           ,[alpha19]    
+           ,[alpha20]    
+           ,[alpha21]    
+           ,[alpha22]    
+           ,[alpha23]    
+           ,[alpha24]    
+           ,[alpha25]    
+           ,[alpha26]    
+           ,[alpha27]    
+           ,[alpha28]    
+           ,[alpha29]    
+           ,[alpha30]    
+           ,[alpha31]    
+           ,[alpha32]    
+           ,[alpha33]    
+           ,[alpha34]    
+           ,[alpha35]    
+           ,[alpha36]    
+           ,[alpha37]    
+           ,[alpha38]    
+           ,[alpha39]    
+           ,[alpha40]    
+           ,[alpha41]    
+           ,[alpha42]    
+           ,[alpha43]    
+           ,[alpha44]    
+           ,[alpha45]    
+           ,[alpha46]    
+           ,[alpha47]    
+           ,[alpha48]    
+           ,[alpha49]    
+           ,[alpha50]    
+           ,[HistoryStatus])    
+		SELECT [NodeID]    
+		  ,[CreatedBy]    
+		  ,[CreatedDate]    
+		  ,[ModifiedBy]    
+		  ,[ModifiedDate]    
+		  ,[alpha1]    
+		  ,[alpha2]    
+		  ,[alpha3]    
+		  ,[alpha4]    
+		  ,[alpha5]    
+		  ,[alpha6]    
+		  ,[alpha7]    
+		  ,[alpha8]    
+		  ,[alpha9]    
+		  ,[alpha10]    
+		  ,[alpha11]    
+		  ,[alpha12]    
+		  ,[alpha13]    
+		  ,[alpha14]    
+		  ,[alpha15]    
+		  ,[alpha16]    
+		  ,[alpha17]    
+		  ,[alpha18]    
+		  ,[alpha19]    
+		  ,[alpha20]    
+		  ,[alpha21]    
+		  ,[alpha22]    
+		  ,[alpha23]    
+		  ,[alpha24]    
+		  ,[alpha25]    
+		  ,[alpha26]    
+		  ,[alpha27]    
+		  ,[alpha28]    
+		  ,[alpha29]    
+		  ,[alpha30]    
+		  ,[alpha31]    
+		  ,[alpha32]    
+		  ,[alpha33]    
+		  ,[alpha34]    
+		  ,[alpha35]    
+		  ,[alpha36]    
+		  ,[alpha37]    
+		  ,[alpha38]    
+		  ,[alpha39]    
+		  ,[alpha40]    
+		  ,[alpha41]    
+		  ,[alpha42]    
+		  ,[alpha43]    
+		  ,[alpha44]    
+		  ,[alpha45]    
+		  ,[alpha46]    
+		  ,[alpha47]    
+		  ,[alpha48]    
+		  ,[alpha49]    
+		  ,[alpha50], @AUDITSTATUS     
+		FROM  [REN_ContractExtended] with(nolock) WHERE  [NodeID]  = @ContractID    
+	END         
     --------------------------  POSTINGS --------------------------      
        
         
          
-	Declare @RcptCCID INT,@ComRcptCCID INT,@SIVCCID INT,@RentRcptCCID INT     
-	Declare @BnkRcpt INT  , @PDRcpt INT , @CommRcpt INT , @SalesInv INT, @RentRcpt INT      
+	Declare @RcptCCID BIGint,@ComRcptCCID bigint,@SIVCCID bigint,@RentRcptCCID bigint     
+	Declare @BnkRcpt BIGINT  , @PDRcpt BIGINT , @CommRcpt bigint , @SalesInv BIGINT, @RentRcpt BIGINT      
 	DECLARE  @StatusValue int ,@IsRes bit    
 	DECLARE @AA XML  , @DateXML XML       
 	DECLARE @DocXml nvarchar(max)       
@@ -981,286 +1148,199 @@ SET NOCOUNT ON;
 	BEGIN    
         
         
-	IF(@SIVXML is not null and @SIVXML<>'') 
-	BEGIN
-		if exists(select MapID from REN_ContractDocMapping DM WITH(NOLOCK)
-		join COM_CCSchedules a WITH(NOLOCK) on DM.CostCenterID=a.CostCenterID
-		join COM_SchEvents b WITH(NOLOCK) on a.ScheduleID=b.ScheduleID
-		where a.NodeID=DM.DocID and DM.ContractID = @ContractID and b.statusid=2
-		and (DM.TYPE = 1 OR DM.TYPE IS NULL) and (DM.isaccdoc = 0 OR DM.IsAccDoc  IS NULL ))
-		 RAISERROR('-101',16,1)
-	
-		 
-		if(@IsOpening=1)
-		BEGIN
-				set @DocIDValue=0
-				
-				select @DocIDValue=isnull(DocID,0) from [REN_ContractDocMapping] WITH(NOLOCK)
-				where ContractID=@ContractID and ContractCCID=95 and Type=1 and DocType=4
-				
-				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
-				where CostCenterID=95 and Name='ContractOpeningDoc' 
-				
-				set @Prefix=''
-				EXEC [sp_GetDocPrefix] @SIVXML,@ContractDate,@RcptCCID,@Prefix   output
+	IF(@SIVXML is not null and @SIVXML<>'')      
+	BEGIN      
+		select @ParentID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
+		where CostCenterID=95 and Name='ContractSalesInvoice'      
+		SET @XML = @SIVXML    
 
-				EXEC @return_value = [dbo].[spDOC_SetTempAccDocument]      
-				@CostCenterID = @RcptCCID,      
-				@DocID = @DocIDValue,      
-				@DocPrefix = @Prefix,      
-				@DocNumber =1,      
-				@DocDate = @ContractDate,      
-				@DueDate = NULL,      
-				@BillNo = @SNO,      
-				@InvDocXML = @SIVXML,      
-				@NotesXML = N'',      
-				@AttachmentsXML = N'',      
-				@ActivityXML  = N'', 
-				@IsImport = 0,      
-				@LocationID = @ContractLocationID,      
-				@DivisionID = @ContractDivisionID,      
-				@WID = 0,      
-				@RoleID = @RoleID,      
-				@RefCCID = 95,    
-				@RefNodeid = @ContractID ,    
-				@CompanyGUID = @CompanyGUID,      
-				@UserName = @UserName,      
-				@UserID = @UserID,      
-				@LangID = @LangID      
+		declare  @tblExistingSIVXML TABLE (ID int identity(1,1),DOCID bigint)           
+		declare @totalPreviousSIVXML bigint,@BillWiseXMl Nvarchar(max)    
+		insert into @tblExistingSIVXML     
+		select DOCID from  [REN_ContractDocMapping] with(nolock)   
+		where contractid=@ContractID and Doctype =4 AND ContractCCID= 95    
 
-				IF(@DocIDValue = 0 )    
-				BEGIN    
-					INSERT INTO [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID)      
-					VALUES(@ContractID,1,1,@return_value,@RcptCCID,1,4,95)      
-				END
-		END
-		ELSE	     
+		select @totalPreviousSIVXML=COUNT(id) from @tblExistingSIVXML     
+
+		CREATE TABLE #tblListSIVTemp(ID int identity(1,1),TRANSXML NVARCHAR(MAX) ,Documents NVARCHAR(MAX),Recurxml NVARCHAR(MAX))            
+		INSERT INTO #tblListSIVTemp        
+		SELECT  CONVERT(NVARCHAR(MAX),  X.query('DocumentXML')),CONVERT(NVARCHAR(MAX),X.query('Documents')),CONVERT(NVARCHAR(MAX),X.query('recurXML'))                     
+		from @XML.nodes('/SIV//ROWS') as Data(X)        
+
+		SELECT @CNT = COUNT(ID) FROM #tblListSIVTemp      
+
+		SET @ICNT = 0      
+		WHILE(@ICNT < @CNT)      
 		BEGIN      
-			select @ParentID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
-			where CostCenterID=95 and Name='ContractSalesInvoice'      
-			SET @XML = @SIVXML    
+			SET @ICNT =@ICNT+1      
 
-			declare  @tblExistingSIVXML TABLE (ID int identity(1,1),DOCID INT,DimID INT,ccid int)           
-			declare @totalPreviousSIVXML INT,@BillWiseXMl Nvarchar(max),@Dim INT
-			insert into @tblExistingSIVXML     
-			select DOCID,DimID,CostCenterID from  [REN_ContractDocMapping] with(nolock)   
-			where contractid=@ContractID and Doctype =4 AND ContractCCID= 95    
+			SELECT @AA = TRANSXML , @Documents = Documents    FROM #tblListSIVTemp WHERE  ID = @ICNT      
 
-			select @totalPreviousSIVXML=COUNT(id) from @tblExistingSIVXML     
+			Set @DocXml = convert(nvarchar(max), @AA)      
 
-			CREATE TABLE #tblListSIVTemp(ID int identity(1,1),TRANSXML NVARCHAR(MAX) ,Documents NVARCHAR(MAX),Recurxml NVARCHAR(MAX),DimID INT)
-			INSERT INTO #tblListSIVTemp        
-			SELECT  CONVERT(NVARCHAR(MAX),  X.query('DocumentXML')),CONVERT(NVARCHAR(MAX),X.query('Documents')),CONVERT(NVARCHAR(MAX),X.query('recurXML'))
-			,X.value ('@DimID', 'INT')
-			from @XML.nodes('/SIV//ROWS') as Data(X)        
+			SELECT   @tempSno =  X.value ('@CONTRACTSNO', 'int'),@RcptCCID =  ISNULL(X.value ('@CostCenterid', 'int'),@ParentID)
+			from @Documents.nodes('/Documents') as Data(X)     
 
-			SELECT @CNT = COUNT(ID) FROM #tblListSIVTemp      
+			SELECT   @DocIDValue=0    
+			SELECT   @DocIDValue = DOCID from @tblExistingSIVXML where ID=@ICNT    
 
-			SET @ICNT = 0      
-			WHILE(@ICNT < @CNT)      
-			BEGIN      
-				SET @ICNT =@ICNT+1      
-
-				SELECT @AA = TRANSXML , @Documents = Documents ,@Dim=DimID   FROM #tblListSIVTemp WHERE  ID = @ICNT      
-
-				Set @DocXml = convert(nvarchar(max), @AA)      
-
-				SELECT   @tempSno =  X.value ('@CONTRACTSNO', 'int'),@RcptCCID =  ISNULL(X.value ('@CostCenterid', 'int'),@ParentID)
-				from @Documents.nodes('/Documents') as Data(X)     
-
-				SELECT   @DocIDValue=0    
-				if(@Dim>0)
-				BEGIN
-					SELECT   @DocIDValue = DOCID from @tblExistingSIVXML where DimID=@Dim and ccid= @RcptCCID  
-					if(@DocIDValue>0)
-						delete from @tblExistingSIVXML where DimID=@Dim and DOCID=@DocIDValue
-				END	
-				ELSE	
-					SELECT   @DocIDValue = DOCID from @tblExistingSIVXML where ID=@ICNT    
-
-				SET @DocIDValue = ISNULL(@DocIDValue,0)    
-				if exists(SELECT IsBillwise FROM ACC_Accounts with(nolock) WHERE AccountID=@RentRecID and IsBillwise=1)    
-				begin    
-					IF EXISTS(select Value from ADM_GLOBALPREFERENCES with(nolock) where NAME  = 'On')    
-					BEGIN    
-						set @tempxml=@DocXml    
-						set @tempAmt=0
-						select @tempAmt=isnull(sum(X.value('@Amount',' float')),0)
-						from @tempxml.nodes('/DocumentXML/Row/AccountsXML/Accounts') as Data(X)
-						where X.value('@DebitAccount',' int')=@RentRecID
-						if(@tempAmt>0)
-						BEGIN
-							set @BillWiseXMl='<BillWise> <Row DocSeqNo="1" AccountID="'+convert(nvarchar,@RentRecID)+'" AmountFC="'+CONVERT(nvarchar,@tempAmt)+'" AdjAmount="'+CONVERT(nvarchar,@tempAmt)+'" 
-							AdjCurrID="1" AdjExchRT="1" IsNewReference="1" Narration="" IsDocPDC="0" ></Row></BillWise>'    
-						END
-						ELSE
-							set @BillWiseXMl=''
-					END    
-					ELSE    
-					BEGIN    
-						set @BillWiseXMl=''    
-					END    
-				end    
-				else    
-				begin    
+			SET @DocIDValue = ISNULL(@DocIDValue,0)    
+			if exists(SELECT IsBillwise FROM ACC_Accounts with(nolock) WHERE AccountID=@RentRecID and IsBillwise=1)    
+			begin    
+				IF EXISTS(select Value from ADM_GLOBALPREFERENCES with(nolock) where NAME  = 'On')    
+				BEGIN    
+					set @tempxml=@DocXml    
+					select @tempAmt=sum(X.value('@Amount',' float'))
+					from @tempxml.nodes('/DocumentXML/Row/AccountsXML/Accounts') as Data(X)            
+					set @BillWiseXMl='<BillWise> <Row DocSeqNo="1" AccountID="'+convert(nvarchar,@RentRecID)+'" AmountFC="'+CONVERT(nvarchar,@tempAmt)+'" AdjAmount="'+CONVERT(nvarchar,@tempAmt)+'" 
+					AdjCurrID="1" AdjExchRT="1" IsNewReference="1" Narration="" IsDocPDC="0" ></Row></BillWise>'    
+				END    
+				ELSE    
+				BEGIN    
 					set @BillWiseXMl=''    
-				end 
+				END    
+			end    
+			else    
+			begin    
+				set @BillWiseXMl=''    
+			end 
 
-				set @Prefix=''
-				EXEC [sp_GetDocPrefix] @DocXml,@ContractDate,@RcptCCID,@Prefix   output
+			set @Prefix=''
+			EXEC [sp_GetDocPrefix] @DocXml,@ContractDate,@RcptCCID,@Prefix   output
 
-				set @DocXml=Replace(@DocXml,'<RowHead/>','')
-				set @DocXml=Replace(@DocXml,'</DocumentXML>','')
-				set @DocXml=Replace(@DocXml,'<DocumentXML>','')
+			set @DocXml=Replace(@DocXml,'<RowHead/>','')
+			set @DocXml=Replace(@DocXml,'</DocumentXML>','')
+			set @DocXml=Replace(@DocXml,'<DocumentXML>','')
 
-				EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]      
-				@CostCenterID = @RcptCCID,      
-				@DocID = @DocIDValue,      
-				@DocPrefix = @Prefix,      
-				@DocNumber = N'',      
-				@DocDate = @ContractDate,      
-				@DueDate = NULL,      
-				@BillNo = @SNO,      
-				@InvDocXML =@DocXml,      
-				@BillWiseXML = @BillWiseXMl,      
-				@NotesXML = N'',      
-				@AttachmentsXML = N'',     
-				@ActivityXML  = N'',     
-				@IsImport = 0,      
-				@LocationID = @LocationID,      
-				@DivisionID = @DivisionID ,      
-				@WID = 0,      
-				@RoleID = @RoleID,      
-				@DocAddress = N'',      
-				@RefCCID = 95,    
-				@RefNodeid  = @ContractID,    
-				@CompanyGUID = @CompanyGUID,      
-				@UserName = @UserName,      
-				@UserID = @UserID,      
-				@LangID = @LangID       
+			EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]      
+			@CostCenterID = @RcptCCID,      
+			@DocID = @DocIDValue,      
+			@DocPrefix = @Prefix,      
+			@DocNumber = N'',      
+			@DocDate = @ContractDate,      
+			@DueDate = NULL,      
+			@BillNo = @SNO,      
+			@InvDocXML =@DocXml,      
+			@BillWiseXML = @BillWiseXMl,      
+			@NotesXML = N'',      
+			@AttachmentsXML = N'',     
+			@ActivityXML  = N'',     
+			@IsImport = 0,      
+			@LocationID = @LocationID,      
+			@DivisionID = @DivisionID ,      
+			@WID = 0,      
+			@RoleID = @RoleID,      
+			@DocAddress = N'',      
+			@RefCCID = 95,    
+			@RefNodeid  = @ContractID,    
+			@CompanyGUID = @CompanyGUID,      
+			@UserName = @UserName,      
+			@UserID = @UserID,      
+			@LangID = @LangID       
 
-				SET @SalesInv  = @return_value      
+			SET @SalesInv  = @return_value      
 
-				set @Documents=null
-				SELECT @Documents = Recurxml FROM #tblListSIVTemp WHERE  ID = @ICNT  
+			set @Documents=null
+			SELECT @Documents = Recurxml FROM #tblListSIVTemp WHERE  ID = @ICNT  
+			
+			set @Occurrence=0
+			SELECT  @Occurrence=count(X.value ('@Date', 'Datetime' ))
+			from @Documents.nodes('/recurXML/Row') as Data(X)
+			if(@Occurrence>0)
+			BEGIN		 
+				set @ScheduleID=0
+				select @ScheduleID=ScheduleID from COM_CCSchedules WITH(NOLOCK)
+				where CostCenterID=@RcptCCID and NodeID=@SalesInv
+				if(@ScheduleID=0)
+				BEGIN
+					INSERT INTO COM_Schedules(Name,StatusID,FreqType,FreqInterval,FreqSubdayType,FreqSubdayInterval,
+					FreqRelativeInterval,FreqRecurrenceFactor,StartDate,EndDate,Occurrence,RecurAutoPost,
+					CompanyGUID,GUID,CreatedBy,CreatedDate)
+					VALUES('Contract',1,0,0,0,0,0,0,@StartDate,@EndDate,@Occurrence,0,
+							@CompanyGUID,NEWID(),@UserName,@Dt)
+					SET @ScheduleID=SCOPE_IDENTITY()  
+
+					INSERT INTO COM_CCSchedules(CostCenterID,NodeID,ScheduleID,CreatedBy,CreatedDate)
+					VALUES(@RcptCCID,@SalesInv,@ScheduleID,@UserName,@Dt)
+					
+					INSERT INTO COM_UserSchedules(ScheduleID,GroupID,RoleID,UserID,CreatedBy,CreatedDate)
+					values(@ScheduleID,0,0,@UserID,@UserName,@Dt)
+				END
+				ELSE
+				BEGIN
+					update COM_Schedules
+					set StartDate=@StartDate,EndDate=@EndDate,Occurrence=@Occurrence
+					where ScheduleID=@ScheduleID
+				END
 				
-				set @Occurrence=0
-				SELECT  @Occurrence=count(X.value ('@Date', 'Datetime' ))
-				from @Documents.nodes('/recurXML/Row') as Data(X)
-				if(@Occurrence>0)
-				BEGIN		 
-					set @ScheduleID=0
-					select @ScheduleID=ScheduleID from COM_CCSchedules WITH(NOLOCK)
-					where CostCenterID=@RcptCCID and NodeID=@SalesInv
-					if(@ScheduleID=0)
-					BEGIN
-						INSERT INTO COM_Schedules(Name,StatusID,FreqType,FreqInterval,FreqSubdayType,FreqSubdayInterval,
-						FreqRelativeInterval,FreqRecurrenceFactor,StartDate,EndDate,Occurrence,RecurAutoPost,
-						CompanyGUID,GUID,CreatedBy,CreatedDate)
-						VALUES('Contract',1,0,0,0,0,0,0,@StartDate,@EndDate,@Occurrence,0,
-								@CompanyGUID,NEWID(),@UserName,@Dt)
-						SET @ScheduleID=SCOPE_IDENTITY()  
+				delete from COM_SchEvents
+				where ScheduleID=@ScheduleID
+				
+				INSERT INTO COM_SchEvents(ScheduleID,EventTime,Message,StatusID,StartFlag,StartDate,EndDate,CompanyGUID,[GUID],CreatedBy,CreatedDate,
+				SubCostCenterID,NODEID,AttachmentID)
+				select @ScheduleID,CONVERT(FLOAT,X.value ('@Date', 'Datetime' )),'Contract',1,0,CONVERT(FLOAT,X.value ('@Date', 'Datetime' )),CONVERT(FLOAT,X.value ('@Date', 'Datetime' )),
+				@CompanyGUID,NEWID(),@UserName,CONVERT(FLOAT,GETDATE()),@ParentID,@SNO,X.value ('@Seq', 'INT' )
+				from @Documents.nodes('/recurXML/Row') as Data(X)	
+			END
 
-						INSERT INTO COM_CCSchedules(CostCenterID,NodeID,ScheduleID,CreatedBy,CreatedDate)
-						VALUES(@RcptCCID,@SalesInv,@ScheduleID,@UserName,@Dt)
-						
-						INSERT INTO COM_UserSchedules(ScheduleID,GroupID,RoleID,UserID,CreatedBy,CreatedDate)
-						values(@ScheduleID,0,0,@UserID,@UserName,@Dt)
-					END
-					ELSE
-					BEGIN
-						update COM_Schedules
-						set StartDate=@StartDate,EndDate=@EndDate,Occurrence=@Occurrence
-						where ScheduleID=@ScheduleID
-					END
+			IF(@DocIDValue = 0 )    
+			BEGIN    
+				INSERT INTO [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID)
+				values(@ContractID,1,@tempSno,@SalesInv,@RcptCCID,0,4,95)
+			END      
+			else    
+			begin    
+				update [REN_ContractDocMapping]    
+				set [Sno]= @tempSno
+				where [ContractID]=@ContractID and DocID=@DocIDValue    
+			end
+		END    
+       
+		IF(@totalPreviousSIVXML > @CNT)    
+		BEGIN    
+			WHILE(@CNT <  @totalPreviousSIVXML)    
+			BEGIN    
+
+				SET @CNT = @CNT+1    
+				SELECT @DELETEDOCID = DOCID FROM @tblExistingSIVXML WHERE ID = @CNT    
+
+				SELECT @DELETECCID = COSTCENTERID FROM dbo.INV_DocDetails   with(nolock)    
+				WHERE DOCID = @DELETEDOCID    
+
+				EXEC @return_value = [spDOC_DeleteInvDocument]      
+				@CostCenterID = @DELETECCID,      
+				@DocPrefix = '',      
+				@DocNumber = '',  
+				@DOCID = @DELETEDOCID,
+				@UserID = 1,      
+				@UserName = N'ADMIN',      
+				@LangID = 1,
+				@RoleID=1
+
+				DELETE FROM REN_ContractDocMapping 
+				WHERE CONTRACTID = @CONTRACTID  AND DOCID =  @DELETEDOCID and DOCTYPE =4 AND ContractCCID = 95    
+				
+				set @ScheduleID=0
+				select @ScheduleID=ScheduleID from COM_CCSchedules WITH(NOLOCK)
+				where CostCenterID=@DELETECCID and NodeID=@DELETEDOCID
+				
+				if(@ScheduleID>0)
+				BEGIN
+					delete from COM_CCSchedules
+					where ScheduleID=@ScheduleID
+					
+					delete from COM_UserSchedules
+					where ScheduleID=@ScheduleID
 					
 					delete from COM_SchEvents
 					where ScheduleID=@ScheduleID
 					
-					INSERT INTO COM_SchEvents(ScheduleID,EventTime,Message,StatusID,StartFlag,StartDate,EndDate,CompanyGUID,[GUID],CreatedBy,CreatedDate,
-					SubCostCenterID,NODEID,AttachmentID)
-					select @ScheduleID,CONVERT(FLOAT,X.value ('@Date', 'Datetime' )),'Contract',1,0,CONVERT(FLOAT,X.value ('@Date', 'Datetime' )),CONVERT(FLOAT,X.value ('@Date', 'Datetime' )),
-					@CompanyGUID,NEWID(),@UserName,CONVERT(FLOAT,GETDATE()),@ParentID,@SNO,X.value ('@Seq', 'INT' )
-					from @Documents.nodes('/recurXML/Row') as Data(X)	
+					delete from COM_Schedules
+					where ScheduleID=@ScheduleID
 				END
-
-				IF(@DocIDValue = 0 )    
-				BEGIN    
-					INSERT INTO [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID,DimID)
-					values(@ContractID,1,@tempSno,@SalesInv,@RcptCCID,0,4,95,@Dim)
-				END      
-				else    
-				begin    
-					update [REN_ContractDocMapping]    
-					set [Sno]= @tempSno
-					where [ContractID]=@ContractID and DocID=@DocIDValue    
-				end
-			END    
-	       
-			if(@Dim>0)
-			BEGIN
-				declare @temptab table(id int)
-				
-				insert into @temptab(id)
-				select DOCID FROM @tblExistingSIVXML
-				
-				delete from @tblExistingSIVXML
-				
-				insert into @tblExistingSIVXML(docid)
-				select id FROM @temptab
-					 
-				select @totalPreviousSIVXML=max(id),@CNT=min(id) from @tblExistingSIVXML     
-				set @CNT=@CNT-1
-			END	
-		
-			IF(@totalPreviousSIVXML > @CNT)    
-			BEGIN    
-				WHILE(@CNT <  @totalPreviousSIVXML)    
-				BEGIN    
-
-					SET @CNT = @CNT+1    
-					SELECT @DELETEDOCID = DOCID FROM @tblExistingSIVXML WHERE ID = @CNT    
-
-					SELECT @DELETECCID = COSTCENTERID FROM dbo.INV_DocDetails   with(nolock)    
-					WHERE DOCID = @DELETEDOCID    
-
-					EXEC @return_value = [spDOC_DeleteInvDocument]      
-					@CostCenterID = @DELETECCID,      
-					@DocPrefix = '',      
-					@DocNumber = '',  
-					@DOCID = @DELETEDOCID,
-					@UserID = 1,      
-					@UserName = N'ADMIN',      
-					@LangID = 1,
-					@RoleID=1
-
-					DELETE FROM REN_ContractDocMapping 
-					WHERE CONTRACTID = @CONTRACTID  AND DOCID =  @DELETEDOCID and DOCTYPE =4 AND ContractCCID = 95    
-					
-					set @ScheduleID=0
-					select @ScheduleID=ScheduleID from COM_CCSchedules WITH(NOLOCK)
-					where CostCenterID=@DELETECCID and NodeID=@DELETEDOCID
-					
-					if(@ScheduleID>0)
-					BEGIN
-						delete from COM_CCSchedules
-						where ScheduleID=@ScheduleID
-						
-						delete from COM_UserSchedules
-						where ScheduleID=@ScheduleID
-						
-						delete from COM_SchEvents
-						where ScheduleID=@ScheduleID
-						
-						delete from COM_Schedules
-						where ScheduleID=@ScheduleID
-					END
-				END
-			END 
-		END       
-    END
-  
-    
+			END
+		END 
+	END       
      		
 	IF(@RcptXML is not null and @RcptXML<>'')      
 	BEGIN      
@@ -1289,11 +1369,6 @@ SET NOCOUNT ON;
 				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
 				where CostCenterID=95 and Name='ContractPostDatedReceipt'      
 			END    
-			ELSE  IF(@AccValue = 'Rct')    
-			BEGIN    
-				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
-				where CostCenterID=95 and Name='ContractBankReceipt'      
-			END  
 			ELSE  IF(@AccValue = 'CASH')    
 			BEGIN    
 				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
@@ -1342,7 +1417,7 @@ SET NOCOUNT ON;
 				SELECT   @TempDocIDValue =  X.value('@DocID', 'NVARCHAR(100)'),@DDValue=ISNULL(X.value('@DDate', 'DateTime'),@ContractDate)
 				from @Documents.nodes('/Documents') as Data(X)     
 				set @BillWiseXMl=''
-				if(@TempDocIDValue is not null and @TempDocIDValue<>'' and convert(INT,@TempDocIDValue)>0 and @TempDocIDValue= @DocIDValue)
+				if(@TempDocIDValue is not null and @TempDocIDValue<>'' and convert(bigint,@TempDocIDValue)>0 and @TempDocIDValue= @DocIDValue)
 				BEGIN
 					set @tempxml=@DocXml    
 					select @tempAmt=X.value ('@Amount', 'FLOAT' )            
@@ -1395,45 +1470,17 @@ SET NOCOUNT ON;
 	END      
 
         
-    declare  @tblExistingPDRcptXML TABLE (ID int identity(1,1),DOCID INT,ccid INT,postingdate float)           
+    declare  @tblExistingPDRcptXML TABLE (ID int identity(1,1),DOCID bigint)           
     insert into @tblExistingPDRcptXML     
-    select DOCID,CostCenterID,postingdate from  [REN_ContractDocMapping] with(nolock)   
+    select DOCID from  [REN_ContractDocMapping] with(nolock)   
     where contractid=@ContractID and Doctype =2 AND ContractCCID = 95 
     order by sno   
-    
-    if exists(select * from sys.columns
-	where object_id('REN_ContractDocMapping')=object_id and name='IsFreezed')
-	BEGIN
-		delete from @tblExistingSIVXML
-		
-		SET @SQL=' select DOCID from  [REN_ContractDocMapping] with(nolock)   
-		where contractid='+convert(NVARCHAR(MAX),@ContractID)+' and Doctype =2 AND ContractCCID = 95  AND IsFreezed=1'
-		
-		insert into @tblExistingSIVXML(DOCID)
-		exec(@SQL)
-		
-		delete from @tblExistingPDRcptXML
-		where DOCID in(select DOCID from @tblExistingSIVXML)
-	END
-	
-    declare @totalPreviousPDRcptXML INT    
+    declare @totalPreviousPDRcptXML bigint    
     select @CNT=0,@totalPreviousPDRcptXML=COUNT(id) from @tblExistingPDRcptXML     
    
 	IF(@PDRcptXML is not null and @PDRcptXML<>'')      
 	BEGIN      
-		
-		if exists(select * from COM_CostCenterPreferences WITH(nolock)      
-				where CostCenterID=95 and Name='SinglePDC' and value='true')
-			set @SinglePDC	=1
-		else
-			set @SinglePDC	=0	
-			
-	   	if exists(select * from COM_CostCenterPreferences WITH(nolock)      
-				where CostCenterID=95 and Name='InclPostingDate' and value='true')
-			set @InclPostingDate	=1
-		else
-			set @InclPostingDate	=0	
-
+	   
 		DECLARE @MPSNO NVARCHAR(MAX)       
 
 		SET @XML =   @PDRcptXML       
@@ -1463,11 +1510,6 @@ SET NOCOUNT ON;
 			BEGIN    
 				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
 				where CostCenterID=95 and Name='ContractPostDatedReceipt'      
-			END 
-			ELSE  IF(@AccValue = 'Rct')    
-			BEGIN    
-				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
-				where CostCenterID=95 and Name='ContractBankReceipt'      
 			END    
 			ELSE  IF(@AccValue = 'CASH')    
 			BEGIN    
@@ -1478,226 +1520,129 @@ SET NOCOUNT ON;
 			BEGIN    
 				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
 				where CostCenterID=95 and Name='ContractJVReceipt'      
-			END
-			ELSE  IF(@AccValue = 'OPB')    
-			BEGIN    
-				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)      
-				where CostCenterID=95 and Name='ContractOpeningDoc'      
 			END    
 
 			Set @DocXml = convert(nvarchar(max), @AA)      
 
 			set @DELETECCID=0    
 			
-			if(@SinglePDC	=0)
-			BEGIN
-				IF(@DocIDValue>0)    
-				BEGIN    
-					SELECT  @DELETECCID = COSTCENTERID FROM dbo.ACC_DocDetails  with(nolock)     
-					WHERE DOCID = @DocIDValue    
-				END 
-				    
-				if(@DocIDValue >0 AND @DELETECCID <> 0 and @RcptCCID<>@DELETECCID)    
-				begin   
-					EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]      
-					@CostCenterID = @DELETECCID,      
-					@DocPrefix = '',      
-					@DocNumber = '',  
-					@DOCID = @DocIDValue,      
-					@UserID = 1,      
-					@UserName = N'ADMIN',      
-					@LangID = 1,
-					@RoleID=1
+			IF(@DocIDValue>0)    
+			BEGIN    
+				SELECT  @DELETECCID = COSTCENTERID FROM dbo.ACC_DocDetails  with(nolock)     
+				WHERE DOCID = @DocIDValue    
+			END 
+			    
+			if(@DocIDValue >0 AND @DELETECCID <> 0 and @RcptCCID<>@DELETECCID)    
+			begin   
+				EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]      
+				@CostCenterID = @DELETECCID,      
+				@DocPrefix = '',      
+				@DocNumber = '',  
+				@DOCID = @DocIDValue,      
+				@UserID = 1,      
+				@UserName = N'ADMIN',      
+				@LangID = 1,
+				@RoleID=1
 
-					DELETE FROM REN_ContractDocMapping WHERE CONTRACTID = @CONTRACTID  AND DOCID =  @DocIDValue and DOCTYPE =2 AND ContractCCID = 95    
+				DELETE FROM REN_ContractDocMapping WHERE CONTRACTID = @CONTRACTID  AND DOCID =  @DocIDValue and DOCTYPE =2 AND ContractCCID = 95    
 
-					set @DocIDValue=0       
-				end    
-			END
-			
-			
+				set @DocIDValue=0       
+			end    
+     
 			set @TempDocIDValue =0
 			SELECT   @TempDocIDValue =  X.value ('@DocID', 'NVARCHAR(100)'),@DDValue=ISNULL(X.value ('@DDate', 'DateTime'),@ContractDate)            
-			from @Documents.nodes('/Documents') as Data(X)  
-			   
+			from @Documents.nodes('/Documents') as Data(X)     
 			set @BillWiseXMl=''
-			if(@TempDocIDValue is not null and @TempDocIDValue<>'' and convert(INT,@TempDocIDValue)>0 and @TempDocIDValue= @DocIDValue)
+			if(@TempDocIDValue is not null and @TempDocIDValue<>'' and convert(bigint,@TempDocIDValue)>0 and @TempDocIDValue= @DocIDValue)
 			BEGIN
 				set @tempxml=@DocXml    
-				select @tempAmt=X.value ('@Amount', 'FLOAT'),@lft =X.value ('@CreditAccount', 'INT')
+				select @tempAmt=X.value ('@Amount', 'FLOAT'),@lft =X.value ('@CreditAccount', 'BIGINT')
 				from @tempxml.nodes('/DocumentXML/Row/Transactions') as Data(X)  
-				if exists(select DOCID from Acc_docdetails with(nolock) where  DOCID=@DocIDValue and Amount=@tempAmt 
-				and ((StatusID in(369,429) and DocumentType=19) or (OpPdcStatus in(369,429) and DocumentType=16)))
+				if exists(select DOCID from Acc_docdetails with(nolock) where  DOCID=@DocIDValue and Amount=@tempAmt and StatusID in(369,429) and DocumentType=19)
 					continue;
 				if exists(select DOCID from Acc_docdetails with(nolock) 
 				where  DOCID=@DocIDValue and Amount=@tempAmt and CreditAccount=@lft)
 				BEGIN
 					set @BillWiseXMl='<XML DontChangeBillwise="1" ></XML>'
 				END	
-			END 
-			
-			if(@SinglePDC=1)
-			BEGIN
-				select @DocIDValue=0
-				
-				iF(@InclPostingDate=1)
-					select @DocIDValue=isnull(DOCID ,0)  FROM @tblExistingPDRcptXML WHERE ccid=@RcptCCID and postingdate=convert(float,@DDValue)
-				else
-					select @DocIDValue=isnull(DOCID ,0)   FROM @tblExistingPDRcptXML WHERE ccid=@RcptCCID 
-				 
-				
-				
-				delete from @tblExistingPDRcptXML
-				where DOCID=@DocIDValue
-			END
-			 
-			
-			if(@DocXml<>'')
-			BEGIN
-				if(@DocIDValue=-2)
-				BEGIN
-					set @DocIDValue=0
-					set @TempDocIDValue=-2
-				END	
-					
-				set @Prefix=''
-				EXEC [sp_GetDocPrefix] @DocXml,@DDValue,@RcptCCID,@Prefix   output
+			END  
+      
+			set @Prefix=''
+			EXEC [sp_GetDocPrefix] @DocXml,@DDValue,@RcptCCID,@Prefix   output
 
-				EXEC @return_value = [dbo].[spDOC_SetTempAccDocument]      
-				@CostCenterID = @RcptCCID,      
-				@DocID = @DocIDValue,      
-				@DocPrefix =@Prefix,      
-				@DocNumber =1,      
-				@DocDate = @DDValue,				        
-				@DueDate = NULL,      
-				@BillNo = @SNO,      
-				@InvDocXML = @DocXml,      
-				@NotesXML = N'',      
-				@AttachmentsXML = N'',      
-				@ActivityXML  = @BillWiseXMl,     
-				@IsImport = 0,      
-				@LocationID = @ContractLocationID,      
-				@DivisionID = @ContractDivisionID,      
-				@WID = 0,      
-				@RoleID = @RoleID,      
-				@RefCCID = 95,    
-				@RefNodeid = @ContractID ,    
-				@CompanyGUID = @CompanyGUID,      
-				@UserName = @UserName,      
-				@UserID = @UserID,      
-				@LangID = @LangID      
+			EXEC @return_value = [dbo].[spDOC_SetTempAccDocument]      
+			@CostCenterID = @RcptCCID,      
+			@DocID = @DocIDValue,      
+			@DocPrefix =@Prefix,      
+			@DocNumber =1,      
+			@DocDate = @DDValue,				        
+			@DueDate = NULL,      
+			@BillNo = @SNO,      
+			@InvDocXML = @DocXml,      
+			@NotesXML = N'',      
+			@AttachmentsXML = N'',      
+			@ActivityXML  = @BillWiseXMl,     
+			@IsImport = 0,      
+			@LocationID = @ContractLocationID,      
+			@DivisionID = @ContractDivisionID,      
+			@WID = 0,      
+			@RoleID = @RoleID,      
+			@RefCCID = 95,    
+			@RefNodeid = @ContractID ,    
+			@CompanyGUID = @CompanyGUID,      
+			@UserName = @UserName,      
+			@UserID = @UserID,      
+			@LangID = @LangID      
 
-				SET @PDRcpt  = @return_value      
-	         
-				set @XML = @AA 
-				
-				
-				IF(@DocIDValue = 0 )    
-				BEGIN    
-					if(@TempDocIDValue=-2)
-						update [REN_ContractDocMapping]
-						set DocID=@PDRcpt
-						where [ContractID]=@ContractID  and [Sno]=@ICNT +1 and [Type]=2 and DocType=2
-					else
-					BEGIN
-						IF(@AccValue = 'OPB')
-							INSERT INTO  [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID)      
-							values(@ContractID,2,@ICNT,@PDRcpt,@RcptCCID,1,2,95  )        
-						ELSE
-							INSERT INTO  [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID,postingdate)      
-							values(@ContractID,2,@ICNT +1,@PDRcpt,@RcptCCID,1,2,95 ,convert(float,@DDValue) )        
-					END	
-				END   
-				ELSE if(@DocIDValue =-2)
-					update [REN_ContractDocMapping]
-					set DocID=@PDRcpt
-					where [ContractID]=@ContractID  and [Sno]=@ICNT +1 and [Type]=2 and DocType=2
-			END
-			else
-			BEGIN
-				IF(@DocIDValue = 0 )    
-				BEGIN    
-					INSERT INTO  [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID)      
-					values(@ContractID,2,@ICNT +1,-2,@RcptCCID,1,2,95  )        
-				END  
-				else if(@DocIDValue >0)
-				BEGIN 
-						EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]      
-						@CostCenterID = @DELETECCID,      
-						@DocPrefix = '',      
-						@DocNumber = '',  
-						@DOCID = @DocIDValue,      
-						@UserID = 1,      
-						@UserName = N'ADMIN',      
-						@LangID = 1,
-						@RoleID=1
+			SET @PDRcpt  = @return_value      
+         
+			set @XML = @AA      
 
-						update [REN_ContractDocMapping]
-						set DocID=-2
-						where [ContractID]=@ContractID  and [Sno]=@ICNT +1 and [Type]=2 and DocType=2
-						
-						set @DocIDValue=0  
-				END	
-			END	
-		END
-		
-		if(@SinglePDC=1)
-		BEGIN
-			delete from @tblExistingSIVXML
-			
-			insert into @tblExistingSIVXML(docid)
-			select DOCID FROM @tblExistingPDRcptXML
-			
-			delete from @tblExistingPDRcptXML
-			
-			insert into @tblExistingPDRcptXML(docid)
-			select DOCID FROM @tblExistingSIVXML
-			
-			select @CNT=min(ID),@totalPreviousPDRcptXML=max(ID) FROM @tblExistingPDRcptXML	
-			set @CNT=@CNT-1	
-		END
-	END
-	
-	  
+			IF(@DocIDValue = 0 )    
+			BEGIN    
+				INSERT INTO  [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID)      
+				values(@ContractID,2,@ICNT +1,@PDRcpt,@RcptCCID,1,2,95  )        
+			END    
+		END        
+	END      
       
    IF(@totalPreviousPDRcptXML > @CNT)    
    BEGIN           
-	  WHILE(@CNT <  @totalPreviousPDRcptXML)    
-	  BEGIN    
-	          
-	   SET @CNT = @CNT+1    
-	   SELECT @DELETEDOCID = DOCID FROM @tblExistingPDRcptXML WHERE ID = @CNT    
-	       
-	   SELECT  @DELETECCID = COSTCENTERID FROM dbo.ACC_DocDetails with(nolock)      
-	   WHERE DOCID = @DELETEDOCID    
-	      
-		 EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]      
-		@CostCenterID = @DELETECCID,      
-		@DocPrefix = '',      
-		@DocNumber = '',  
-		@DOCID = @DELETEDOCID,      
-		@UserID = 1,      
-		@UserName = N'ADMIN',      
-		@LangID = 1,
-		@RoleID=1
-	           
-		 DELETE FROM REN_ContractDocMapping WHERE CONTRACTID = @CONTRACTID  AND DOCID =  @DELETEDOCID and DOCTYPE =2 AND ContractCCID = 95    
-	         
-		END    
-   END  
-     
-   SELECT @CNT=0    
+  WHILE(@CNT <  @totalPreviousPDRcptXML)    
+  BEGIN    
+          
+   SET @CNT = @CNT+1    
+   SELECT @DELETEDOCID = DOCID FROM @tblExistingPDRcptXML WHERE ID = @CNT    
+       
+   SELECT  @DELETECCID = COSTCENTERID FROM dbo.ACC_DocDetails with(nolock)      
+   WHERE DOCID = @DELETEDOCID    
+      
+     EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]      
+    @CostCenterID = @DELETECCID,      
+    @DocPrefix = '',      
+    @DocNumber = '',  
+    @DOCID = @DELETEDOCID,      
+    @UserID = 1,      
+    @UserName = N'ADMIN',      
+    @LangID = 1,
+    @RoleID=1
+           
+     DELETE FROM REN_ContractDocMapping WHERE CONTRACTID = @CONTRACTID  AND DOCID =  @DELETEDOCID and DOCTYPE =2 AND ContractCCID = 95    
+         
+    END    
+  END    
+    SELECT @CNT=0    
         
    IF(@ComRcptXML is not null and @ComRcptXML<>'')      
    BEGIN      
       
   SET @XML =   @ComRcptXML       
         
-  declare  @tblExistingComRcptXML TABLE (ID int identity(1,1),DOCID INT)           
+  declare  @tblExistingComRcptXML TABLE (ID int identity(1,1),DOCID bigint)           
   insert into @tblExistingComRcptXML     
   select DOCID from  [REN_ContractDocMapping]   with(nolock) 
   where contractid=@ContractID and Doctype =3 AND ContractCCID = 95    
-  declare @totalPreviousComRcptXML INT    
+  declare @totalPreviousComRcptXML bigint    
   select @totalPreviousComRcptXML=COUNT(id) from @tblExistingComRcptXML     
       
       
@@ -1850,11 +1795,11 @@ END
 		where CostCenterID=95 and Name='ContractRentReceipt'      
 		SET @XML =   @RentRcptXML       
 	   
-		declare  @tblExistingRcs TABLE (ID int identity(1,1),DOCID INT)           
+		declare  @tblExistingRcs TABLE (ID int identity(1,1),DOCID bigint)           
 		insert into @tblExistingRcs     
 		select DOCID from  [REN_ContractDocMapping]  with(nolock)  
 		where contractid=@ContractID and DOCTYPE =5 AND ContractCCID = 95    
-		declare @totalPreviousRcts INT    
+		declare @totalPreviousRcts bigint    
 		select @totalPreviousRcts=COUNT(id) from @tblExistingRcs     
        
   CREATE TABLE #tblList(ID int identity(1,1),TRANSXML NVARCHAR(MAX) , DateXML NVARCHAR(MAX))           
@@ -1882,18 +1827,10 @@ END
         
    SELECT   @DDValue =  X.value ('@DD', 'Datetime' )            
    from @DateXML.nodes('/ChequeDocDate') as Data(X)      
-   
-   if(@incMontEnd=1)
-   BEGIN
-		if(month(@EndDate)=month(@DDValue) and  year(@EndDate)=year(@DDValue))	
-			 set @DDValue=@EndDate
-		else
-			 set @DDValue=  convert(float,dateadd(d,-1,dateadd(m,datediff(m,0,@DDValue)+1,0)))  
-   END
-   
+         
    Set @DocXml = convert(nvarchar(max), @AA) 
-   set @Prefix=''
-   EXEC [sp_GetDocPrefix] @DocXml,@DDValue,@RcptCCID,@Prefix   output
+        set @Prefix=''
+     EXEC [sp_GetDocPrefix] @DocXml,@ContractDate,@RcptCCID,@Prefix   output
      
    EXEC @return_value = [dbo].[spDOC_SetTempAccDocument]      
     @CostCenterID = @RcptCCID,      
@@ -1980,11 +1917,11 @@ END
   where CostCenterID=104 and Name='PurchasePInvoice'      
   SET @XML = @SIVXML    
          
-  declare  @tblExistingPIVXML TABLE (ID int identity(1,1),DOCID INT)           
+  declare  @tblExistingPIVXML TABLE (ID int identity(1,1),DOCID bigint)           
   insert into @tblExistingPIVXML     
   select DOCID from  [REN_ContractDocMapping] with(nolock)   
   where contractid=@ContractID and Doctype =4 AND ContractCCID = 104    
-  declare @totalPreviousPIVXML INT    
+  declare @totalPreviousPIVXML bigint    
   select @totalPreviousPIVXML=COUNT(id) from @tblExistingPIVXML     
    
    CREATE TABLE #tblListPIVTemp(ID int identity(1,1),TRANSXML NVARCHAR(MAX) ,Documents NVARCHAR(200),Recurxml NVARCHAR(MAX))            
@@ -2204,13 +2141,13 @@ END
 		SELECT  CONVERT(NVARCHAR(MAX),  X.query('DocumentXML')) ,  CONVERT(NVARCHAR(MAX),  X.query('ChequeDocDate')) ,  CONVERT(NVARCHAR(MAX),  X.query('AccountType')) ,  CONVERT(NVARCHAR(200),  X.query('Documents'))                  
 		from @XML.nodes('/PDPayment/ROWS') as Data(X)        
 
-		DECLARE  @tblExistingPDPayXML TABLE (ID int identity(1,1),DOCID INT)           
+		DECLARE  @tblExistingPDPayXML TABLE (ID int identity(1,1),DOCID bigint)           
 		INSERT INTO @tblExistingPDPayXML     
 		SELECT DOCID from  [REN_ContractDocMapping]  with(nolock)  
 		WHERE contractid=@ContractID and Doctype =2 AND ContractCCID = 104 
 		order by sno
 		   
-		DECLARE @totalPreviousPDPayXML INT    
+		DECLARE @totalPreviousPDPayXML bigint    
 		SELECT @totalPreviousPDPayXML=COUNT(id) from @tblExistingPDPayXML     
 
 		SELECT @CNT = COUNT(ID) FROM #tblListPDP      
@@ -2282,7 +2219,7 @@ END
 			SELECT   @TempDocIDValue =  X.value('@DocID', 'NVARCHAR(100)' )            
 			from @Documents.nodes('/Documents') as Data(X)      
 
-			if(@TempDocIDValue is not null and @TempDocIDValue<>'' and convert(INT,@TempDocIDValue)>0 and @TempDocIDValue= @DocIDValue)
+			if(@TempDocIDValue is not null and @TempDocIDValue<>'' and convert(bigint,@TempDocIDValue)>0 and @TempDocIDValue= @DocIDValue)
 			BEGIN
 
 				set @tempxml=@DocXml    
@@ -2380,11 +2317,11 @@ END
       
     SET @XML =   @ComRcptXML       
            
-    declare  @tblExistingComPayXML TABLE (ID int identity(1,1),DOCID INT)           
+    declare  @tblExistingComPayXML TABLE (ID int identity(1,1),DOCID bigint)           
     insert into @tblExistingComPayXML     
     select DOCID from  [REN_ContractDocMapping]  with(nolock)  
     where contractid=@ContractID and Doctype =3 AND ContractCCID = 104    
-    declare @totalPreviousComPayXML INT    
+    declare @totalPreviousComPayXML bigint    
    select @totalPreviousComPayXML=COUNT(id) from @tblExistingComPayXML     
           
           
@@ -2535,11 +2472,11 @@ END
  where CostCenterID=104 and Name='PurchaseBankPayment'      
  SET @XML =   @RentRcptXML       
        
- declare  @tblExistingPayRcs TABLE (ID int identity(1,1),DOCID INT)           
+ declare  @tblExistingPayRcs TABLE (ID int identity(1,1),DOCID bigint)           
  insert into @tblExistingPayRcs     
  select DOCID from  [REN_ContractDocMapping]  with(nolock)  
  where contractid=@ContractID and DOCTYPE =5 AND ContractCCID = 104    
- declare @totalPreviousPayRcts INT    
+ declare @totalPreviousPayRcts bigint    
  select @totalPreviousPayRcts=COUNT(id) from @tblExistingPayRcs     
        
   CREATE TABLE #tblPayList(ID int identity(1,1),TRANSXML NVARCHAR(MAX) , DateXML NVARCHAR(MAX))           
@@ -2572,7 +2509,7 @@ END
    Set @DocXml = convert(nvarchar(max), @AA)     
    
          set @Prefix=''
-     EXEC [sp_GetDocPrefix] @DocXml,@DDValue,@RcptCCID,@Prefix   output
+     EXEC [sp_GetDocPrefix] @DocXml,@ContractDate,@RcptCCID,@Prefix   output
    
    EXEC @return_value = [dbo].[spDOC_SetTempAccDocument]      
     @CostCenterID = @RcptCCID,      
@@ -2665,24 +2602,12 @@ END
       
    -------------------------- END POSTINGS -----------------------      
      
-    set @UpdateSql='update [REN_ContractExtended] SET '+@CustomFieldsQuery+' [ModifiedBy] ='''+ @UserName+''',
-	[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID='+convert(nvarchar,@ContractID)      
-	exec(@UpdateSql)      
-
-	set @UpdateSql='update COM_CCCCDATA SET '+@CustomCostCenterFieldsQuery+'[ModifiedBy] ='''+ @UserName+''',
-	[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID ='+convert(nvarchar,@ContractID) + ' AND CostCenterID = 95'       	  
-	exec(@UpdateSql)        
- 
- 
-     
-     
 	IF  (  @CostCenterID = 95 )
 	BEGIN
 		DECLARE @CCNODEIDCONT INT   
 
 		SELECT @CCNODEIDCONT = CCNODEID  ,@Dimesion = CCID FROM REN_CONTRACT  with(nolock)
 		WHERE CONTRACTID = @ContractID  
-		select @Dimesion
 		IF(@Dimesion IS NOT NULL AND @Dimesion <> '' AND  @Dimesion  > 50000)  
 		BEGIN  
 			DECLARE @CCMapSql nvarchar(max)    
@@ -2691,39 +2616,13 @@ END
 			SET CCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+'  WHERE NodeID = '+convert(nvarchar,@ContractID) + ' AND CostCenterID = 95'     
 			EXEC (@CCMapSql)
 			
-			set @CCMapSql=' UPDATE a    
-			SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+' 
-			from COM_DOCCCDATA a with(nolock) 
-			join ACC_DOCDETAILS b with(nolock) on a.AccDocDetailsID=b.AccDocDetailsID
-			where b.RefCCID=95 and b.RefNodeid='+convert(nvarchar,@ContractID)+ '
+			set @CCMapSql=' UPDATE COM_DOCCCDATA    
+			SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+'   
+			WHERE ACCDOCDETAILSID IN (SELECT ACCDOCDETAILSID  FROM ACC_DOCDETAILS  with(nolock) WHERE REFCCID = 95 AND REFNODEID = '+convert(nvarchar,@ContractID) + ' and DOCID > 0)  
+			OR INVDOCDETAILSID IN (SELECT INVDOCDETAILSID  FROM INV_DOCDETAILS  with(nolock) WHERE REFCCID = 95 AND REFNODEID =  '+convert(nvarchar,@ContractID)+ ' and DOCID > 0)'     
+			--select @CCMapSql  
+			EXEC (@CCMapSql) 
 			
-			UPDATE a    
-			SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+' 
-			from COM_DOCCCDATA a with(nolock) 
-			join INV_DOCDETAILS b with(nolock) on a.InvDocDetailsID=b.InvDocDetailsID
-			where b.RefCCID=95 and b.RefNodeid='+convert(nvarchar,@ContractID)  
-			EXEC (@CCMapSql)   
-			
-			set @CCMapSql=' UPDATE a    
-			SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+' 
-			from COM_DOCCCDATA_history a with(nolock) 
-			join ACC_DOCDETAILS b with(nolock) on a.AccDocDetailsID=b.AccDocDetailsID
-			where b.RefCCID=95 and b.RefNodeid='+convert(nvarchar,@ContractID)+ '
-			
-			UPDATE a    
-			SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+' 
-			from COM_DOCCCDATA_history a with(nolock) 
-			join INV_DOCDETAILS b with(nolock) on a.InvDocDetailsID=b.InvDocDetailsID
-			where b.RefCCID=95 and b.RefNodeid='+convert(nvarchar,@ContractID)  
-			EXEC (@CCMapSql)   
-			
-			set @CCMapSql=' UPDATE a
-			SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+'  
-			from COM_Billwise a with(nolock) 
-			join ACC_DOCDETAILS b with(nolock)  on a. DocNo=b.VoucherNo
-			where b.RefCCID=95 and b.RefNodeid='+convert(nvarchar,@ContractID) 
-			EXEC (@CCMapSql)   
-			 
 			Exec [spDOC_SetLinkDimension]
 					@InvDocDetailsID=@ContractID, 
 					@Costcenterid=95,         
@@ -2732,30 +2631,6 @@ END
 					@UserID=@UserID,    
 					@LangID=@LangID    
 			
-		END 
-		
-		
-		Exec @Selectedlft=[dbo].[spREN_GetDimensionNodeID]
-				 @NodeID  =@UnitID,      
-				 @CostcenterID = 93,   
-				 @UserID =@UserID,      
-				 @LangID =@LangID,
-				 @Dimesion=@lft output
-	 
-		Exec @Selectedrgt=[dbo].[spREN_GetDimensionNodeID]
-				 @NodeID  =@TenantID,      
-				 @CostcenterID = 94,   
-				 @UserID =@UserID,      
-				 @LangID =@LangID,	
-				 @Dimesion=@rgt output 
-				 
-		if not exists(select * from COM_CostCenterCostCenterMap a WITH(NOLOCK)
-		 where ParentCostCenterID=@rgt and ParentNodeID=@Selectedrgt
-		 and CostCenterID=@lft and NodeID=@Selectedlft)
-		BEGIN 
-			INSERT INTO  COM_CostCenterCostCenterMap (ParentCostCenterID,ParentNodeID,CostCenterID,
-			NodeID,GUID,CreatedBy,CreatedDate)
-			values( @rgt ,@Selectedrgt,@lft,@Selectedlft,newid(),@UserName,@Dt)
 		END 
 		
 		if(@WID>0)
@@ -2786,7 +2661,6 @@ END
 				FROM ACC_DOCDETAILS a WITH(NOLOCK)
 				join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
 				WHERE CONTRACTID = @ContractID AND ISACCDOC = 1  and RefNodeID = @ContractID
-				and not (StatusID in(369,429) and DocumentType in(14,19))
 			END	
 		END	
 		
@@ -2798,7 +2672,7 @@ END
 			set ContractID=@ContractID
 			where UnitID=@UnitID
 
-			declare @ChildUnits table(UnitID INT)  
+			declare @ChildUnits table(UnitID BIGINT)  
 			insert into @ChildUnits  
 			exec SPSplitString @MultiUnitIds,','
 
@@ -2827,7 +2701,7 @@ END
 			if(@PrefValue is not null and @PrefValue<>'')
 			begin
 				begin try
-					select @Dimesion=convert(INT,@PrefValue)
+					select @Dimesion=convert(BIGINT,@PrefValue)
 				end try
 				begin catch
 					set @Dimesion=0
@@ -2841,32 +2715,27 @@ END
 				    
 				set @CCMapSql=' SELECT @CCNODEIDCONT = NODEID FROM ' + @TabName +'  with(nolock) where   Name = N'''+@MultiUnitName+''''  
 			     				 
-				EXEC sp_executesql @CCMapSql,N'@CCNODEIDCONT INT OUTPUT', @CCNODEIDCONT OUTPUT  
+				EXEC sp_executesql @CCMapSql,N'@CCNODEIDCONT BIGINT OUTPUT', @CCNODEIDCONT OUTPUT  
      
-				set @CCMapSql=' UPDATE a    
-				SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+' 
-				from COM_DOCCCDATA a with(nolock) 
-				join ACC_DOCDETAILS b with(nolock) on a.AccDocDetailsID=b.AccDocDetailsID
-				where a.DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'=1 and b.RefCCID=95 and b.RefNodeid='+convert(nvarchar,@ContractID)+ '
-				
-				UPDATE a    
-				SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+' 
-				from COM_DOCCCDATA a with(nolock) 
-				join INV_DOCDETAILS b with(nolock) on a.InvDocDetailsID=b.InvDocDetailsID
-				where  a.DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'=1 and b.RefCCID=95 and b.RefNodeid='+convert(nvarchar,@ContractID)  
-				EXEC (@CCMapSql)   
-				
-				set @CCMapSql=' UPDATE a
-				SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+'  
-				from COM_Billwise a with(nolock) 
-				join ACC_DOCDETAILS b with(nolock)  on a. DocNo=b.VoucherNo
-				where  a.DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'=1 and b.RefCCID=95 and b.RefNodeid='+convert(nvarchar,@ContractID)
-				
+				set @CCMapSql=' UPDATE COM_DOCCCDATA    
+				SET DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@CCNODEIDCONT)+'   
+				WHERE DCCCNID'+convert(nvarchar,(@Dimesion-50000))+'=1 and ( ACCDOCDETAILSID IN (SELECT ACCDOCDETAILSID  FROM ACC_DOCDETAILS with(nolock) WHERE REFCCID = 95 AND REFNODEID = '+convert(nvarchar,@ContractID) + ' and DOCID > 0)  
+				OR INVDOCDETAILSID IN (SELECT INVDOCDETAILSID  FROM INV_DOCDETAILS with(nolock) WHERE REFCCID = 95 AND REFNODEID =  '+convert(nvarchar,@ContractID)+ ' and DOCID > 0))'     
 				EXEC (@CCMapSql)    
-				
 			END 
 		END 
 	END
+
+	set @UpdateSql='update [REN_ContractExtended] SET '+@CustomFieldsQuery+' [ModifiedBy] ='''+ @UserName+''',
+	[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID='+convert(nvarchar,@ContractID)      
+
+	exec(@UpdateSql)      
+
+	set @UpdateSql='update COM_CCCCDATA SET '+@CustomCostCenterFieldsQuery+'[ModifiedBy] ='''+ @UserName+''',
+	[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID ='+convert(nvarchar,@ContractID) + ' AND CostCenterID = 95'       
+	  
+	exec(@UpdateSql)        
+ 
 	--Insert Notifications    
 	DECLARE @ActionType INT    
 	IF @AUDITSTATUS='ADD'    
@@ -2903,12 +2772,9 @@ BEGIN CATCH
 	if(@return_value is null or  @return_value<>-999)       
 	BEGIN            
 		IF ERROR_NUMBER()=50000        
-		BEGIN 
-			IF ISNUMERIC(ERROR_MESSAGE())<>1			
-				SELECT ERROR_MESSAGE() ErrorMessage,ERROR_NUMBER() ErrorNumber
-			ELSE  
-				SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)         
-				WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID        
+		BEGIN        
+			SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)         
+			WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID        
 		END        
 		ELSE IF ERROR_NUMBER()=547        
 		BEGIN        

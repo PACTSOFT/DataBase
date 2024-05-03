@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetBillwiseDetails]
-	@AccountID [int] = 0,
+	@AccountID [bigint] = 0,
 	@AccXml [nvarchar](max),
 	@IsCredit [bit],
 	@VoucherNo [nvarchar](500),
@@ -11,9 +11,8 @@ CREATE PROCEDURE [dbo].[spDOC_GetBillwiseDetails]
 	@LocationWhere [nvarchar](max),
 	@DivisionWhere [nvarchar](max),
 	@DimensionWhere [nvarchar](max),
-	@DimWhere [nvarchar](max),
 	@Docdate [datetime],
-	@CostCenterID [int],
+	@CostCenterID [bigint],
 	@IsInv [bit],
 	@LinkedVchrs [nvarchar](max),
 	@getAmt [bit],
@@ -61,7 +60,7 @@ BEGIN TRY
 		IF (@AccountID=0 and @AccXml is not null and @AccXml<>'')
 		BEGIN
 			select @AccountID=AccountID,@IsCredit=X.value('@Iscr','BIT'),@DocSeqNo=X.value('@DocSeqNo','int') from ACC_Accounts a WITH(NOLOCK)
-			join @XML.nodes('/XML/Row') as Data(X) on X.value('@AccountID','INT')=a.AccountID
+			join @XML.nodes('/XML/Row') as Data(X) on X.value('@AccountID','BIGINT')=a.AccountID
 			where IsBillwise=1 
 			
 			if(@AccountID=0)
@@ -105,14 +104,12 @@ BEGIN TRY
 			 set @PrefValue=''
 			select @PrefValue= isnull(Value,'') from ADM_GlobalPreferences with(nolock) where Name='Maintain Dimensionwise Bills'  
 		    
-			if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+			if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 			begin
-				  set @PrefValue=convert(INT,@PrefValue)-50000  						 
+				  set @PrefValue=convert(bigint,@PrefValue)-50000  						 
 				  set @Where=@Where+' and dcCCNID'+@PrefValue+' in ('+@DimensionWhere+')'
 			end  			
 		end
-		
-		set @Where=@Where+@DimWhere
 		
 		if exists(select [PrefValue] from [COM_DOCUMENTPREFERENCES] WITH(NOLOCK)
 			where [CostCenterID]=@CostCenterID and [PrefName]='UnappinBills' and [PrefValue]='true')
@@ -277,8 +274,6 @@ BEGIN TRY
 						SELECT 1 NonAc,0 VatAdvance,a.StatusID,a.CostCenterID CostCenterID, a.DocAbbr,a.DocPrefix,a.Docnumber,  a.VoucherNO, abs(sum('+@PrefValue+')) Amount,abs(sum('+@PrefValue+')) AmountFC,1 DocSeqNo,CONVERT(DATETIME,a.DocDate) DocDate ,CONVERT(DATETIME,a.DueDate) DocDueDate,
 						ISNULL((SELECT abs(SUM(SQ.Amount)) FROM COM_BillWiseNonAcc SQ with(nolock) WHERE  SQ.RefDocNo=a.voucherno AND not (SQ.DocNo in('''+@VoucherNo+''') )),0) 
 						Paid,'
-						if(@IsFc=1)
-							set @Sql=@Sql+'ISNULL((SELECT abs(SUM(SQ.Amount)) FROM COM_BillWiseNonAcc SQ with(nolock) WHERE  SQ.RefDocNo=a.voucherno AND not (SQ.DocNo in('''+@VoucherNo+''') )),0) Paidfc,'
 						if(@inclfrmdoc=1)
 							set @Sql=@Sql+''''','
 							
@@ -402,8 +397,6 @@ BEGIN TRY
 						SELECT 1 NonAc,0 VatAdvance,a.StatusID,a.CostCenterID CostCenterID, a.DocAbbr,a.DocPrefix,a.Docnumber,  a.VoucherNO, abs(sum('+@PrefValue+')) Amount,abs(sum('+@PrefValue+')) AmountFC,1 DocSeqNo,CONVERT(DATETIME,a.DocDate) DocDate ,CONVERT(DATETIME,a.DueDate) DocDueDate,
 						ISNULL((SELECT abs(SUM(SQ.Amount)) FROM COM_BillWiseNonAcc SQ with(nolock) WHERE  SQ.RefDocNo=a.voucherno ),0) 
 						Paid,'
-						if(@IsFc=1)
-							set @Sql=@Sql+'ISNULL((SELECT abs(SUM(SQ.Amount)) FROM COM_BillWiseNonAcc SQ with(nolock) WHERE  SQ.RefDocNo=a.voucherno ),0) Paidfc,'
 						if(@inclfrmdoc=1)
 							set @Sql=@Sql+''''','
 							
@@ -503,8 +496,6 @@ BEGIN TRY
 						SELECT 1 NonAc,0 VatAdvance,a.StatusID,a.CostCenterID CostCenterID, a.DocAbbr,a.DocPrefix,a.Docnumber,  a.VoucherNO, abs(sum('+@PrefValue+')) Amount,abs(sum('+@PrefValue+')) AmountFC,1 DocSeqNo,CONVERT(DATETIME,a.DocDate) DocDate ,CONVERT(DATETIME,a.DueDate) DocDueDate,
 						ISNULL((SELECT abs(SUM(SQ.Amount)) FROM COM_BillWiseNonAcc SQ with(nolock) WHERE  SQ.RefDocNo=a.voucherno ),0) 
 						Paid,'
-						if(@IsFc=1)
-							set @Sql=@Sql+'ISNULL((SELECT abs(SUM(SQ.Amount)) FROM COM_BillWiseNonAcc SQ with(nolock) WHERE  SQ.RefDocNo=a.voucherno ),0) paidfc,'
 						if(@inclfrmdoc=1)
 							set @Sql=@Sql+''''','
 							
@@ -625,8 +616,6 @@ BEGIN TRY
 						SELECT 1 NonAc,0 VatAdvance,a.StatusID,a.CostCenterID CostCenterID, a.DocAbbr,a.DocPrefix,a.Docnumber,  a.VoucherNO, abs(sum('+@PrefValue+')) Amount,abs(sum('+@PrefValue+')) AmountFC,1 DocSeqNo,CONVERT(DATETIME,a.DocDate) DocDate ,CONVERT(DATETIME,a.DueDate) DocDueDate,
 						ISNULL((SELECT abs(SUM(SQ.Amount)) FROM COM_BillWiseNonAcc SQ with(nolock) WHERE  SQ.RefDocNo=a.voucherno ),0) 
 						Paid,'
-						if(@IsFc=1)
-							set @Sql=@Sql+'ISNULL((SELECT abs(SUM(SQ.Amount)) FROM COM_BillWiseNonAcc SQ with(nolock) WHERE  SQ.RefDocNo=a.voucherno ),0) paidfc,'
 						if(@inclfrmdoc=1)
 							set @Sql=@Sql+''''','
 							
@@ -664,7 +653,7 @@ BEGIN TRY
 			END
 		END
 		
-		SELECT a.FeatureID CostCenterID,Name UserColumnName,Name,'DIM' UserColumnType, g.ColumnWidth, g.ColumnOrder, 'False' IsEditable                        
+		SELECT a.FeatureID CostCenterID,Name UserColumnName,Name,'TEXT' UserColumnType, g.ColumnWidth, g.ColumnOrder, 'False' IsEditable                        
 		FROM ADM_Features a WITH(NOLOCK)
 		join ADM_GridViewColumns g WITH(NOLOCK) on a.FeatureID=g.CostCenterColID
 		join adm_gridview gr WITH(NOLOCK) on gr.GridViewID=g.GridViewID and gr.costcenterid=99
@@ -674,13 +663,13 @@ BEGIN TRY
 		from adm_costcenterdef a WITH(NOLOCK) 
 		join ADM_GridViewColumns g WITH(NOLOCK) on a.CostCenterColID=g.CostCenterColID
 		join adm_gridview gr WITH(NOLOCK) on gr.GridViewID=g.GridViewID and gr.costcenterid=99  
-		left join COM_LanguageResources lr WITH(NOLOCK) on  lr.ResourceID= a.ResourceID and lr.LanguageID=1                    
+		left join COM_LanguageResources lr WITH(NOLOCK) on  lr.ResourceID= a.ResourceID and lr.LanguageID=@LangID                    
 		where a.CostCenterID=99                     
 		order by g.ColumnOrder                         		
 		if(@AccXml is not null and @AccXml<>'')
 		BEGIN
 			select distinct AccountID,AccountName,@AccountID SelectedAcc,@DocSeqNo SelSeq from ACC_Accounts a WITH(NOLOCK)
-			join @XML.nodes('/XML/Row') as Data(X) on X.value('@AccountID','INT')=a.AccountID
+			join @XML.nodes('/XML/Row') as Data(X) on X.value('@AccountID','BIGINT')=a.AccountID
 			where IsBillwise=1
 		END
 		ELSE if(@getAmt=1)

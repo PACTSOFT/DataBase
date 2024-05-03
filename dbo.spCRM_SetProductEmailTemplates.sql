@@ -9,7 +9,7 @@ CREATE PROCEDURE [dbo].[spCRM_SetProductEmailTemplates]
 	@FilterXML [nvarchar](max) = null,
 	@CompanyGUID [nvarchar](100),
 	@UserName [nvarchar](100),
-	@UserID [int],
+	@UserID [bigint],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -18,30 +18,41 @@ BEGIN TRANSACTION
 BEGIN TRY 
 SET NOCOUNT ON
 
-	--SP Required Parameters Check
-	IF(@CCID=0)
-	BEGIN
-		RAISERROR('-100',16,1)
-	END
+DECLARE @HasAccess bit
 
-	DECLARE @NotifGUID NVARCHAR(50),@Dt FLOAT
-	SET @Dt=CONVERT(FLOAT,GETDATE())
-	SET @NotifGUID=newid()	
+		--SP Required Parameters Check
+		IF(@CCID=0)
+		BEGIN
+			RAISERROR('-100',16,1)
+		END
 	
-	CREATE TABLE #TBL(ID INT IDENTITY(1,1),TEMPLATEID INT)
-	INSERT INTO  #TBL
-	EXEC SPSPLITSTRING @TemplatesID ,','
-	
-	INSERT INTO COM_SchEvents(CostCenterID,NodeID,TemplateID,StatusID,EventTime,ScheduleID,StartFlag,StartDate,EndDate,CompanyGUID,GUID,
-	CreatedBy,CreatedDate,SUBCostCenterID,SUBNodeID,FilterXML)
-	SELECT @CCID,@CCNODEID,N.TemplateID,1,@Dt,0,0,@Dt,@Dt,@CompanyGUID,@NotifGUID,@UserName,@Dt,0,0,@FilterXML
-	FROM COM_NotifTemplate N WITH(NOLOCK)
-	JOIN #TBL T WITH(NOLOCK) ON N.TemplateID=T.TEMPLATEID
-	WHERE N.TemplateType=1 AND CostCenterID=@CCID AND StatusID=383
-	AND N.TemplateID IN (SELECT NotificationID FROM COM_NotifTemplateUserMap WITH(NOLOCK)
-	WHERE UserID=@UserID OR RoleID=@RoleID OR GroupID IN (select GID from COM_Groups WITH(nolock) where UserID=@UserID or RoleID=@RoleID))
-	
-	DROP TABLE #TBL
+		DECLARE @NotifGUID NVARCHAR(50),@Dt FLOAT
+		SET @Dt=CONVERT(FLOAT,GETDATE())
+		SET @NotifGUID=newid()	
+		
+		CREATE TABLE #TBL(ID INT IDENTITY(1,1),TEMPLATEID INT)
+		INSERT INTO  #TBL
+		EXEC SPSPLITSTRING @TemplatesID ,','
+		
+		DECLARE @I INT,@COUNT INT,@TID BIGINT
+		set @I=1
+		select @COUNT=count(*) from #TBL
+
+		WHILE @I<=@COUNT
+		BEGIN
+			SELECT @TID=TEMPLATEID FROM #TBL WHERE ID=@I
+				INSERT INTO COM_SchEvents(CostCenterID,NodeID,TemplateID,StatusID,EventTime,ScheduleID,StartFlag,StartDate,EndDate,CompanyGUID,GUID,
+				CreatedBy,CreatedDate,SUBCostCenterID,SUBNodeID,FilterXML)
+				SELECT @CCID,@CCNODEID,N.TemplateID,1,@Dt,0,0,@Dt,@Dt,@CompanyGUID,@NotifGUID,@UserName,@Dt,0,0,@FilterXML
+				FROM COM_NotifTemplate N WITH(NOLOCK)
+				WHERE N.TemplateType=1 AND N.TemplateID=@TID AND CostCenterID=@CCID AND StatusID=383
+				AND N.TemplateID IN (SELECT NotificationID FROM COM_NotifTemplateUserMap WITH(NOLOCK)
+				WHERE UserID=@UserID OR RoleID=@RoleID OR GroupID IN (select GID from COM_Groups WITH(nolock) where UserID=@UserID or RoleID=@RoleID))
+		
+			SET @I=@I+1
+		END
+		
+	 	DROP TABLE #TBL
 
 COMMIT TRANSACTION  
 

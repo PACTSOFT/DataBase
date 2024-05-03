@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_Validate]
 	@InvDocXML [nvarchar](max),
-	@DocID [int],
+	@DocID [bigint],
 	@DocDate [datetime],
 	@IsDel [bit],
 	@ActivityXML [nvarchar](max),
@@ -18,12 +18,12 @@ BEGIN TRANSACTION
 BEGIN TRY             
 SET NOCOUNT ON; 
 
-	declare @xml xml,@TRANSXML xml,@I int,@Cnt int,@InvDocDetailsID INT,@Dt float,@LinkedID INT,@TotLinkedQty float,@ToTValue float
+	declare @xml xml,@TRANSXML xml,@I int,@Cnt int,@InvDocDetailsID bigint,@Dt float,@LinkedID bigint,@TotLinkedQty float,@ToTValue float
 	declare @tblList TABLE(ID int identity(1,1),TRANSXML NVARCHAR(MAX))
 	declare @tab TABLE(ID int identity(1,1),DocDate float,qty float)
-	declare @ProductID INT,@Qty FLOAT,@prevDate FLOAT, @prevQty  FLOAT ,@DetailIDs nvarchar(max),@iI INT,@cCnt   INT,@TotQty FLOAT
-	declare @WHERE NVARCHAR(MAX),@PrefValue nvarchar(50),@NID INT,@sql NVARCHAR(MAX),@HoldRes float,@HoldResCancelledDocs nvarchar(max)
-	declare @loc int,@div int,@dim int,@oldProdID INT,@isQtyUsed bit,@VoucherType int,@HRIssue nvarchar(50),@ExpRecd nvarchar(50)
+	declare @ProductID bigint,@Qty FLOAT,@prevDate FLOAT, @prevQty  FLOAT ,@DetailIDs nvarchar(max),@iI bigint,@cCnt   bigint,@TotQty FLOAT
+	declare @WHERE NVARCHAR(MAX),@PrefValue nvarchar(50),@NID bigint,@sql NVARCHAR(MAX),@HoldRes float,@HoldResCancelledDocs nvarchar(max)
+	declare @loc int,@div int,@dim int,@oldProdID BIGINT,@isQtyUsed bit,@VoucherType int,@HRIssue nvarchar(50),@ExpRecd nvarchar(50)
 
 
 	select @HRIssue=Value from ADM_GlobalPreferences with(nolock) where Name='ConsiderHoldAndReserveAsIssued'
@@ -63,19 +63,19 @@ SET NOCOUNT ON;
 	set @PrefValue=''      
 	select @PrefValue= isnull(Value,'') from ADM_GlobalPreferences with(nolock) where Name='Maintain Dimensionwise stock'        
 
-	if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)        
+	if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)        
 	begin     
 	
-		if(convert(INT,@PrefValue)=50001)
+		if(convert(bigint,@PrefValue)=50001)
 			set @div=1
-		else if(convert(INT,@PrefValue)=50002)
+		else if(convert(bigint,@PrefValue)=50002)
 			set @loc=1
-		else if(convert(INT,@PrefValue)>50002)			
-			set @dim=convert(INT,@PrefValue)-50000 
+		else if(convert(bigint,@PrefValue)>50002)			
+			set @dim=convert(bigint,@PrefValue)-50000 
 			       
 	end        
            
-		DECLARE @TblDeleteRows AS Table(IDent int identity(1,1),ID INT,DynamicType INT)
+		DECLARE @TblDeleteRows AS Table(IDent int identity(1,1),ID BIGINT,DynamicType INT)
 		
 		if(@IsDel=1)
 		BEGIN
@@ -89,7 +89,7 @@ SET NOCOUNT ON;
 			SELECT @DetailIDs=X.value('@DetailIds','nvarchar(max)')   
 			from @XML.nodes('/XML') as Data(X)    
 	    
-			declare @tblIDsList table(Id INT)  
+			declare @tblIDsList table(Id bigint)  
 			insert into @tblIDsList  
 			exec SPSplitString @DetailIDs,'~'
 
@@ -101,7 +101,7 @@ SET NOCOUNT ON;
 			INSERT INTO @TblDeleteRows(ID,DynamicType)
 			SELECT InvDocDetailsID,1 FROM INV_DocDetails WITH(NOLOCK)    
 			where DynamicInvDocDetailsID is not null and VoucherType=1 and DynamicInvDocDetailsID in(    
-			select InvDocDetailsID FROM INV_DocDetails WITH(NOLOCK)      
+			select InvDocDetailsID FROM INV_DocDetails      
 			WHERE DocID =@DocID AND InvDocDetailsID NOT IN (SELECT ID from @tblIDsList))
 			
 		END
@@ -118,21 +118,21 @@ SET NOCOUNT ON;
 			set @WHERE=''
 			if(@loc=1)
 			BEGIN
-				select @NID=dcCCNID2 from COM_DocCCData WITH(NOLOCK) where InvDocDetailsID=@InvDocDetailsID        
+				select @NID=dcCCNID2 from COM_DocCCData where InvDocDetailsID=@InvDocDetailsID        
 				set @WHERE =' and dcCCNID2='+CONVERT(nvarchar,@NID)        
 			END
 			
 			if(@div=1)
 			BEGIN
-				select @NID=dcCCNID1 from COM_DocCCData WITH(NOLOCK) where InvDocDetailsID=@InvDocDetailsID        
+				select @NID=dcCCNID1 from COM_DocCCData where InvDocDetailsID=@InvDocDetailsID        
 				set @WHERE =' and dcCCNID1='+CONVERT(nvarchar,@NID)        
 			END
 			
 			if(@dim>0)
 			BEGIN
-				set @sql='select @NID=dcCCNID'+CONVERT(nvarchar,@dim) +' from COM_DocCCData WITH(NOLOCK) where InvDocDetailsID='+CONVERT(nvarchar,@InvDocDetailsID)
+				set @sql='select @NID=dcCCNID'+CONVERT(nvarchar,@dim) +' from COM_DocCCData where InvDocDetailsID='+CONVERT(nvarchar,@InvDocDetailsID)
 			
-				EXEC sp_executesql @sql,N'@NID INT OUTPUT',@NID output		 
+				EXEC sp_executesql @sql,N'@NID bigint OUTPUT',@NID output		 
 				set @WHERE =@WHERE+' and dcCCNID'+CONVERT(nvarchar,@dim)+'='+CONVERT(nvarchar,@NID)        
 			END
 
@@ -212,7 +212,7 @@ SET NOCOUNT ON;
 			
 			EXEC sp_executesql @SQL, N'@TotQty float OUTPUT', @TotQty OUTPUT   
 			
-			if(@TotQty<-0.01)
+			if(@TotQty<0)
 					RAISERROR('-407',16,1)
 
 			WHILE(@iI<=@cCnt)        
@@ -270,7 +270,7 @@ SET NOCOUNT ON;
 				END
 				
 				set @TotQty=@TotQty+@prevQty
-				if(@TotQty<-0.01)
+				if(@TotQty<0)
 					RAISERROR('-407',16,1)
 
 				SET @iI=@iI+1
@@ -296,7 +296,7 @@ BEGIN
 	
 	set @VoucherType=0
 	
-    SELECT @InvDocDetailsID=X.value('@DocDetailsID','INT'),@ProductID=X.value('@ProductID','INT')    
+    SELECT @InvDocDetailsID=X.value('@DocDetailsID','BIGINT'),@ProductID=X.value('@ProductID','bigint')    
 	 ,@Qty=X.value('@UOMConvertedQty','FLOAT') from @TRANSXML.nodes('/Transactions') as Data(X)      
 	 
 	if(@docType=30 or @docType=5)
@@ -316,21 +316,21 @@ BEGIN
 				set @WHERE=''
 				if(@loc=1)
 				BEGIN
-					select @NID=dcCCNID2 from COM_DocCCData WITH(NOLOCK) where InvDocDetailsID=@InvDocDetailsID        
+					select @NID=dcCCNID2 from COM_DocCCData where InvDocDetailsID=@InvDocDetailsID        
 					set @WHERE =' and dcCCNID2='+CONVERT(nvarchar,@NID)        
 				END
 				
 				if(@div=1)
 				BEGIN
-					select @NID=dcCCNID1 from COM_DocCCData WITH(NOLOCK) where InvDocDetailsID=@InvDocDetailsID        
+					select @NID=dcCCNID1 from COM_DocCCData where InvDocDetailsID=@InvDocDetailsID        
 					set @WHERE =' and dcCCNID1='+CONVERT(nvarchar,@NID)        
 				END
 				
 				if(@dim>0)
 				BEGIN
-					set @sql='select @NID=dcCCNID'+CONVERT(NVARCHAR,@dim )+' from COM_DocCCData WITH(NOLOCK) where InvDocDetailsID='+CONVERT(nvarchar,@InvDocDetailsID)
+					set @sql='select @NID=dcCCNID'+CONVERT(NVARCHAR,@dim )+' from COM_DocCCData where InvDocDetailsID='+CONVERT(nvarchar,@InvDocDetailsID)
 				
-					EXEC sp_executesql @sql,N'@NID INT OUTPUT',@NID output		 
+					EXEC sp_executesql @sql,N'@NID bigint OUTPUT',@NID output		 
 					set @WHERE =@WHERE+' and dcCCNID'+CONVERT(NVARCHAR,@dim)+'='+CONVERT(nvarchar,@NID)        
 				END
 
@@ -381,7 +381,7 @@ BEGIN
 				
 				EXEC sp_executesql @SQL, N'@TotQty float OUTPUT', @TotQty OUTPUT   
 				
-				if(@TotQty<-0.01)
+				if(@TotQty<0)
 						RAISERROR('-407',16,1)
 
 				WHILE(@iI<=@cCnt)        
@@ -424,7 +424,7 @@ BEGIN
 					END	
 					
 					set @TotQty=@TotQty+@prevQty
-					if(@TotQty<-0.01)
+					if(@TotQty<0)
 						RAISERROR('-407',16,1)
 
 					SET @iI=@iI+1
@@ -435,21 +435,21 @@ BEGIN
 			set @WHERE=''
 			if(@loc=1)
 			BEGIN
-				select @NID=dcCCNID2 from COM_DocCCData WITH(NOLOCK) where InvDocDetailsID=@InvDocDetailsID        
+				select @NID=dcCCNID2 from COM_DocCCData where InvDocDetailsID=@InvDocDetailsID        
 				set @WHERE =' and dcCCNID2='+CONVERT(nvarchar,@NID)        
 			END
 			
 			if(@div=1)
 			BEGIN
-				select @NID=dcCCNID1 from COM_DocCCData WITH(NOLOCK) where InvDocDetailsID=@InvDocDetailsID        
+				select @NID=dcCCNID1 from COM_DocCCData where InvDocDetailsID=@InvDocDetailsID        
 				set @WHERE =' and dcCCNID1='+CONVERT(nvarchar,@NID)        
 			END
 			
 			if(@dim>0)
 			BEGIN
-				set @sql='select @NID=dcCCNID'+CONVERT(nvarchar,@dim) +' from COM_DocCCData WITH(NOLOCK) where InvDocDetailsID='+CONVERT(nvarchar,@InvDocDetailsID)
+				set @sql='select @NID=dcCCNID'+CONVERT(nvarchar,@dim) +' from COM_DocCCData where InvDocDetailsID='+CONVERT(nvarchar,@InvDocDetailsID)
 			
-				EXEC sp_executesql @sql,N'@NID INT OUTPUT',@NID output		 
+				EXEC sp_executesql @sql,N'@NID bigint OUTPUT',@NID output		 
 				set @WHERE =@WHERE+' and dcCCNID'+CONVERT(nvarchar,@dim)+'='+CONVERT(nvarchar,@NID)        
 			END
 			
@@ -488,7 +488,7 @@ BEGIN
   
 				EXEC sp_executesql @SQL, N'@TotQty float OUTPUT', @TotQty OUTPUT   
 
-				if(@TotQty<-0.01)
+				if(@TotQty<0)
 					RAISERROR('-407',16,1)
 			END
 			ELSE
@@ -584,8 +584,7 @@ BEGIN
 					END		
 					
 					set @TotQty=@TotQty+@prevQty
-					
-					if(@TotQty<-0.01)
+					if(@TotQty<0)
 						RAISERROR('-407',16,1)
 
 					SET @iI=@iI+1
@@ -624,5 +623,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION          
 SET NOCOUNT OFF            
 RETURN -999             
-END CATCH
+END CATCH    
 GO

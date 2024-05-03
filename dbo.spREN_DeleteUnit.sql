@@ -13,7 +13,7 @@ BEGIN TRANSACTION
 BEGIN TRY    
 SET NOCOUNT ON;    
   
-	DECLARE @HasAccess bit,@lft bigint,@rgt bigint,@Width bigint,@UserName NVARCHAR(64)  
+	DECLARE @HasAccess bit,@lft bigint,@rgt bigint,@Width bigint  
 
 	--SP Required Parameters Check  
 	if(@UnitID=0)  
@@ -76,44 +76,29 @@ SET NOCOUNT ON;
 		end  
 		set @i=@i+1  
 	end  
-	
-	SELECT @UserName=USERNAME FROM ADM_USERS WITH(NOLOCK) WHERE UserID=@UserID
-	
-    select @i=1,@cnt=count(*) from @tempUnit
-	while @i<=@cnt
-	begin
-		select @CCNodeID=UNITID from @tempUnit where id=@i
-		
-		--INSERT INTO HISTROY   
-		EXEC [spCOM_SaveHistory]  
-			@CostCenterID =93,    
-			@NodeID =@CCNodeID,
-			@HistoryStatus ='Deleted',
-			@UserName=@UserName
-		
-		set @i=@i+1
-	end
+  
+    INSERT INTO [REN_UnitsHistory]
+	([UnitID],[PropertyID],[Code],[Name],[Status],[CCID],[NodeID],[RentableArea],[BuildUpArea],[FloorLookUpID],[ViewLookUpID]
+	,[NoOfBathrooms],[NoOfParkings],[ElectricityCode],[ElectricityKW],[Rent],[RentTypeID],[DiscountPercentage],[DiscountAmount]
+	,[AnnualRent],[MonthlyRent],[RentPerSQFT],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]
+	,[ModifiedBy],[ModifiedDate],[TermsConditions],[SalesmanID],[AccountantID],[LandlordID],[UnitStatus],[RentalIncomeAccountID],[RentalReceivableAccountID]
+	,[AdvanceRentAccountID],[BankAccount],[BankLoanAccount],[CCNodeID],[LinkCCID],[RentalAccount],[RentPayableAccount],[AdvanceRentPaid]
+	,[LocationID],[BasedOn],[ContractID],[PenaltyAccountID],[AdvanceReceivableAccountID],[HistoryStatus])
+	select [UnitID],[PropertyID],[Code],[Name],[Status],[CCID],[NodeID],[RentableArea],[BuildUpArea],[FloorLookUpID],[ViewLookUpID]
+	,[NoOfBathrooms],[NoOfParkings],[ElectricityCode],[ElectricityKW],[Rent],[RentTypeID],[DiscountPercentage],[DiscountAmount]
+	,[AnnualRent],[MonthlyRent],[RentPerSQFT],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]
+	,[ModifiedBy],[ModifiedDate],[TermsConditions],[SalesmanID],[AccountantID],[LandlordID],[UnitStatus],[RentalIncomeAccountID],[RentalReceivableAccountID]
+	,[AdvanceRentAccountID],[BankAccount],[BankLoanAccount],[CCNodeID],[LinkCCID],[RentalAccount],[RentPayableAccount],[AdvanceRentPaid]
+	,[LocationID],[BasedOn],[ContractID],[PenaltyAccountID],[AdvanceReceivableAccountID],'Deleted'
+	from ren_units with(nolock)  WHERE lft >= @lft AND rgt <= @rgt  
 
+	-- --Insert into Units history  Extended  
+	--insert into REN_UnitsExtendedHistory  
+	--select *,'Deleted' from REN_UnitsExtended WHERE unitid in
+	-- (select UnitID REN_UNITS WHERE lft >= @lft AND rgt <= @rgt  )
 
-	delete from REN_UnitsExtended where UNITID IN (select UNITID from @tempUnit) 
-	delete from com_ccccdata where costcenterid=93 and NodeID IN (select UNITID from @tempUnit)  
-	
-	delete from REN_Particulars where PropertyID in   
-	(SELECT PropertyID FROM REN_UNITS WITH(NOLOCK) WHERE UNITID IN (select UNITID from @tempUnit)) and UnitID IN (select UNITID from @tempUnit)
-	
-	delete FROM COM_Notes  
-	WHERE FeatureID = 93 AND FeaturePK IN (select UNITID from @tempUnit) 
-	
-	delete FROM COM_Files 
-	WHERE FeatureID = 93 AND FeaturePK IN (select UNITID from @tempUnit) 
-	
-	DELETE FROM Ren_UnitRate 
-	WHERE UnitID IN (select UNITID from @tempUnit) 
-	
-	--Delete From CRM_Cases where CASEID=@CASEID  
-	Delete from com_docbridge WHERE CostCenterID = 93 AND NodeID IN (select UNITID from @tempUnit)
-   
-   	Delete from COM_HistoryDetails WHERE CostCenterID = 93 AND NodeID IN (select UNITID from @tempUnit) 
+	delete from REN_UnitsExtended where UNITID IN (SELECT UNITID  FROM REN_UNITS with(nolock) WHERE lft >= @lft AND rgt <= @rgt)  
+	delete from com_ccccdata where costcenterid=93 and NodeID IN (SELECT UNITID  FROM REN_UNITS with(nolock) WHERE lft >= @lft AND rgt <= @rgt)  
 	
 	--Delete from main table  
 	DELETE FROM REN_UNITS WHERE lft >= @lft AND rgt <= @rgt  
@@ -121,7 +106,15 @@ SET NOCOUNT ON;
 	--Update left and right extent to set the tree  
 	UPDATE REN_UNITS SET rgt = rgt - @Width WHERE rgt > @rgt;  
 	UPDATE REN_UNITS SET lft = lft - @Width WHERE lft > @rgt;  
-	
+
+	delete from REN_Particulars where PropertyID=  
+	(SELECT PropertyID FROM REN_UNITS WITH(NOLOCK) WHERE UNITID=@UnitID) and UnitID=@UnitID  
+
+	--Delete From CRM_Cases where CASEID=@CASEID  
+	Delete from com_docbridge WHERE CostCenterID = 93 AND NodeID = @UnitID  
+   
+   	Delete from COM_HistoryDetails WHERE CostCenterID = 93 AND NodeID = @UnitID  
+ 
 COMMIT TRANSACTION  
 SET NOCOUNT OFF;    
 SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
@@ -150,5 +143,7 @@ if(@return_value=-999)
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH
+END CATCH  
+  
+  
 GO

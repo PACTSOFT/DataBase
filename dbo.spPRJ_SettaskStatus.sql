@@ -4,13 +4,10 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPRJ_SettaskStatus]
 	@CostCenterID [int],
-	@NodeID [int],
+	@NodeID [bigint],
 	@Mode [nvarchar](50),
 	@progressxml [nvarchar](max),
 	@dt [datetime],
-	@ActDays [float] = 0,
-	@ActWorkHrs [float] = 0,
-	@ActDurDays [float] = 0,
 	@UserName [nvarchar](50),
 	@RoleID [int] = 0,
 	@UserID [int] = 0,
@@ -20,7 +17,7 @@ AS
 BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;  
-	declare @Sql nvarchar(max),@Status int,@tabName nvarchar(100),@depend nvarchar(max),@noteid INT
+	declare @Sql nvarchar(max),@Status int,@tabName nvarchar(100),@depend nvarchar(max),@noteid bigint
 	set @noteid=1
 	select @tabName=TableName from ADM_Features WITH(NOLOCK) WHERE FeatureID=@CostCenterID
 	
@@ -51,9 +48,8 @@ SET NOCOUNT ON;
 		where costcenterid=@CostCenterID and status='In Process'
 
 		SET @Sql='update '+@tabName+'
-		set StatusID='+convert(nvarchar,@Status)+',ccalpha22='''+convert(nvarchar,@dt,100)+'''
+		set StatusID='+convert(nvarchar,@Status)+',ccalpha22='''+convert(nvarchar,@dt,106)+'''
 		where NodeID='+convert(nvarchar,@NodeID)
-		print @Sql
 		EXEC (@Sql)
 		
 		SET @Sql='
@@ -66,10 +62,10 @@ SET NOCOUNT ON;
 		
 		set @diff=0
 		if(@ProjStart is not null)
-			set @diff=datediff(d,convert(datetime,@ProjStart),convert(datetime,'''+convert(nvarchar,@dt,100)+'''))
+			set @diff=datediff(d,convert(datetime,@ProjStart),convert(datetime,'''+convert(nvarchar,@dt,106)+'''))
 		
 		update c 
-		set dcalpha20=''In Process'',dcalpha22='''+convert(nvarchar,@dt,100)+''',dcAlpha25='''+convert(nvarchar,@dt,100)+'''
+		set dcalpha20=''In Process'',dcalpha22='''+convert(nvarchar,@dt,106)+''',dcAlpha25='''+convert(nvarchar,@dt,106)+'''
 		from inv_docdetails a WITH(NOLOCK)
 		join com_docccdata b WITH(NOLOCK) on a.invdocdetailsid=b.invdocdetailsid
 		join com_doctextdata c WITH(NOLOCK) on a.invdocdetailsid=c.invdocdetailsid
@@ -78,8 +74,8 @@ SET NOCOUNT ON;
 		if(@diff<>0)
 		BEGIN
 			update c 
-			set dcAlpha25=case when isdate(dcAlpha25)=1 and convert(datetime,dcAlpha25)>@ProjStart then convert(nvarchar,convert(datetime,dcAlpha25)+@diff,100) else dcAlpha25 end,
-				dcAlpha26=case when isdate(dcAlpha26)=1 and convert(datetime,dcAlpha26)>@ProjStart then convert(nvarchar,convert(datetime,dcAlpha26)+@diff,100) else dcAlpha26 end
+			set dcAlpha25=case when isdate(dcAlpha25)=1 and convert(datetime,dcAlpha25)>@ProjStart then convert(nvarchar,convert(datetime,dcAlpha25)+@diff,106) else dcAlpha25 end,
+				dcAlpha26=case when isdate(dcAlpha26)=1 and convert(datetime,dcAlpha26)>@ProjStart then convert(nvarchar,convert(datetime,dcAlpha26)+@diff,106) else dcAlpha26 end
 			from inv_docdetails a WITH(NOLOCK)			
 			join com_doctextdata c WITH(NOLOCK) on a.invdocdetailsid=c.invdocdetailsid
 			where Voucherno=@vno
@@ -87,7 +83,7 @@ SET NOCOUNT ON;
 		print @Sql
 		EXEC (@Sql)
 		
-		EXEC spCOM_SetNotifEvent 475,@COSTCENTERID,@NodeID,'admin',@UserName,@UserID,@RoleID  
+		
 		
 	
 	end
@@ -96,7 +92,7 @@ SET NOCOUNT ON;
 		set @Status=472
 
 		SET @Sql='update '+@tabName+'
-		set StatusID='+convert(nvarchar,@Status)+',ccalpha22='''+convert(nvarchar,@dt,100)+'''
+		set StatusID='+convert(nvarchar,@Status)+',ccalpha22='''+convert(nvarchar,@dt,106)+'''
 		where NodeID='+convert(nvarchar,@NodeID)
 		EXEC (@Sql)
 		
@@ -136,8 +132,6 @@ SET NOCOUNT ON;
 		where Voucherno=@vno' 
 		
 		EXEC (@Sql)
-		EXEC spCOM_SetNotifEvent 472,@COSTCENTERID,@NodeID,'admin',@UserName,@UserID,@RoleID  
-		
 	end
 	else if(@Mode='Hold')
 	begin
@@ -157,7 +151,6 @@ SET NOCOUNT ON;
 		join com_doctextdata c WITH(NOLOCK) on a.invdocdetailsid=c.invdocdetailsid
 		where documenttype=45 and dcccnid'+convert(nvarchar,(@CostCenterID-50000))+'='+convert(nvarchar,@NodeID)
 		EXEC (@Sql)
-		EXEC spCOM_SetNotifEvent 474,@COSTCENTERID,@NodeID,'admin',@UserName,@UserID,@RoleID  
 
 	end 
 	else if(@Mode='Stop')
@@ -167,7 +160,7 @@ SET NOCOUNT ON;
 		
 		
 		SET @Sql='update '+@tabName+'
-		set StatusID='+convert(nvarchar,@Status)+',ccalpha23='''+convert(nvarchar,@dt,100)+''',ccAlpha24=case when isdate(ccAlpha22)=1 then datediff(d,convert(datetime,ccAlpha22),convert(datetime,'''+convert(nvarchar,@dt,100)+''')) else 0 end
+		set StatusID='+convert(nvarchar,@Status)+',ccalpha23='''+convert(nvarchar,@dt,106)+''',ccAlpha24=case when isdate(ccAlpha22)=1 then datediff(d,convert(datetime,ccAlpha22),convert(datetime,'''+convert(nvarchar,@dt,106)+''')) else 0 end
 		where NodeID='+convert(nvarchar,@NodeID)
 		
 		EXEC (@Sql)
@@ -181,14 +174,12 @@ SET NOCOUNT ON;
 		where documenttype=45 and dcccnid'+convert(nvarchar,(@CostCenterID-50000))+'='+convert(nvarchar,@NodeID)
 		
 		SET @Sql=@Sql+'update c 
-		set dcalpha20=''Close'',dcalpha23='''+convert(nvarchar,@dt,100)+''',dcAlpha24='''+convert(nvarchar,@ActDays)+''',dcAlpha33='''+convert(nvarchar,@ActWorkHrs)+''',dcAlpha34='''+convert(nvarchar,@ActDurDays)+'''
-		,dcAlpha26='''+convert(nvarchar,@dt,100)+'''
+		set dcalpha20=''Close'',dcalpha23='''+convert(nvarchar,@dt,106)+''',dcAlpha24=case when isdate(dcAlpha22)=1 then datediff(d,convert(datetime,dcAlpha22),convert(datetime,'''+convert(nvarchar,@dt,106)+''')) else 0 end
+		,dcAlpha26='''+convert(nvarchar,@dt,106)+'''
 		from inv_docdetails a WITH(NOLOCK)
 		join com_docccdata b WITH(NOLOCK) on a.invdocdetailsid=b.invdocdetailsid
 		join com_doctextdata c WITH(NOLOCK) on a.invdocdetailsid=c.invdocdetailsid
 		where documenttype=45 and dcccnid'+convert(nvarchar,(@CostCenterID-50000))+'='+convert(nvarchar,@NodeID)
-		
-		--dcAlpha24=case when isdate(dcAlpha22)=1 then datediff(d,convert(datetime,dcAlpha22),convert(datetime,'''+convert(nvarchar,@dt,100)+''')) else 0 end
 		 		
 		SET @Sql=@Sql+' select @compPer=isnull(sum(convert(float,dcalpha14)),0)
 		from inv_docdetails a WITH(NOLOCK)		
@@ -203,19 +194,18 @@ SET NOCOUNT ON;
 		
 		set @diff=0
 		if(@Projend is not null)
-			set @diff=datediff(d,convert(datetime,@Projend),convert(datetime,'''+convert(nvarchar,@dt,100)+'''))
+			set @diff=datediff(d,convert(datetime,@Projend),convert(datetime,'''+convert(nvarchar,@dt,106)+'''))
 		
 		update c 
 		set dcalpha4=convert(nvarchar,@compPer),dcalpha9=convert(nvarchar,@InProcPer),dcalpha8=convert(nvarchar,@InProcPer+@compPer)
-		,dcAlpha25=case when @diff<>0 and isdate(dcAlpha25)=1 and convert(datetime,dcAlpha25)>@Projend then convert(nvarchar,convert(datetime,dcAlpha25)+@diff,100) else dcAlpha25 end
-		,dcAlpha26=case when @diff<>0 and isdate(dcAlpha26)=1 and convert(datetime,dcAlpha26)>@Projend then convert(nvarchar,convert(datetime,dcAlpha26)+@diff,100) else dcAlpha26 end		
+		,dcAlpha25=case when @diff<>0 and isdate(dcAlpha25)=1 and convert(datetime,dcAlpha25)>@Projend then convert(nvarchar,convert(datetime,dcAlpha25)+@diff,106) else dcAlpha25 end
+		,dcAlpha26=case when @diff<>0 and isdate(dcAlpha26)=1 and convert(datetime,dcAlpha26)>@Projend then convert(nvarchar,convert(datetime,dcAlpha26)+@diff,106) else dcAlpha26 end		
 		from inv_docdetails a WITH(NOLOCK)			
 		join com_doctextdata c WITH(NOLOCK) on a.invdocdetailsid=c.invdocdetailsid
 		where Voucherno=@vno' 
 		print @Sql
 		EXEC (@Sql)
-		
-		EXEC spCOM_SetNotifEvent 473,@COSTCENTERID,@NodeID,'admin',@UserName,@UserID,@RoleID  
+
 	end 
 	else if(@Mode='Progress')
 	begin
@@ -332,5 +322,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION    
  SET NOCOUNT OFF      
  RETURN -999       
-END CATCH
+END CATCH 
 GO

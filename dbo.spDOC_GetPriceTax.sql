@@ -3,13 +3,13 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetPriceTax]
-	@ProductID [int] = 0,
+	@ProductID [bigint] = 0,
 	@CCXML [nvarchar](max),
 	@DocDate [datetime],
-	@DocDetailsID [int] = 0,
-	@ProfileID [nvarchar](max) = '',
-	@UOMID [int] = 0,
-	@CostCenterID [int] = 0,
+	@DocDetailsID [bigint] = 0,
+	@ProfileID [bigint] = 0,
+	@UOMID [bigint] = 0,
+	@CostCenterID [bigint] = 0,
 	@DocQty [float],
 	@CalcAvgrate [bit] = 0,
 	@CalcQOH [bit] = 0,
@@ -29,11 +29,11 @@ AS
 BEGIN TRY      
 SET NOCOUNT ON      
 
- DECLARE @SQL NVARCHAR(MAX),@XML XML,@WHERE NVARCHAR(MAX),@I INT,@CNT INT,@NODEID INT,@CcID INT,@BalQOH FLOAT,@table   nvarchar(200),@TestCaseExists BIT
-    Declare @CC nvarchar(30),@CCWHERE NVARCHAR(MAX),@OrderBY NVARCHAR(MAX),@HOLDQTY FLOAT,@CommittedQTY FLOAT,@RESERVEQTY FLOAT,@stockID INT,@IsPromo BIT,@StCCID int
-    DECLARE @AvgRate float,@LastPRate float,@PWLastPRate float,@iCNT INT,@ccCNTT INT,@QOH float,@PrefValue nvarchar(50),@NID INT,@dp float,@rp float,@AvgPrice float
-    DECLARE @DrAccount INT,@CrAccount INT,@CrName NVARCHAR(200),@DrName NVARCHAR(200),@VendorQty float,@JOIN nvarchar(max),@tmpccid int
-   DECLARE @SIZE INT,@Cols NVARCHAR(1000),@ColsList NVARCHAR(1000) ,@uBarcode nvarchar(100),@VBarcode nvarchar(100),@CurrencyID INT,@ptype int,@TotalReserve float
+ DECLARE @SQL NVARCHAR(MAX),@XML XML,@WHERE NVARCHAR(MAX),@I INT,@CNT INT,@NODEID BIGINT,@CcID BIGINT,@BalQOH FLOAT,@table   nvarchar(200),@TestCaseExists BIT
+    Declare @CC nvarchar(30),@CCWHERE NVARCHAR(MAX),@OrderBY NVARCHAR(MAX),@HOLDQTY FLOAT,@CommittedQTY FLOAT,@RESERVEQTY FLOAT,@stockID BIGINT,@IsPromo BIT,@StCCID int
+    DECLARE @AvgRate float,@LastPRate float,@PWLastPRate float,@iCNT INT,@ccCNTT INT,@QOH float,@PrefValue nvarchar(50),@NID BIGINT,@dp float,@rp float,@AvgPrice float
+    DECLARE @DrAccount BIGINT,@CrAccount BIGINT,@CrName NVARCHAR(200),@DrName NVARCHAR(200),@VendorQty float,@JOIN nvarchar(max),@tmpccid int
+   DECLARE @SIZE INT,@Cols NVARCHAR(1000),@ColsList NVARCHAR(1000) ,@uBarcode nvarchar(100),@VBarcode nvarchar(100),@CurrencyID bigint,@ptype int,@TotalReserve float
    DECLARE @UPDATESQL NVARCHAR(MAX),@CCJOINQUERY NVARCHAR(MAX),@LastPCost float ,@PWLastPCost float,@isGrp bit,@tblName NVARCHAR(200),@LastPRSNS Float
    SET @XML=@CCXML        
     
@@ -49,9 +49,9 @@ SET NOCOUNT ON
     END    
     
    declare @tblSplitcc table(CCIDS int)        
-   DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId INT)        
+   DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId BIGINT)        
    INSERT INTO @tblCC(CostCenterID,NodeId)        
-   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','INT')        
+   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','BIGINT')        
    FROM @XML.nodes('/XML/Row') as Data(X)  
    
 
@@ -88,8 +88,8 @@ SET NOCOUNT ON
 				END
 				if not exists(select CostCenterID from @tblCC where CostCenterID=@CcID)
 				BEGIN
-						if exists(select b.CostcenterCOlID from adm_costcenterdef a with(nolock)
-						join adm_costcenterdef b with(nolock) on a.CostcenterCOlID=b.LocalReference
+						if exists(select b.CostcenterCOlID from adm_costcenterdef a
+						join adm_costcenterdef b on a.CostcenterCOlID=b.LocalReference
 						where a.costcenterid=@CostCenterID and b.costcenterid=@CostCenterID and a.syscolumnname='productid'
 						and b.ColumnCostCenterID=@CcID)
 						BEGIN				
@@ -103,90 +103,77 @@ SET NOCOUNT ON
 									set @SQL='Select @NID='+REPLACE(@CC,'=','')+' from com_CCCCData WITH(NOLOCK) 
 									where CostcenterID=3 and NOdeID='+convert(nvarchar,@ProductID)
 								
-							EXEC sp_executesql @SQL, N'@NID INT OUTPUT', @NID OUTPUT  
+							EXEC sp_executesql @SQL, N'@NID BIGINT OUTPUT', @NID OUTPUT  
 							if( @NID is null)
 								set @NID=0  
 							 insert into @tblCC(CostCenterID,NodeId)values(@CcID,@NID)
 						END
-						ELSE if(@ProfileID IS NOT NULL AND @ProfileID<>'')
+						ELSE if(@ProfileID>0)
 						BEGIN
-							SET @XML=@ProfileID
-							
-							SET @ProfileID='0'
-							SELECT TOP 1 @ProfileID=X.value('@ProfileID','INT')
-							from @XML.nodes('/DimensionDefProfile/Row') as Data(X) 
-							WHERE (X.value('@TillDate','NVARCHAR') is null or X.value('@TillDate','NVARCHAR')='' or X.value('@TillDate','DateTime')>=@DocDate) and (X.value('@WEFDate','NVARCHAR') is null or X.value('@WEFDate','NVARCHAR')='' or X.value('@WEFDate','DateTime')<=@DocDate)
-							
-							IF @ProfileID IS NULL
-								SET @ProfileID='0'
-							
-							IF 	ISNUMERIC(@ProfileID)=1 AND @ProfileID > '0'
-							BEGIN
-								 SelecT @XML=defxml from COM_DimensionMappings WITH(NOLOCK)
-								 where ProfileID=@ProfileID
+							 SelecT @XML=defxml from COM_DimensionMappings WITH(NOLOCK)
+							 where ProfileID=@ProfileID
+							 
+							 if exists(select X.value('@cols','int')  
+							 FROM @XML.nodes('/XML/Row') as Data(X)	
+							 where X.value('@IsBase','int')=0 and X.value('@cols','int')=@CcID)
+							 BEGIN
+								
+								declare @dtcols table(id int identity(1,1),ccid int)
+								insert into @dtcols
+								SELECT X.value('@cols','int')
+								FROM @XML.nodes('/XML/Row') as Data(X)									
+								join adm_costcenterdef c on c.ColumnCostCenterID=X.value('@cols','int')
+								join adm_costcenterdef b on c.LocalReference=b.CostCenterColID
+								left join @tblCC a on X.value('@cols','int')=a.CostCenterID	
+								where X.value('@IsBase','int')=1 and X.value('@cols','int')>50000
+								and c.CostCenterID=@CostCenterID and b.CostCenterID=@CostCenterID and b.SysColumnName='productid'
+								and a.NodeId is null 
+								
+								set @iCNT=0
+								select @ccCNTT=COUNT(id) from @dtcols
+								while(@iCNT<@ccCNTT)        
+								begin  
+									set @iCNT=@iCNT+1
+									
+									select @tmpccid=ccid from @dtcols where id=@iCNT
+									
+									if(@tmpccid=50006)
+											set @SQL='Select @NID=CategoryID from inv_product WITH(NOLOCK) 
+											where ProductID='+convert(nvarchar,@ProductID)
+									ELSE if(@tmpccid=50004)
+											set @SQL='Select @NID=DepartmentID from inv_product WITH(NOLOCK) 
+											where ProductID='+convert(nvarchar,@ProductID)
+									ELSE		
+											set @SQL='Select @NID=CCNID'+CONVERT(nvarchar,(@tmpccid-50000))+' from com_CCCCData WITH(NOLOCK) 
+											where CostcenterID=3 and NOdeID='+convert(nvarchar,@ProductID)
+										
+									EXEC sp_executesql @SQL, N'@NID BIGINT OUTPUT', @NID OUTPUT  
+									if( @NID is null)
+										set @NID=0  
+									 insert into @tblCC(CostCenterID,NodeId)values(@tmpccid,@NID)
+									
+								END
+								
 								 
-								 if exists(select X.value('@cols','int')  
-								 FROM @XML.nodes('/XML/Row') as Data(X)	
-								 where X.value('@IsBase','int')=0 and X.value('@cols','int')=@CcID)
-								 BEGIN
-									
-									declare @dtcols table(id int identity(1,1),ccid int)
-									insert into @dtcols
-									SELECT X.value('@cols','int')
-									FROM @XML.nodes('/XML/Row') as Data(X)									
-									join adm_costcenterdef c with(nolock) on c.ColumnCostCenterID=X.value('@cols','int')
-									join adm_costcenterdef b with(nolock) on c.LocalReference=b.CostCenterColID
-									left join @tblCC a on X.value('@cols','int')=a.CostCenterID	
-									where X.value('@IsBase','int')=1 and X.value('@cols','int')>50000
-									and c.CostCenterID=@CostCenterID and b.CostCenterID=@CostCenterID and b.SysColumnName='productid'
-									and a.NodeId is null 
-									
-									set @iCNT=0
-									select @ccCNTT=COUNT(id) from @dtcols
-									while(@iCNT<@ccCNTT)        
-									begin  
-										set @iCNT=@iCNT+1
-										
-										select @tmpccid=ccid from @dtcols where id=@iCNT
-										
-										if(@tmpccid=50006)
-												set @SQL='Select @NID=CategoryID from inv_product WITH(NOLOCK) 
-												where ProductID='+convert(nvarchar,@ProductID)
-										ELSE if(@tmpccid=50004)
-												set @SQL='Select @NID=DepartmentID from inv_product WITH(NOLOCK) 
-												where ProductID='+convert(nvarchar,@ProductID)
-										ELSE		
-												set @SQL='Select @NID=CCNID'+CONVERT(nvarchar,(@tmpccid-50000))+' from com_CCCCData WITH(NOLOCK) 
-												where CostcenterID=3 and NOdeID='+convert(nvarchar,@ProductID)
-											
-										EXEC sp_executesql @SQL, N'@NID INT OUTPUT', @NID OUTPUT  
-										if( @NID is null)
-											set @NID=0  
-										 insert into @tblCC(CostCenterID,NodeId)values(@tmpccid,@NID)
-										
-									END
-									
-									 
-									 set @CCWHERE=''
-									 
-									SELECT @CCWHERE=@CCWHERE+case when X.value('@cols','int')=2 THEN ' and AccountID='+isnull(CONVERT(nvarchar,NodeId),'0')
-									 when X.value('@cols','int')=3 THEN ' and ProductID='+isnull(CONVERT(nvarchar,@ProductID),'0')
-									 ELSE  ' and CCNID'+convert(nvarchar,X.value('@cols','int')-50000)+'='+CONVERT(nvarchar,NodeId) END
-									 FROM @XML.nodes('/XML/Row') as Data(X)
-									 left join @tblCC a on X.value('@cols','int')=a.CostCenterID
-									 where X.value('@IsBase','int')=1
-									 
-									if(@CCWHERE is not null and @CCWHERE<>'')
-									BEGIN				
-										set @SQL='Select @NID='+REPLACE(@CC,'=','')+' from COM_DimensionMappings WITH(NOLOCK) 
-											where ProfileID='+convert(nvarchar,@ProfileID)+@CCWHERE
-										set @NID=0
-										EXEC sp_executesql @SQL, N'@NID INT OUTPUT', @NID OUTPUT  
-										if( @NID is null)
-											set @NID=0  
-										 insert into @tblCC(CostCenterID,NodeId)values(@CcID,@NID)
-									END	
-								 END
+								 set @CCWHERE=''
+								 
+								SELECT @CCWHERE=@CCWHERE+case when X.value('@cols','int')=2 THEN ' and AccountID='+isnull(CONVERT(nvarchar,NodeId),'0')
+								 when X.value('@cols','int')=3 THEN ' and ProductID='+isnull(CONVERT(nvarchar,@ProductID),'0')
+								 ELSE  ' and CCNID'+convert(nvarchar,X.value('@cols','int')-50000)+'='+CONVERT(nvarchar,NodeId) END
+								 FROM @XML.nodes('/XML/Row') as Data(X)
+								 left join @tblCC a on X.value('@cols','int')=a.CostCenterID
+								 where X.value('@IsBase','int')=1
+								 
+								if(@CCWHERE is not null and @CCWHERE<>'')
+								BEGIN				
+									set @SQL='Select @NID='+REPLACE(@CC,'=','')+' from COM_DimensionMappings WITH(NOLOCK) 
+										where ProfileID='+convert(nvarchar,@ProfileID)+@CCWHERE
+									set @NID=0
+									EXEC sp_executesql @SQL, N'@NID BIGINT OUTPUT', @NID OUTPUT  
+									if( @NID is null)
+										set @NID=0  
+									 insert into @tblCC(CostCenterID,NodeId)values(@CcID,@NID)
+								END	
 							 END
 						END
 				END
@@ -290,8 +277,8 @@ SET NOCOUNT ON
 				
 				if not exists(select CostCenterID from @tblCC where CostCenterID=@CcID)
 				BEGIN
-						if exists(select b.CostcenterCOlID from adm_costcenterdef a with(nolock)
-						join adm_costcenterdef b with(nolock) on a.CostcenterCOlID=b.LocalReference
+						if exists(select b.CostcenterCOlID from adm_costcenterdef a
+						join adm_costcenterdef b on a.CostcenterCOlID=b.LocalReference
 						where a.costcenterid=@CostCenterID and b.costcenterid=@CostCenterID and a.syscolumnname='productid'
 						and b.ColumnCostCenterID=@CcID)
 						BEGIN
@@ -304,7 +291,7 @@ SET NOCOUNT ON
 							ELSE		
 									set @SQL='Select @NID='+REPLACE(@CC,'=','')+' from com_CCCCData WITH(NOLOCK) 
 									where CostcenterID=3 and NOdeID='+convert(nvarchar,@ProductID)
-							EXEC sp_executesql @SQL, N'@NID INT OUTPUT', @NID OUTPUT 
+							EXEC sp_executesql @SQL, N'@NID BIGINT OUTPUT', @NID OUTPUT 
 							if( @NID is null)
 								set @NID=0   
 							--if(@NID>1)
@@ -374,5 +361,5 @@ BEGIN CATCH
       END      
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH
+END CATCH      
 GO

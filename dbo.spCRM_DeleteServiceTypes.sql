@@ -23,6 +23,9 @@ SET NOCOUNT ON;
 		--Delete from Reasons table
 		DELETE FROM CRM_ServiceReasons  WHERE ServiceTypeID=@ServiceTypeID 
  
+		--Delete from ServiceCostCenter
+		--DELETE FROM SVC_ServiceCostCenterMap WHERE ServiceTypeID=@ServiceTypeID
+
 		--Delete from Com_Files(Attachment) table
 		DELETE FROM COM_Files WHERE FeaturePK=@ServiceTypeID and FeatureID=82
 		
@@ -60,4 +63,12 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
+
+
+
+
+
+
+
 GO

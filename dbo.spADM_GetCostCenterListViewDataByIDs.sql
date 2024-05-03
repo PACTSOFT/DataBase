@@ -14,7 +14,7 @@ BEGIN TRY
 SET NOCOUNT ON
 
 			--Declaration Section
-			DECLARE @ColumnName varchar(50),@ListViewID int
+			DECLARE @HasAccess bit,@ColumnName varchar(50),@ListViewID int
 			Declare @Table nvarchar(50),@Primarycol varchar(50),@SQL nvarchar(max)
   
 			--Check for manadatory paramters
@@ -40,6 +40,8 @@ SET NOCOUNT ON
 				SET @Primarycol='ContractTemplID'
 			ELSE IF(@CostCenterID=71)
 				SET @Primarycol='ResourceID'
+			ELSE IF(@CostCenterID=61)
+				SET @Primarycol='VehicleID'
 			ELSE IF(@CostCenterID=65)
 				SET @Primarycol='ContactID'	
 			ELSE IF(@CostCenterID=83)
@@ -71,21 +73,23 @@ SET NOCOUNT ON
 					
 		 	END
 
-			--Getting FIRST COLUMN IN LIST
-			SET @ColumnName=(SELECT Top 1 SysColumnName FROM ADM_CostCenterDef A WITH(nolock)
-							JOIN ADM_ListViewColumns B WITH(nolock) ON A.CostCenterColID=B.CostCenterColID 
-							WHERE B.ListViewID= @ListViewID and ColumnType=1 and SysTableName=@Table
-							ORDER BY B.ColumnOrder)
-			
-			IF @ColumnName IS NULL
-				SET @ColumnName=''
-			ELSE
-				SET @ColumnName=','+@ColumnName
-			--Prepare query	
-			SET @SQL='select '+ @Primarycol+' AS NodeID'+@ColumnName+' from '+@Table +' WITH(NOLOCK) where '+@Primarycol+ ' in ( '+@NodeIDs+')'
 
+			--Getting FIRST COLUMN IN LIST
+			SET @ColumnName=(SELECT Top 1 SysColumnName FROM ADM_CostCenterDef A
+							JOIN ADM_ListViewColumns B ON A.CostCenterColID=B.CostCenterColID 
+							WHERE B.ListViewID= @ListViewID and ColumnType=1
+							ORDER BY B.ColumnOrder)
+
+			--Prepare query	
+			SET @SQL='select '+ @Primarycol+' AS NodeID ,'+@ColumnName+' from '+@Table +'  WITH(NOLOCK) where '+@Primarycol+ ' in ( '+@NodeIDs+')'
+
+			if(@CostCenterID=61)
+				SET @SQL='select '+ @Primarycol+' AS NodeID ,Make+''-''+MOdel+''-''+Variant+''-''++''(''+convert(nvarchar,startYear)+''-''+
+				case when (EndYear= ''0'') then convert(nvarchar, Datepart(YEAR,GETDATE())) else convert(nvarchar,endYear) END
+				+'')'' from '+@Table +'  WITH(NOLOCK) where '+@Primarycol+ ' in ( '+@NodeIDs+')'
+print @SQL
 		 	--Execute statement
-			Exec sp_executesql @SQL     
+			Exec(@SQL)
 			 
 
  
@@ -105,5 +109,18 @@ BEGIN CATCH
 	END
  SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
+
+
+
+
+
+
+
+
+
+
+
+
+
 GO

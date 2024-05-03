@@ -6,7 +6,7 @@ CREATE PROCEDURE [dbo].[spCRM_CloseLead]
 	@LeadID [int],
 	@CCID [int],
 	@Date [datetime],
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -18,15 +18,15 @@ SET NOCOUNT ON;
 		update crm_leads set closedate=convert(float,@Date), StatusID=416 where LeadID=@LeadID
 	else if (@CCID=73)
 	begin
-		declare @SID INT,@CompanyGUID nvarchar(50),@UserName nvarchar(50)
-		select @SID=convert(INT,isnull(Value,0)) FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=73 and  Name='DefaultCloseStatus'  
-		select @CompanyGUID=CompanyGUID from crm_cases WITH(nolock) where caseid=@LeadID
-		select @UserName=UserName from adm_users WITH(nolock) where userid=@UserID
+		declare @SID bigint,@CompanyGUID nvarchar(50),@UserName nvarchar(50)
+		select @SID=convert(bigint,isnull(Value,0)) FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=73 and  Name='DefaultCloseStatus'  
+		select @CompanyGUID=CompanyGUID from crm_cases where caseid=@LeadID
+		select @UserName=UserName from adm_users where userid=@UserID
 		EXEC spCOM_SetNotifEvent -1015,73,@LeadID,@CompanyGUID,@UserName,@UserID,-1 
 		if(@SID is not null)
-			UPDATE CRM_Cases SET closedate=convert(float,@Date), StatusID=@SID,CloseBy=@UserName where CaseID=@LeadID 
+			UPDATE CRM_Cases SET closedate=convert(float,@Date), StatusID=@SID where Caseid=@LeadID 
 		else
-			update crm_cases set closedate=convert(float,@Date), StatusID=1001,CloseBy=@UserName where CaseID=@LeadID
+			update crm_cases set closedate=convert(float,@Date), StatusID=1001 where CaseID=@LeadID
 	end
  
 COMMIT TRANSACTION    

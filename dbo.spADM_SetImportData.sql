@@ -6,7 +6,7 @@ CREATE PROCEDURE [dbo].[spADM_SetImportData]
 	@XML [nvarchar](max),
 	@CCMapXML [nvarchar](max) = '',
 	@HistoryXML [nvarchar](max) = null,
-	@COSTCENTERID [int],
+	@COSTCENTERID [bigint],
 	@IsDuplicateNameAllowed [bit],
 	@IsCodeAutoGen [bit],
 	@IsOnlyName [bit],
@@ -16,7 +16,7 @@ CREATE PROCEDURE [dbo].[spADM_SetImportData]
 	@Attachment [nvarchar](max) = NULL,
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@RoleID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -28,22 +28,21 @@ SET NOCOUNT ON
 	--Declaration Section  
 	declare @ERROR_MESSAGE nvarchar(max),@HistoryStatus NVARCHAR(10)
 	DECLARE @return_value int,@failCount int  , @IsMove bit
-	DECLARE @NodeID INT, @Table NVARCHAR(50),@SQL NVARCHAR(max),@ParentGroupName NVARCHAR(200),@PK NVARCHAR(50)  
-	DECLARE @AccountCode nvarchar(max),@CodePrefix nvarchar(100),@CodeNumber INT,@GUID nvarchar(max),@AccountName nvarchar(max),@AliasName nvarchar(max)  
+	DECLARE @NodeID bigint, @Table NVARCHAR(50),@SQL NVARCHAR(max),@ParentGroupName NVARCHAR(200),@PK NVARCHAR(50)  
+	DECLARE @AccountCode nvarchar(max),@CodePrefix nvarchar(100),@CodeNumber BIGINT,@GUID nvarchar(max),@AccountName nvarchar(max),@AliasName nvarchar(max)  
 	DECLARE @StatusID int,@ExtraFields NVARCHAR(max),@ExtraUserDefinedFields NVARCHAR(max),@CostCenterFields NVARCHAR(max),@CCWEFFields NVARCHAR(max),@PrimaryContactQuery nvarchar(max)  
 	DECLARE @LinkFields NVARCHAR(MAX), @LinkOption NVARCHAR(MAX),@ProductImage NVARCHAR(MAX),@Customerdata NVARCHAR(MAX)
-	DECLARE @SelectedNode INT, @IsGroup bit , @Substitutes NVARCHAR(MAX),@ProductWiseUOM NVARCHAR(MAX)   
+	DECLARE @SelectedNode bigint, @IsGroup bit , @Substitutes NVARCHAR(MAX),@ProductWiseUOM NVARCHAR(MAX)   
 	DECLARE @CreditDays int, @CreditLimit float , @ProductImageXML XML , @AttachmentXML xml 
-	DECLARE @PurchaseAccount INT,@Purchase nvarchar(max)  
-	DECLARE @SalesAccount INT,@Sales nvarchar(max)  
+	DECLARE @PurchaseAccount bigint,@Purchase nvarchar(max)  
+	DECLARE @SalesAccount bigint,@Sales nvarchar(max)  
 	DECLARE @DebitDays int, @DebitLimit float  
 	DECLARE @IsBillwise bit, @TypeID int, @ValuationID int,@Dt float,@IsAutoBarcode BIT
-	DECLARE @Make nvarchar(400),@Model nvarchar(400),@Year nvarchar(400),@Variant nvarchar(400),@Segment nvarchar(400)
+	DECLARE @Make nvarchar(400),@Model nvarchar(400),@Year nvarchar(400),@Variant nvarchar(400),@Segment nvarchar(400),@VehicleID bigint  
 	DECLARE @tempCode NVARCHAR(max),@DUPLICATECODE NVARCHAR(300),@DUPNODENO INT,@PARENTCODE NVARCHAR(max)  
 	DECLARE @tempName NVARCHAR(max),@DUPLICATEName NVARCHAR(max), @DUPNODENOCODE INT  
 	DECLARE @TempGuid NVARCHAR(max),@HasAccess BIT,@DATA XML,@Cnt INT,@I INT, @CCID INT, @SubstitutesXML XML,@CustomersXML XML
-	DECLARE @PrefValue NVARCHAR(500),@Dimesion INT,@CCStatID INT,@LinkDim_NodeID int,@RefSelectedNodeID int,@SelectedNodeID int,@SelectedNodeName nvarchar(200)
-	
+
 	SET @DATA=@XML  
 	SET @Dt=CONVERT(FLOAT,GETDATE())--Setting Current Date    
 	set  @ERROR_MESSAGE=''
@@ -68,21 +67,21 @@ SET NOCOUNT ON
 	SET @PK='CurrencyID'   
   ELSE IF(@COSTCENTERID=71)  
 	SET @PK='ResourceID'  
-  ELSE IF(@COSTCENTERID=83)  
+  ELSE IF(@COSTCENTERID=51 or @COSTCENTERID=83)  
 	SET @PK='CustomerID'  
   ELSE IF(@COSTCENTERID=65)  
 	SET @PK='ContactID'  
   ELSE  
 	SET @PK='NodeID'  
-   
-   
+     
+     
   -- Create Temp Table  
-  DECLARE  @temptbl TABLE(ID int identity(1,1),[AccountCode] nvarchar(500),CodePrefix nvarchar(100),CodeNumber INT  
-     ,[AccountName] nvarchar(max),[AliasName] nvarchar(max),[StatusID] int,SelectedNode INT,ParentGroupName NVARCHAR(200)  
+  DECLARE  @temptbl TABLE(ID int identity(1,1),[AccountCode] nvarchar(500),CodePrefix nvarchar(100),CodeNumber BIGINT  
+     ,[AccountName] nvarchar(max),[AliasName] nvarchar(max),[StatusID] int,SelectedNode bigint,ParentGroupName NVARCHAR(200)  
      ,[IsGroup] bit,[CreditDays] int,[CreditLimit] float,[PurchaseAccount] nvarchar(500),[SalesAccount] nvarchar(500),[DebitDays] int,[DebitLimit] float  
      ,IsBillwise bit,TypeID int,ValuationID   int,ExtraFields nvarchar(max),ExtraUserDefinedFields nvarchar(max),CostCenterFields nvarchar(max),CCWEFFields nvarchar(max)
      ,PrimaryContactQuery nvarchar(max), LinkFields nvarchar(max), LinkOption nvarchar(max), Substitutes NVARCHAR(MAX),Customerdata nvarchar(max), ProductImage NVARCHAR(MAX)      
-     ,ProductWiseUOM nvarchar(Max), IsMove bit)  
+     ,Make nvarchar(400),Model nvarchar(400),Year nvarchar(400),Variant nvarchar(400),Segment nvarchar(400),VehicleID int, ProductWiseUOM nvarchar(Max), IsMove bit)  
   
   
   INSERT INTO @temptbl([AccountCode]
@@ -104,15 +103,13 @@ SET NOCOUNT ON
 			,TypeID  
 			,ValuationID,ExtraFields ,ExtraUserDefinedFields ,CostCenterFields,CCWEFFields,
 			PrimaryContactQuery,LinkFields, LinkOption, Substitutes,  
-			ProductImage,Customerdata,ProductWiseUOM, IsMove )            
+			ProductImage,Customerdata,Make ,Model ,Year ,Variant ,Segment,VehicleID,ProductWiseUOM, IsMove )            
   SELECT  
-   X.value('@AccountCode','nvarchar(500)'),X.value('@CodePrefix','nvarchar(100)'),X.value('@CodeNumber','INT')  
+   X.value('@AccountCode','nvarchar(500)'),X.value('@CodePrefix','nvarchar(100)'),X.value('@CodeNumber','bigint')  
            ,X.value('@AccountName','nvarchar(max)')  
            ,isnull(X.value('@AliasName','nvarchar(max)'),'')  
-           ,X.value('@StatusID','int')                   
-           --,isnull(X.value('@SelectedNode','INT'),0) 
-           ,CASE WHEN (@COSTCENTERID=2 AND X.value('@SelectedNode','INT')=1) THEN (SELECT AccountID FROM ACC_Accounts WITH(NOLOCK) WHERE (AccountCode=X.value('@GroupName','nvarchar(200)')
-           OR AccountName=X.value('@GroupName','nvarchar(200)'))) ELSE isnull(X.value('@SelectedNode','INT'),0) END            
+           ,X.value('@StatusID','int')             
+           ,isnull(X.value('@SelectedNode','bigint'),0)  
            ,isnull(X.value('@GroupName','nvarchar(200)'),'')  
            ,isnull(X.value('@IsGroup','bit'),0)  
            ,isnull(X.value('@CreditDays','int'),0)  
@@ -134,46 +131,23 @@ SET NOCOUNT ON
    ,isnull(X.value('@LinkFields','nvarchar(max)'),'')  
    ,isnull(X.value('@LinkOption','nvarchar(max)'),'')  
    ,isnull(X.value('@Substitutes','nvarchar(max)'),'') ,isnull(X.value('@ProductImage','nvarchar(max)'),'')  
-   ,isnull(X.value('@CustomerName','nvarchar(max)'),'') 
+   ,isnull(X.value('@CustomerName','nvarchar(max)'),'')  
+   ,X.value('@Make','nvarchar(400)'),X.value('@Model','nvarchar(400)'),X.value('@Year','nvarchar(400)')  
+   ,X.value('@Variant','nvarchar(400)'),X.value('@Segment','nvarchar(400)'),X.value('@VehicleID','int')  
    ,X.value('@ProductWiseUOM','nvarchar(MAX)'),isnull(X.value('@Move','bit'),0)  
    from @DATA.nodes('/XML/Row') as Data(X)  
 
    IF @COSTCENTERID=2 AND @IsUpdate=0
    BEGIN  
-		DECLARE @TblControl AS TABLE(NodeID nvarchar(15))
-		
-		SET @SQL=''
-		SELECT @SQL=Value FROM ADM_GlobalPreferences WITH(NOLOCK) 
-		WHERE Name='DebtorsControlGroup' AND Value is not null AND Value<>''
+	   SELECT @SelectedNode=CONVERT(BIGINT,Value) FROM ADM_GlobalPreferences WITH(NOLOCK) 
+	   WHERE Name='DebtorsControlGroup' AND Value is not null AND Value<>'' AND isnumeric(Value)=1
 	   
-		INSERT INTO @TblControl(NodeID)
-		EXEC SPSplitString @SQL,','
-	   
-		IF EXISTS (SELECT * FROM @TblControl)
-		BEGIN
-			SELECT TOP 1 @ParentGroupName=A.AccountName,@SelectedNode=T.NodeID FROM ACC_Accounts A WITH(NOLOCK) 
-			JOIN @TblControl T ON T.NodeID=A.AccountID
-
+	   IF @SelectedNode>0
+	   BEGIN
+			SELECT @ParentGroupName=AccountName FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=@SelectedNode
 			UPDATE @temptbl SET ParentGroupName=@ParentGroupName
 			WHERE TypeID=7 AND (ParentGroupName is null or ParentGroupName='')
-		END
-		
-		DELETE FROM @TblControl
-		SET @SQL=''
-		SELECT @SQL=Value FROM ADM_GlobalPreferences WITH(NOLOCK) 
-		WHERE Name='CreditorsControlGroup' AND Value is not null AND Value<>''
-	   
-		INSERT INTO @TblControl(NodeID)
-		EXEC SPSplitString @SQL,','
-	   
-		IF EXISTS (SELECT * FROM @TblControl)
-		BEGIN
-			SELECT TOP 1 @ParentGroupName=A.AccountName,@SelectedNode=T.NodeID FROM ACC_Accounts A WITH(NOLOCK) 
-			JOIN @TblControl T ON T.NodeID=A.AccountID
-
-			UPDATE @temptbl SET ParentGroupName=@ParentGroupName
-			WHERE TypeID=6 AND (ParentGroupName is null or ParentGroupName='')
-		END
+	   END
    END
    
   SELECT @I=1, @Cnt=count(ID) FROM @temptbl   
@@ -204,8 +178,33 @@ SET NOCOUNT ON
 	   ,@LinkFields=LinkFields   
 	   ,@ProductWiseUOM=ProductWiseUOM
 	   ,@LinkOption=LinkOption,  @IsMove=IsMove,
-	   @Substitutes=Substitutes,@ProductImage=ProductImage,@Customerdata=Customerdata
+	   @Substitutes=Substitutes,@ProductImage=ProductImage,@Customerdata=Customerdata,  
+	   @VehicleID=VehicleID,@Make=Make ,@Model =Model ,@Year =Year ,@Variant =Variant ,@Segment=Segment  
 	   from  @temptbl where ID=@I  
+	   
+		if(@IsProductVehicle is not null and @IsProductVehicle=1)  
+		begin  
+			if @VehicleID is not null and @VehicleID>0 and  @IsCode is not null and @IsCode=0 and exists(select ProductID from INV_Product with(nolock) where ProductName=@AccountName)  
+			begin  
+				set @NodeID=(select top 1 ProductID from INV_Product with(nolock) where ProductName=@AccountName)  
+				--Mapping Vehicle to Product  
+				if not exists (select ProductID from SVC_ProductVehicle with(nolock) where ProductID=@NodeID and VehicleID=@VehicleID)  
+				begin  
+					insert into SVC_ProductVehicle(ProductID,VehicleID,CompanyGUID,GUID,CreatedBy,CreatedDate)  
+					values(@NodeID,@VehicleID,@CompanyGUID,newid(),@UserName,convert(float,getdate()))  
+				end   
+			end  
+			else if @VehicleID is not null and @VehicleID>0 and  @IsCode is not null and @IsCode=1 and exists(select ProductID from INV_Product with(nolock) where ProductCode=@AccountCode)  
+			begin  
+				set @NodeID=(select top 1 ProductID from INV_Product with(nolock) where ProductCode=@AccountCode)  
+				--Mapping Vehicle to Product  
+				if not exists (select ProductID from SVC_ProductVehicle with(nolock) where ProductID=@NodeID and VehicleID=@VehicleID)  
+				begin  
+					insert into SVC_ProductVehicle(ProductID,VehicleID,CompanyGUID,GUID,CreatedBy,CreatedDate)  
+					values(@NodeID,@VehicleID,@CompanyGUID,newid(),@UserName,convert(float,getdate()))  
+				end  
+			end  
+		end  
 	   
 		if(@IsOnlyName=1 or @StatusID is null)  
 		begin  
@@ -310,7 +309,7 @@ SET NOCOUNT ON
 	     
 			IF @IsDuplicateCodeAllowed IS NOT NULL AND @IsDuplicateCodeAllowed=0  
 			BEGIN   
-				declare  @len INT,@CodeSQL NVARCHAR(MAX)  
+				declare  @len bigint,@CodeSQL NVARCHAR(MAX)  
 				set @CodeSQL='ProductCode'  
 				set @len=len(@ProductCodeIgnoreText)   
 				if(@len>0)  
@@ -425,7 +424,7 @@ SET NOCOUNT ON
 			if(@SelectedNode is null or @SelectedNode=0)
 				set @SelectedNode=1
 
-			DECLARE @temp1 table(prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200),IsManualCode BIT)
+			DECLARE @temp1 table(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200),IsManualCode BIT)
 			
 			if(@SelectedNode is null and @SelectedNode=0)  
 				insert into @temp1
@@ -459,7 +458,7 @@ SET NOCOUNT ON
 		END  
 		  
 		--To Set Left,Right And Depth of Record    
-		SET @SQL='DECLARE @SelectedNodeID INT,@IsGroup BIT,@lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth INT,@ParentID INT, @SelectedIsGroup BIT'    
+		SET @SQL='DECLARE @SelectedNodeID BIGINT,@IsGroup BIT,@lft BIGINT,@rgt BIGINT,@Selectedlft BIGINT,@Selectedrgt BIGINT,@Depth INT,@ParentID BIGINT, @SelectedIsGroup BIT'    
 		SET @SQL=@SQL+' SELECT @IsGroup='+convert(NVARCHAR,@IsGroup)+', @SelectedNodeID='+convert(NVARCHAR,@SelectedNode)    
 		SET @SQL=@SQL+' SELECT @SelectedNodeID='+@PK+', @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth from '+@Table+' with(NOLOCK) where '  
 		if(@COSTCENTERID=2)  
@@ -595,7 +594,7 @@ SET NOCOUNT ON
 				SET @SQL=@SQL+'2,65,0,'  
 			else  
 				SET @SQL=@SQL+'N'''+@CodePrefix+''','+convert(NVARCHAR,@CodeNumber)+','+CONVERT(VARCHAR,@CreditDays)+','+CONVERT(VARCHAR,@CreditLimit)+','+CONVERT(VARCHAR,@DebitDays)+','+CONVERT(VARCHAR,@DebitLimit)+','+CONVERT(VARCHAR,@PurchaseAccount)+','+CONVERT(VARCHAR,@SalesAccount)+',N'''+REPLACE(@AliasName,'''','''''')+''','  
-			SET @SQL=@SQL+'@Depth,@ParentID,@lft,@rgt,@IsGroup,'''+@CompanyGUID+''',newid(),'''+@UserName+''','+convert(NVARCHAR(32),CAST(@DT AS DECIMAL(18,10)))+','''+@UserName+''','+convert(NVARCHAR(32),CAST(@DT AS DECIMAL(18,10)))+')    
+			SET @SQL=@SQL+'@Depth,@ParentID,@lft,@rgt,@IsGroup,'''+@CompanyGUID+''',newid(),'''+@UserName+''',convert(float,getdate()),'''+@UserName+''',convert(float,getdate()))    
 			SET @NodeID=SCOPE_IDENTITY()'--To get inserted record primary key  
 			
 			EXEC sp_executesql @SQL, N'@NodeID INT OUTPUT', @NodeID OUTPUT   
@@ -611,7 +610,7 @@ SET NOCOUNT ON
 		else IF  @IsUpdate=1  
 		BEGIN 
 			set @SQL=''   
-			SET @SQL=@SQL+' UPDATE '+@Table+ ' SET ModifiedBy='''+@UserName+''',ModifiedDate='+convert(NVARCHAR(32),CAST(@DT AS DECIMAL(18,10)))+','   
+			SET @SQL=@SQL+' UPDATE '+@Table+ ' SET ModifiedBy='''+@UserName+''',ModifiedDate=convert(float,getdate()),'   
 	      
 			if(@COSTCENTERID=2)  
 			begin    
@@ -683,15 +682,26 @@ SET NOCOUNT ON
 					exec spINV_MoveProduct @NodeID,@SelectedNode,1,1
 				end
 			end  
-			else if(@COSTCENTERID=83)  
-			begin
-				if( @IsCode is not null and @IsCode =0)  
-					set @NodeID= (Select  top 1 CustomerID from CRM_CUSTOMER with(nolock) where CustomerName=@AccountName)   
-				else  
-					set @NodeID= (Select  top 1 CustomerID from CRM_CUSTOMER with(nolock) where CustomerCode=@AccountCode)   
+			else if(@COSTCENTERID=51 or @COSTCENTERID=83)  
+			begin  
+				IF @COSTCENTERID=51  
+				BEGIN  
+					if( @IsCode is not null and @IsCode =0)  
+						set @NodeID= (Select  top 1 CustomerID from SVC_Customers with(nolock) where CustomerName=@AccountName)   
+					else  
+						set @NodeID= (Select  top 1 CustomerID from SVC_Customers with(nolock) where CustomerCode=@AccountCode)   
+					
+					set @AccountCode= (Select CustomerCode from SVC_Customers with(nolock) where CustomerID=@NodeID)  
+				END  
+				ELSE IF @COSTCENTERID=83  
+				BEGIN  
+					if( @IsCode is not null and @IsCode =0)  
+						set @NodeID= (Select  top 1 CustomerID from CRM_CUSTOMER with(nolock) where CustomerName=@AccountName)   
+					else  
+						set @NodeID= (Select  top 1 CustomerID from CRM_CUSTOMER with(nolock) where CustomerCode=@AccountCode)   
 					 
-				set @AccountCode= (Select CustomerCode from CRM_CUSTOMER with(nolock) where CustomerID=@NodeID)  
-				  
+					set @AccountCode= (Select CustomerCode from CRM_CUSTOMER with(nolock) where CustomerID=@NodeID)  
+				END   
 				SET @SQL=@SQL+' CustomerCode= N'''+ISNULL(@AccountCode,'')+''', CustomerName=N'''+@AccountName+''',  
 				CustomerTypeID = '+ISNULL(convert(NVARCHAR,@TypeID),1)+',    
 				AliasName =N'''+isnull(REPLACE(@AliasName,'''',''''''),'')+'''   
@@ -789,7 +799,7 @@ SET NOCOUNT ON
 	     
 			if (@Customerdata is not null and @Customerdata<>'')  
 			begin  
-				DECLARE @TblCustomer TABLE(ID int identity(1,1), GroupName nvarchar(50),CostCenterID INT)  
+				DECLARE @TblCustomer TABLE(ID int identity(1,1), GroupName nvarchar(50),CostCenterID Bigint)  
 				Declare @CustomerID int,@cname nvarchar(max)  
 
 				IF LEN(@Customerdata)>0  
@@ -838,7 +848,6 @@ SET NOCOUNT ON
 					select @cname=GroupName from @TblCustomer     
 					IF @CustomerID=0 or @CustomerID is null  
 					BEGIN   
-					SELECT 1
 						EXEC @return_value = [dbo].[spACC_SetAccount]  
 							@AccountID = 0,  
 							@AccountCode = @cname,  
@@ -863,7 +872,7 @@ SET NOCOUNT ON
 							@UserName = @USERNAME,@UserID=@USERID,@RoleID=@RoleID,@CustomFieldsQuery='',@CustomCostCenterFieldsQuery='',  
 							@PrimaryContactQuery='',@ContactsXML='',@AttachmentsXML='',@NotesXML='',@AddressXML='',  
 							@PDCReceivableAccount=0,@PDCPayableAccount=0,@PaymentTerms='',@Description=NULL   
-						SELECT 11
+						
 						set @SQL=''  
 						set @SQL='update '+@Table+' set Featureid=2, FeaturePK='+convert(nvarchar(200),@return_value)+'  
 						where [ContactID]='+convert(nvarchar,@NodeID)  
@@ -931,20 +940,16 @@ SET NOCOUNT ON
 
 				INSERT INTO COM_CCCCDATA (COSTCENTERID , [NodeID],[CreatedBy],[CreatedDate], [CompanyGUID],[GUID])  
 				VALUES(3,@NodeID, @UserName, @Dt, @CompanyGUID,newid())  
-			end 
-			 
-			--if(@IsDuplicateNameAllowed is not null and @IsDuplicateNameAllowed=1)
-			--	set @NodeID= (Select  top 1 ProductID from INV_Product WITH(nolock) where ProductCode=@AccountCode)  
-			--else 
-			if( @IsCode is not null and @IsCode=0)  
+			end  
+			if( @IsCode is not null and @IsCode =0)  
 				set @NodeID= (Select  top 1 ProductID from INV_Product WITH(nolock) where ProductName=@AccountName)   
 			else if(@IsCode is not null and @IsCode=1)    
-				set @NodeID= (Select  top 1 ProductID from INV_Product WITH(nolock) where ProductCode=@AccountCode)
-				
+				set @NodeID= (Select  top 1 ProductID from INV_Product WITH(nolock) where ProductCode=@AccountCode)   
+			
 			if @ExtraFields is not null and @ExtraFields<>''  
 			begin  
 				set @SQL='update '+@Table+' set '+@ExtraFields+ ' where [ProductID]='+convert(nvarchar,@NodeID)  
-				PRINT @SQL
+				--PRINT @SQL
 				exec (@SQL)  
 				--SELECT UOMID FROM INV_PRODUCT WHERE PRODUCTID=@NodeID
 			end  
@@ -968,28 +973,28 @@ SET NOCOUNT ON
 	      
 			if @ProductWiseUOM is not null and @ProductWiseUOM<>'' and @COSTCENTERID=3  
 			begin  
-				IF((SELECT COUNT(*) FROM [COM_UOM] WITH(nolock) WHERE PRODUCTID=@NodeID)>0)  
+				IF((SELECT COUNT(*) FROM [COM_UOM] WHERE PRODUCTID=@NodeID)>0)  
 				BEGIN   
 					UPDATE INV_PRODUCT SET UOMID=1 WHERE PRODUCTID=@NodeID   
 					DELETE FROM [COM_UOM] WHERE PRODUCTID=@NodeID  
 				END  
 				
 				set @ProductWiseUOM ='<Data>  <Row RowNo=''1'' UnitiD='''' Action="NEW" MapAction="0" BaseID="-100" '+ @ProductWiseUOM+' /></Data>'  
-				DECLARE @UOMDATA XML,@RUOMID INT,@RPRODUCTID INT,@RCOUNT INT,@BASEDATA XML,@BCOUNT INT,@J INT,@BASEID INT,@Conversion FLOAT,  
-				@MAPACTION2 INT,@ACTION NVARCHAR(300),@UOMID INT,  
-				@BASENAME NVARCHAR(300),@TEMPBASEID INT,  
+				DECLARE @UOMDATA XML,@RUOMID INT,@RPRODUCTID INT,@RCOUNT INT,@BASEDATA XML,@BCOUNT INT,@J INT,@BASEID BIGINT,@Conversion FLOAT,  
+				@MAPACTION2 BIGINT,@ACTION NVARCHAR(300),@UOMID bigint,  
+				@BASENAME NVARCHAR(300),@TEMPBASEID BIGINT,  
 				@UNITID INT,@UNAME NVARCHAR(300),@CONVERSIONRATE FLOAT  
 
 				SET @UOMDATA=@ProductWiseUOM   
 				SET @BASEDATA=@ProductWiseUOM   
-				DECLARE @TBLBASE TABLE(ID INT IDENTITY(1,1),BASEID INT,BASENAME NVARCHAR(300),MAPACTION INT,CONVERSION float)  
+				DECLARE @TBLBASE TABLE(ID INT IDENTITY(1,1),BASEID BIGINT,BASENAME NVARCHAR(300),MAPACTION INT,CONVERSION float)  
 
 				INSERT INTO @TBLBASE  
 				SELECT X.value('@BaseID','int'),X.value('@BaseName','NVARCHAR(50)'), 
 				X.value('@MapAction','NVARCHAR(50)') , X.value('@Conversion','float')   
 				FROM @BASEDATA.nodes('/Data/Row') as Data(X)  
 
-				DECLARE @TBLUOM TABLE(ID INT IDENTITY(1,1),UNITID INT,UNITNAME NVARCHAR(300),BASEID INT,  
+				DECLARE @TBLUOM TABLE(ID INT IDENTITY(1,1),UNITID BIGINT,UNITNAME NVARCHAR(300),BASEID BIGINT,  
 				BASENAME NVARCHAR(300),CONVERSIONRATE FLOAT,MAPACTION INT,ACTION NVARCHAR(300),CONVERSION float)  
 
 				INSERT INTO @TBLUOM  
@@ -1008,7 +1013,7 @@ SET NOCOUNT ON
 						SELECT @BASEID=ISNULL(MAX(BASEID),0) FROM [COM_UOM] WITH(NOLOCK)  
 						SET @BASEID=@BASEID+1  
 						INSERT INTO [COM_UOM] (BASEID,BASENAME,UNITID,UNITNAME,CONVERSION,GUID,CREATEDBY,CREATEDDATE,ProductID,IsProductWise)  
-						VALUES(@BASEID,@BASENAME,@Conversion,@BASENAME,@Conversion,NEWID(),@USERNAME,@Dt,@NodeID,1)   
+						VALUES(@BASEID,@BASENAME,@Conversion,@BASENAME,@Conversion,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@NodeID,1)   
 					END    
 					ELSE  
 					BEGIN  
@@ -1031,7 +1036,7 @@ SET NOCOUNT ON
 							SELECT @UNITID=ISNULL(MAX(UNITID),0)+1 FROM [COM_UOM] WITH(NOLOCK)  
 
 							INSERT INTO [COM_UOM] (BaseID,BASENAME,UNITID,UNITNAME,CONVERSION,GUID,CREATEDBY,CREATEDDATE,ProductID,IsProductWise)  
-							VALUES(@BASEID,@BASENAME,@UNITID,@UNAME,@CONVERSIONRATE,NEWID(),@USERNAME,@Dt,@NodeID,1)   
+							VALUES(@BASEID,@BASENAME,@UNITID,@UNAME,@CONVERSIONRATE,NEWID(),@USERNAME,CONVERT(FLOAT,GETDATE()),@NodeID,1)   
 
 							IF @I=1  
 								SET @UOMID=SCOPE_IDENTITY()   
@@ -1074,7 +1079,45 @@ SET NOCOUNT ON
 				set '+@CostCenterFields+ ' where [NodeID]='+convert(nvarchar,@NodeID) + ' AND CostCenterID = 83 '  
 				exec (@SQL)  
 			end  
-		end     
+		end   
+		else if (@COSTCENTERID=51)  
+		begin 
+			if(@IsUpdate=0 AND @DUPNODENO=0)  
+			begin  
+				INSERT INTO SVC_CustomersExtended([CustomerID],[CreatedBy],[CreatedDate])  
+				VALUES(@NodeID, @UserName, @Dt)  
+
+				INSERT INTO COM_CCCCDATA (CostCenterID,NodeID,[CreatedBy],[CreatedDate], [CompanyGUID],[GUID])  
+				VALUES(51,@NodeID, @UserName, @Dt, @CompanyGUID,newid())  
+			end  
+			if( @IsCode is not null and @IsCode =0)  
+				set @NodeID= (Select  top 1 CustomerID from SVC_Customers WITH(nolock) where CustomerName=@AccountName)   
+			else if(@IsCode=1 and @IsCode is not null)  
+				set @NodeID= (Select  top 1 CustomerID from SVC_Customers WITH(nolock) where CustomerCode=@AccountCode)   
+
+			if @ExtraFields is not null and @ExtraFields<>''  
+			begin  
+				set @SQL=''  
+				set @SQL='update '+@Table+' set '+@ExtraFields+ ' where [CustomerID]='+convert(nvarchar,@NodeID)  
+				print @SQL  
+				exec (@SQL)  
+			end  
+
+			if @ExtraUserDefinedFields is not null and @ExtraUserDefinedFields<>''  
+			begin  
+				set @SQL='update  dbo.SVC_CustomersExtended  
+				set '+@ExtraUserDefinedFields+ '  where [CustomerID]='+convert(nvarchar,@NodeID)  
+				print @SQL  
+				exec (@SQL)  
+			end  
+			
+			if @CostCenterFields is not null and @CostCenterFields<>''  
+			begin  
+				set @SQL='update COM_CCCCDATA   
+				set '+@CostCenterFields+ ' where [NodeID]='+convert(nvarchar,@NodeID) + ' AND CostCenterID = 51 '  
+				exec (@SQL)  
+			end  
+		end   
 		else   
 		begin 
 			--Handling of CostCenter Costcenters Extrafields Table  
@@ -1195,8 +1238,8 @@ SET NOCOUNT ON
 		if (@Substitutes is not null and @Substitutes<>'')  
 		begin 
 
-			DECLARE @TblSubstitue TABLE(ID int identity(1,1),GroupID INT,GroupName nvarchar(50), SProductID INT)  
-			Declare @SCnt int, @SI int, @SubGroupName nvarchar(500), @SubGroupID INT,@SProductID INT, @lft int  
+			DECLARE @TblSubstitue TABLE(ID int identity(1,1),GroupID bigint,GroupName nvarchar(50), SProductID bigint)  
+			Declare @SCnt int, @SI int, @SubGroupName nvarchar(500), @SubGroupID bigint,@SProductID bigint, @lft int  
 
 			set @Substitutes ='<XML><Row '+ @Substitutes+' Action=''NEW''  /></XML>'  
 			SET @SubstitutesXML=@Substitutes   
@@ -1230,234 +1273,59 @@ SET NOCOUNT ON
 			VALUES (@SubGroupID,@SubGroupName,@NodeID,0,NEWID(),@UserName,@Dt,@CompanyGUID)  
 		end  
 	    
-		if(@COSTCENTERID=2)--FOR HISTROY   
-		begin
-				--Creating Dimension based on Preference 'AccountTypeLinkDimension'
-				declare @CC nvarchar(max), @CostCID nvarchar(10),@IsGrp int
-				set @SelectedNodeName=''
-				SELECT @CC=[Value] FROM com_costcenterpreferences with(nolock) WHERE [Name]='AccountTypeLinkDimension'
-				if (@CC is not null and @CC<>'')
-				begin
-					SELECT @SelectedNodeName=isnull(X.value('@GroupName','nvarchar(200)'),''),@IsGrp=isnull(X.value('@IsGroup','int'),0) from @DATA.nodes('/XML/Row') as Data(X)  
-					DECLARE @TblCC AS TABLE(ID INT IDENTITY(1,1),CC nvarchar(100))
-					DECLARE @TblCCVal AS TABLE(ID INT IDENTITY(1,1),CC2 nvarchar(100))
+		if(@IsProductVehicle is not null and @IsProductVehicle=1)--product vehicle mapping group,cate,subcat based on part  
+		begin 
+			declare @PartID bigint  
+			select @PartID=CCNID29 from COM_CCCCDATA with(nolock) where NodeID=@NodeID and CostCenterID = 3  
 
-					INSERT INTO @TblCC(CC)
-					EXEC SPSplitString @CC,','
-					declare @rcnt int,@AccountTypeID int,@AccountID int
-					declare @value nvarchar(max)
-					set @i=1
-					set @AccountID=@NodeID
-					select @rcnt=count(*) from @TblCC
-					while @i<=@rcnt
-					begin
-						select @value=cc from @TblCC where id=@i
-						--select @value
-						insert into @TblCCVal (CC2)
-						EXEC SPSplitString @value,'~'
-						 --select cc2 from @TblCCVal
-						 select @AccountTypeID=AccountTypeID from Acc_Accounts with(NOLOCK) where AccountID=@NodeID
-						 select @SelectedNodeID=AccountID from [ACC_Accounts] with(NOLOCK) where AccountName =@SelectedNodeName
-						if exists (select cc2 from @TblCCVal where cc2 =@AccountTypeID )
-						begin
-						
-							select @CostCID=cc2 from @TblCCVal where cc2>50000   
-							--select @CCID
-							if(@CostCID>50000)
-							begin
-								declare @CCStatusID INT
-								set @CCStatusID = (select top 1 statusid from com_status with(nolock) where costcenterid=@CostCID)
-								declare @NID INT, @CCIDAcc INT
-								select @NID = CCNodeID, @CCIDAcc=CCID  from acc_Accounts with(nolock) where Accountid=@AccountID
-								iF(@CCIDAcc<>@CostCID)
-								BEGIN
-									if(@NID>0)
-									begin 
-									Update Acc_accounts set CCID=0, CCNodeID=0 where AccountID=@AccountID
-									DECLARE @RET INT
-										EXEC	@RET = [dbo].[spCOM_DeleteCostCenter]
-											@CostCenterID = @CCIDAcc,
-											@NodeID = @NID,
-											@RoleID=1,
-											@UserID = 1,
-											@LangID = @LangID
-									end	
-									set @NID=0
-									set @CCIDAcc=0 
-								END
-								declare @return_val int
-								
-								if(@NID is null or @NID =0)
-								begin 
-									
-									SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
-											WHERE CostCenterID=2 AND RefDimensionID=@CostCID AND NodeID=@SelectedNodeID 
-									
-									SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
-									
-									EXEC	@return_val = [dbo].[spCOM_SetCostCenter]
-									@NodeID = 0,@SelectedNodeID =@RefSelectedNodeID,@IsGroup = @IsGroup,
-									@Code = @AccountCode,
-									@Name = @AccountName,
-									@AliasName=@AccountName,
-									@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
-									@CustomFieldsQuery=null,@AddressXML=null,@AttachmentsXML=NULL,
-									@CustomCostCenterFieldsQuery=null,@ContactsXML=null,@NotesXML=NULL,
-									@CostCenterID = @CostCID,@CompanyGUID=@COMPANYGUID,@GUID='',@UserName='admin',@RoleID=1,@UserID=1,
-									@CheckLink = 0,@IsOffline=0 
-									 -- Link Dimension Mapping
-									 
-									INSERT INTO COM_DocBridge (CostCenterID, NodeID,InvDocID, AccDocID, RefDimensionID  , RefDimensionNodeID ,  CompanyGUID, guid, Createdby, CreatedDate,Abbreviation)
-									values(2, @AccountID,0,0,@CostCID,@return_val,'',newid(),@UserName, @dt,'Account')									
-									DECLARE @CCMapSql nvarchar(max)
-									set @CCMapSql='update COM_CCCCDATA  
-									SET CCNID'+convert(nvarchar,(@CostCID-50000))+'='+CONVERT(NVARCHAR,@return_val)+'  WHERE NodeID = '+convert(nvarchar,@AccountID) + ' AND CostCenterID = 2' 									
-									EXEC (@CCMapSql)
-				 				end
-								else
-								begin
-									declare @Gid nvarchar(50) , @TableName nvarchar(100), @CGid nvarchar(50)
-									declare @NidXML nvarchar(max) 
-									select @TableName=Tablename from adm_features where featureid=@CostCID
-									declare @strgid nvarchar(max) 
-									set @strgid='@Gid nvarchar(50) output' 
-									set @NidXML='set @Gid= (select GUID from '+@TableName+' with(nolock) where NodeID='+convert(nvarchar,@NID)+')'
-										exec sp_executesql @NidXML, @strgid, @Gid OUTPUT 
-										
-									EXEC	@return_val = [dbo].[spCOM_SetCostCenter]
-									@NodeID = @NID,@SelectedNodeID = 1,@IsGroup = 0,
-									@Code = @AccountCode,
-									@Name = @AccountName,
-									@AliasName=@AccountName,
-									@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
-									@CustomFieldsQuery=null,@AddressXML=null,@AttachmentsXML=NULL,
-									@CustomCostCenterFieldsQuery=null,@ContactsXML=null,@NotesXML=NULL,
-									@CostCenterID = @CostCID,@CompanyGUID=@CompanyGUID,@GUID=@Gid,@UserName='admin',@RoleID=1,@UserID=1
-									,@CheckLink = 0,@IsOffline=0
-									
-				 				end 
-								if(@return_val>0 or @return_val<-10000)
-								BEGIN
-									Exec [spDOC_SetLinkDimension]
-										@InvDocDetailsID=@AccountID, 
-										@Costcenterid=2,         
-										@DimCCID=@CostCID,
-										@DimNodeID=@return_value,
-										@BasedOnValue=@AccountTypeID,
-										@UserID=@UserID,    
-										@LangID=@LangID 
-								END
-								Update Acc_accounts set CCID=@CostCID, CCNodeID=@return_val where AccountID=@AccountID  
-								
-							end
-						end
-						delete from @TblCCVal
-						set @i=@i+1
-					end 
-				end
-				 ----------------------------
-				 --INSERT INTO HISTROY   
-				 EXEC [spCOM_SaveHistory]  
-					 @CostCenterID =@COSTCENTERID,    
-					 @NodeID =@NodeID,
-					 @HistoryStatus =@HistoryStatus,
-					 @UserName=@UserName,
-					 @DT=@DT
-		end
-		else if(@COSTCENTERID=3)
+			if(@PartID is not null and @PartID >0)  
+			begin  
+				update dbo.INV_Product set INV_Product.CategoryID=a.CCNID6  
+				from dbo.COM_CCCCData a  WITH(nolock) 
+				where a.NodeID=INV_Product.ProductID   
+			end  
+		end  
+	     
+		if(@IsProductVehicle is not null and @IsProductVehicle=1 and @VehicleID is not null)  
+		begin 
+			if @VehicleID is not null and @VehicleID>0 and  @IsCode is not null and @IsCode=0 and exists(select ProductID from INV_Product  with(nolock) where ProductName=@AccountName)  
+			begin  
+				set @NodeID=(select top 1 ProductID from dbo.INV_Product with(nolock) where ProductName=@AccountName)  
+				--Mapping Vehicle to Product  
+				if not exists (select ProductID from SVC_ProductVehicle WITH(nolock) where ProductID=@NodeID and VehicleID=@VehicleID)  
+				begin  
+					insert into SVC_ProductVehicle(ProductID,VehicleID,CompanyGUID,GUID,CreatedBy,CreatedDate)  
+					values(@NodeID,@VehicleID,@CompanyGUID,newid(),@UserName,convert(float,getdate()))  
+				end  
+			end  
+			else if @VehicleID is not null and @VehicleID>0 and  @IsCode is not null and @IsCode=1 and exists(select ProductID from INV_Product  with(nolock) where ProductCode=@AccountCode)  
+			begin  
+				set @NodeID=(select top 1 ProductID from dbo.INV_Product with(nolock) where ProductCode=@AccountCode)  
+				--Mapping Vehicle to Product  
+				if not exists (select ProductID from SVC_ProductVehicle WITH(nolock) where ProductID=@NodeID and VehicleID=@VehicleID)  
+				begin  
+					insert into SVC_ProductVehicle(ProductID,VehicleID,CompanyGUID,GUID,CreatedBy,CreatedDate)  
+					values(@NodeID,@VehicleID,@CompanyGUID,newid(),@UserName,convert(float,getdate()))  
+				end  
+			end   
+		end 
+		
+		if(@COSTCENTERID=2)  --FOR HISTROY   
 		begin
-			declare @DimensionPrefValue int
-			select @DimensionPrefValue=Value from COM_CostCenterPreferences with(nolock) where CostCenterID=3 and Name='ProductLinkWithDimension'
-			set @Dimesion=0
-				IF(@DimensionPrefValue is not null and @DimensionPrefValue<>'')  
-				BEGIN  
-
-					BEGIN try  
-						select @Dimesion=convert(INT,@DimensionPrefValue)  
-					end try  
-					BEGIN catch  
-						set @Dimesion=0   
-					end catch  
-					
-					if(@Dimesion>0)  
-					BEGIN  
-							SELECT @SelectedNodeName=isnull(X.value('@GroupName','nvarchar(200)'),'') from @DATA.nodes('/XML/Row') as Data(X)  
-							select @SelectedNodeID=ProductID from INV_Product with(NOLOCK) where ProductName =@SelectedNodeName
-						select @CCStatusID=statusid from com_status with(nolock) where costcenterid=@Dimesion and status = 'Active'
-							SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
-							WHERE CostCenterID=3 AND RefDimensionID=@Dimesion AND NodeID=@SelectedNodeID 
-							SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
-									
-							EXEC @LinkDim_NodeID = [dbo].[spCOM_SetCostCenter]
-							@NodeID = 0,@SelectedNodeID = @RefSelectedNodeID,@IsGroup = @IsGroup,
-							@Code = @AccountCode,
-							@Name = @AccountName,
-							@AliasName=@AccountName,
-							@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
-							@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
-							@CustomCostCenterFieldsQuery=NULL,@ContactsXML=NULL,@NotesXML=NULL,
-							@CostCenterID = @Dimesion,@CompanyGUID=@COMPANYGUID,@GUID='',
-							@UserName=@UserName,@RoleID=1,@UserID=1,@CheckLink = 0
-							
-							Update INV_PRODUCT set CCID=@Dimesion, CCNodeID=@LinkDim_NodeID where ProductID=@NodeID
-							
-							INSERT INTO COM_DocBridge (CostCenterID,NodeID,InvDocID,AccDocID,RefDimensionID,RefDimensionNodeID,CompanyGUID,[guid],Createdby,CreatedDate,Abbreviation)
-							values(@CostCenterID, @NodeID,0,0,@Dimesion,@LinkDim_NodeID,'',newid(),@UserName, @dt,'Product')
-							Delete from com_docbridge WHERE CostCenterID = 3 AND RefDimensionNodeID = 0 AND RefDimensionID =@Dimesion
-				
-					END
-				END
-		end
-		else if(@COSTCENTERID>50000)
-		begin			
-			select @PrefValue = Value from COM_CostCenterPreferences WITH(nolock) where CostCenterID=@CostCenterID and  Name = 'LinkDimension' 
-			SELECT Top 1 @Table=SysTableName FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterID  
-			--Start Map Dimension		
-			IF(@PrefValue is not null and @PrefValue<>'')  
-			BEGIN  
-					set @Dimesion=0  
-					BEGIN try  
-						select @Dimesion=convert(INT,@PrefValue)  
-					end try  
-					BEGIN catch  
-						set @Dimesion=0   
-					end catch  
-					if(@Dimesion>0)  
-					BEGIN 
-						SELECT @SelectedNodeName=isnull(X.value('@GroupName','nvarchar(200)'),'') from @DATA.nodes('/XML/Row') as Data(X) 
-						set @SQL='' 
-						set @SQL='select @SelectedNodeID=NodeID from '+@Table+' WITH(NOLOCK) where Name='''+convert(nvarchar,@SelectedNodeName) +''''
-						
-						EXEC sp_executesql @SQL,N'@SelectedNodeID INT OUTPUT',@SelectedNodeID OUTPUT
-						--select @SelectedNodeID=AccountID from [ACC_Accounts] with(NOLOCK) where AccountName =@SelectedNodeName
-						
-						SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
-						WHERE CostCenterID=@CostCenterID AND RefDimensionID=@Dimesion AND NodeID=@SelectedNodeID 
-						SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
-						
-						select @CCStatID = statusid from com_status WITH(NOLOCK) where costcenterid=@Dimesion and status = 'Active'
-						EXEC @LinkDim_NodeID = [dbo].[spCOM_SetCostCenter]
-						@NodeID = 0,@SelectedNodeID = @RefSelectedNodeID,@IsGroup = @IsGroup,
-						@Code = @AccountCode,
-						@Name = @AccountName,
-						@AliasName=@AccountName,
-						@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatID,
-						@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
-						@CustomCostCenterFieldsQuery=NULL,@ContactsXML=NULL,@NotesXML=NULL,
-						@CostCenterID = @Dimesion,@CompanyGUID=@COMPANYGUID,@GUID='',
-						@UserName=@UserName,@RoleID=1,@UserID=1,@CheckLink = 0
-						
-						INSERT INTO COM_DocBridge (CostCenterID, NodeID,InvDocID, AccDocID, RefDimensionID  , RefDimensionNodeID ,  
-									CompanyGUID, guid, Createdby, CreatedDate,Abbreviation)
-						values(@CostCenterID, @NodeID,0,0,@Dimesion,@LinkDim_NodeID,'',newid(),@UserName, @dt,@Table) 
-					END  
-			END
-			--End Map Dimension
+			--INSERT INTO HISTROY   
+			EXEC [spCOM_SaveHistory]  
+				@CostCenterID =@COSTCENTERID,    
+				@NodeID =@NodeID,
+				@HistoryStatus =@HistoryStatus,
+				@UserName=@UserName
 		end
 		
 		End Try  
 		Begin Catch  
 		     
+			if(@IsProductVehicle is not null and @IsProductVehicle=1 and ERROR_MESSAGE()='-112')  
+				set @failCount=@failCount  
+			else  
 			set @failCount=@failCount+1  
 		    
 			if(len(@ERROR_MESSAGE)>0)
@@ -1476,7 +1344,7 @@ COMMIT TRANSACTION
   
 if(@COSTCENTERID=3)  
 begin  
-	SET @SQL='SELECT ProductID NodeID11,ProductName Name FROM '+@Table+' WITH(nolock)where ProductName in (   
+	SET @SQL='SELECT ProductID NodeID,ProductName Name FROM '+@Table+' WITH(nolock)where ProductName in (   
 	SELECT X.value(''@AccountName'',''nvarchar(500)'')  
 	from @sml.nodes(''/XML/Row'') as Data(X))'  
 
@@ -1553,15 +1421,7 @@ BEGIN
 	EXEC [spCOM_SetCCCCMap] @COSTCENTERID,@NodeID,@CCMapXML,@UserName,@LangID  
 END
 	
-	
-if(@IsUpdate=1 AND @NodeID IS NULL) 
-BEGIN
-	SELECT 'Data Not Found' ErrorMessage,-9999 ErrorNumber
-	SET @failCount=1
-END
-else if(@IsUpdate=1 AND @failCount=0) 
-	SELECT 'Updated Successfully' ErrorMessage,1100 ErrorNumber
-else if(@IsUpdate=0 AND @failCount=0) 
+if(@failCount=0) 
 	SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
 	WHERE ErrorNumber=100 AND LanguageID=@LangID  
 else

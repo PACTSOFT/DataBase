@@ -5,7 +5,6 @@ GO
 CREATE PROCEDURE [dbo].[spREN_TerminateContract]
 	@ContractID [bigint],
 	@TerminationDate [datetime],
-	@TerminationPostingDate [datetime],
 	@StatusID [int] = 0,
 	@Reason [bigint],
 	@PaymentXML [nvarchar](max) = NULL,
@@ -32,7 +31,6 @@ CREATE PROCEDURE [dbo].[spREN_TerminateContract]
 	@RoleID [bigint],
 	@SCostCenterID [bigint],
 	@TermPart [nvarchar](max) = NULL,
-	@WID [int],
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
@@ -49,8 +47,8 @@ SET NOCOUNT ON;
 	DECLARE @PickAcc nvarchar(50) ,@DDXML  nvarchar(max),@DDValue nvarchar(max),@penAccID BIGINT
 	declare @BillWiseXMl Nvarchar(max),@SNO BIGINT ,@CCNODEID BIGINT,@Dimesion int,@DateXML XML,@PendingVchrs nvarchar(max)
 	DECLARE @AccountType xml, @AccValue nvarchar(100) , @Documents xml , @DocIDValue nvarchar(100)
-	declare @tempxml xml,@tempAmt Float,@Prefix nvarchar(200),@CancelDOCID bigint,@EndDate datetime
-	DECLARE	@return_value int,@level int,@maxLevel int,@wfAction int,@incMontEnd bit
+	declare @tempxml xml,@tempAmt Float,@Prefix nvarchar(200)
+	DECLARE	@return_value int
 	DECLARE @DELETEDOCID BIGINT , @DELETECCID BIGINT , @DELETEISACC BIT   
 	DECLARE @DELDocPrefix NVARCHAR(50), @DELDocNumber NVARCHAR(500)
 	
@@ -61,62 +59,15 @@ SET NOCOUNT ON;
 	DECLARE @AUDITSTATUS NVARCHAR(50)  
 	SET @AUDITSTATUS= 'TERMINATE'
 	
-	if exists(select * from com_costcenterpreferences where costcenterid=95 and name ='PostIncomeMonthEnd' and value='true') 
-		set @incMontEnd=1
-	else
-		set @incMontEnd=0
-		
-	if exists(select * from REN_Contract where  parentContractID=@ContractID and statusid not in (428,450,478,480,481,465))
+	if exists(select * from REN_Contract where  parentContractID=@ContractID and statusid<>428)
 		RAISERROR('Terminate child contracts',16,1)
-	
-	if exists(select * from REN_Contract where  parentContractID=@ContractID and statusid=450
-	and RefundDate>CONVERT(FLOAT , @TerminationDate))
-		RAISERROR('Termination date is less than child contracts RefundDate',16,1)
 	
 	if exists(select * from REN_Contract where  parentContractID=@ContractID and statusid=428
 	and TerminationDate>CONVERT(FLOAT , @TerminationDate))
 		RAISERROR('Termination date is less than child contracts termination',16,1)
-	
-	if(@WID>0)
-	begin
-		set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-		where WorkFlowID=@WID and  UserID =@UserID)
-
-		if(@level is null )
-			set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
-			where WorkFlowID=@WID and  RoleID =@RoleID)
-
-		if(@level is null ) 
-			set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
-			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
-
-		if(@level is null )
-			set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
-			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
-			where RoleID =@RoleID))
-
-		select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
-		
-		if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
-		begin	
-			if(@StatusID=477)
-			BEGIN
-				set @StatusID=478
-				set @wfAction=4
-			END	
-			ELSE	
-			BEGIN
-				set @StatusID=465
-				set @wfAction=1
-			END	
-		END
-	END
 	 
 	UPDATE REN_CONTRACT
-	SET STATUSID = @StatusID, WorkFlowID=@WID ,wfAction=@wfAction,WorkFlowLevel=case when @WID>0 then @level else WorkFlowLevel end
-	,TerminationDate =case when @StatusID in(477,478) then null else CONVERT(FLOAT , @TerminationDate) end
-	,TerminationPostingDate =case when @StatusID in(477,478) then null else CONVERT(FLOAT ,@TerminationPostingDate) end
-	, RefundDate=case when @StatusID not in(477,478) then null else CONVERT(FLOAT , @TerminationDate) end,Reason = @Reason,SRTAmount=@SRTAmount,RefundAmt=@RefundAmt,
+	SET STATUSID = @StatusID ,TerminationDate = CONVERT(FLOAT , @TerminationDate) , Reason = @Reason,SRTAmount=@SRTAmount,RefundAmt=@RefundAmt,
 	PDCRefund=@PDCRefund,Penalty=@Penalty,Amt=@Amt,TermPayMode=@TermPayMode,TermChequeNo=@TermChequeNo,TermChequeDate= CONVERT(FLOAT , @TermChequeDate),
 	TermRemarks=@TermRemarks,modifieddate=@Dt,modifiedby=@UserName
 	WHERE ContractID = @ContractID or RefContractID=@ContractID
@@ -128,11 +79,301 @@ SET NOCOUNT ON;
 
 	IF (@AuditTrial=1 AND (@SCostCenterID=95 OR @SCostCenterID=104))  
 	BEGIN  
-		EXEC [spCOM_SaveHistory]  
-			@CostCenterID =@SCostCenterID,    
-			@NodeID =@ContractID,
-			@HistoryStatus =@AUDITSTATUS,
-			@UserName=@UserName 
+		INSERT INTO  [REN_Contract_History]
+				([ContractID]
+				,[ContractPrefix]
+				,[ContractDate]
+				,[ContractNumber]
+				,[StatusID]
+				,[PropertyID]
+				,[UnitID]
+				,[TenantID]
+				,[RentAccID]
+				,[IncomeAccID]
+				,[Purpose]
+				,[StartDate]
+				,[EndDate]
+				,[TotalAmount]
+				,[NonRecurAmount]
+				,[RecurAmount]
+				,[Depth]
+				,[ParentID]
+				,[lft]
+				,[rgt]
+				,[IsGroup]
+				,[CompanyGUID]
+				,[GUID]
+				,[CreatedBy]
+				,[CreatedDate]
+				,[ModifiedBy]
+				,[ModifiedDate]
+				,[TerminationDate]
+				,[Reason]
+				,[LocationID]
+				,[DivisionID]
+				,[CurrencyID]
+				,[TermsConditions]
+				,[SalesmanID]
+				,[AccountantID]
+				,[LandlordID]
+				,[Narration]
+				,[SNO]
+				,[CostCenterID]
+				,[HistoryStatus]
+				,[SRTAmount]
+				,[RefundAmt]
+				,[PDCRefund]
+				,[Penalty]
+				,[Amt]
+				,TermPayMode
+				,TermChequeNo
+				,TermChequeDate
+				,TermRemarks)
+			SELECT [ContractID]
+				,[ContractPrefix]
+				,[ContractDate]
+				,[ContractNumber]
+				,[StatusID]
+				,[PropertyID]
+				,[UnitID]
+				,[TenantID]
+				,[RentAccID]
+				,[IncomeAccID]
+				,[Purpose]
+				,[StartDate]
+				,[EndDate]
+				,[TotalAmount]
+				,[NonRecurAmount]
+				,[RecurAmount]
+				,[Depth]
+				,[ParentID]
+				,[lft]
+				,[rgt]
+				,[IsGroup]
+				,[CompanyGUID]
+				,[GUID]
+				,[CreatedBy]
+				,[CreatedDate]
+				,@UserName
+				,@Dt
+				,[TerminationDate]
+				,[Reason]
+				,[LocationID]
+				,[DivisionID]
+				,[CurrencyID]
+				,[TermsConditions]
+				,[SalesmanID]
+				,[AccountantID]
+				,[LandlordID]
+				,[Narration]
+				,[SNO]
+				,[CostCenterID] 
+				,@AUDITSTATUS 
+				,[SRTAmount]
+				,[RefundAmt]
+				,[PDCRefund]
+				,[Penalty]
+				,[Amt]
+				,TermPayMode
+				,TermChequeNo
+				,TermChequeDate
+				,TermRemarks
+				FROM [REN_Contract]  WITH(NOLOCK)
+				WHERE [ContractID] = @ContractID
+  
+  
+		INSERT INTO  [REN_ContractParticulars_History]
+				([NodeID]
+				,[ContractID]
+				,[CCID]
+				,[CCHistoryID]
+				,[CreditAccID]
+				,[ChequeNo]
+				,[ChequeDate]
+				,[PayeeBank]
+				,[DebitAccID]
+				,[Amount]
+				,[CompanyGUID]
+				,[GUID]
+				,[CreatedBy]
+				,[CreatedDate]
+				,[ModifiedBy]
+				,[ModifiedDate]
+				,[Sno]
+				,[Narration]
+				,[IsRecurr])
+		SELECT [NodeID]
+				,[ContractID]
+				,[CCID]
+				,[CCNodeID]
+				,[CreditAccID]
+				,[ChequeNo]
+				,[ChequeDate]
+				,[PayeeBank]
+				,[DebitAccID]
+				,[Amount]
+				,[CompanyGUID]
+				,[GUID]
+				,[CreatedBy]
+				,[CreatedDate]
+				,@UserName
+				,@Dt
+				,[Sno]
+				,[Narration]
+				,[IsRecurr]  
+				FROM  [REN_ContractParticulars] WITH(NOLOCK)
+				WHERE  [ContractID] = @ContractID
+  
+  
+		INSERT INTO [REN_ContractPayTerms_History]
+				([NodeID]
+				,[ContractID]
+				,[ChequeNo]
+				,[ChequeDate]
+				,[CustomerBank]
+				,[DebitAccID]
+				,[Amount]
+				,[CompanyGUID]
+				,[GUID]
+				,[CreatedBy]
+				,[CreatedDate]
+				,[ModifiedBy]
+				,[ModifiedDate]
+				,[Sno]
+				,[Narration])
+		SELECT [NodeID]
+				,[ContractID]
+				,[ChequeNo]
+				,[ChequeDate]
+				,[CustomerBank]
+				,[DebitAccID]
+				,[Amount]
+				,[CompanyGUID]
+				,[GUID]
+				,[CreatedBy]
+				,[CreatedDate]
+				,@UserName
+				,@Dt
+				,[Sno]
+				,[Narration]
+				FROM  [REN_ContractPayTerms] WITH(NOLOCK)
+				WHERE  [ContractID]  = @ContractID
+  
+		INSERT INTO  [REN_ContractExtended_History]
+				([NodeID]
+				,[CreatedBy]
+				,[CreatedDate]
+				,[ModifiedBy]
+				,[ModifiedDate]
+				,[alpha1]
+				,[alpha2]
+				,[alpha3]
+				,[alpha4]
+				,[alpha5]
+				,[alpha6]
+				,[alpha7]
+				,[alpha8]
+				,[alpha9]
+				,[alpha10]
+				,[alpha11]
+				,[alpha12]
+				,[alpha13]
+				,[alpha14]
+				,[alpha15]
+				,[alpha16]
+				,[alpha17]
+				,[alpha18]
+				,[alpha19]
+				,[alpha20]
+				,[alpha21]
+				,[alpha22]
+				,[alpha23]
+				,[alpha24]
+				,[alpha25]
+				,[alpha26]
+				,[alpha27]
+				,[alpha28]
+				,[alpha29]
+				,[alpha30]
+				,[alpha31]
+				,[alpha32]
+				,[alpha33]
+				,[alpha34]
+				,[alpha35]
+				,[alpha36]
+				,[alpha37]
+				,[alpha38]
+				,[alpha39]
+				,[alpha40]
+				,[alpha41]
+				,[alpha42]
+				,[alpha43]
+				,[alpha44]
+				,[alpha45]
+				,[alpha46]
+				,[alpha47]
+				,[alpha48]
+				,[alpha49]
+				,[alpha50]
+				,[HistoryStatus])
+		SELECT [NodeID]
+				,[CreatedBy]
+				,[CreatedDate]
+				,[ModifiedBy]
+				,[ModifiedDate]
+				,[alpha1]
+				,[alpha2]
+				,[alpha3]
+				,[alpha4]
+				,[alpha5]
+				,[alpha6]
+				,[alpha7]
+				,[alpha8]
+				,[alpha9]
+				,[alpha10]
+				,[alpha11]
+				,[alpha12]
+				,[alpha13]
+				,[alpha14]
+				,[alpha15]
+				,[alpha16]
+				,[alpha17]
+				,[alpha18]
+				,[alpha19]
+				,[alpha20]
+				,[alpha21]
+				,[alpha22]
+				,[alpha23]
+				,[alpha24]
+				,[alpha25]
+				,[alpha26]
+				,[alpha27]
+				,[alpha28]
+				,[alpha29]
+				,[alpha30]
+				,[alpha31]
+				,[alpha32]
+				,[alpha33]
+				,[alpha34]
+				,[alpha35]
+				,[alpha36]
+				,[alpha37]
+				,[alpha38]
+				,[alpha39]
+				,[alpha40]
+				,[alpha41]
+				,[alpha42]
+				,[alpha43]
+				,[alpha44]
+				,[alpha45]
+				,[alpha46]
+				,[alpha47]
+				,[alpha48]
+				,[alpha49]
+				,[alpha50]
+				,@AUDITSTATUS 
+				FROM  [REN_ContractExtended] WITH(NOLOCK)
+				WHERE  [NodeID]  = @ContractID
 	END     
 
 	update b
@@ -145,20 +386,10 @@ SET NOCOUNT ON;
 		 
 
     --------------------------  POSTINGS --------------------------
-
     
-	select @SNO=ISNULL(SNO,0),@CCNODEID = CCNODEID,@Dimesion = CCID,@EndDate=convert(datetime,EndDate)  from [REN_Contract] with(NOLOCK) 
+    
+	select @SNO=ISNULL(SNO,0),@CCNODEID = CCNODEID,@Dimesion = CCID  from [REN_Contract] with(NOLOCK) 
 	WHERE   CONTRACTID = @ContractID and RefContractID=0
-	
-	if(@StatusID in(428,465) and @incMontEnd=1)
-	BEGIN
-		update b
-		set docdate=convert(float,@TerminationPostingDate)
-		 from REN_CONTRACTDOCMAPPING a
-		join acc_docdetails b on a.docid=b.docid		
-		where  a.contractid=@ContractID and a.doctype=5 
-		and month(b.docdate)=month(@TerminationPostingDate) and year(b.docdate)=year(@TerminationPostingDate)
-	END
 	   
 	Declare @RcptCCID BIGint,@ComRcptCCID bigint,@SIVCCID bigint,@RentRcptCCID bigint, @PrefValue nvarchar(200)
 	Declare @BnkRcpt BIGINT  , @PDRcpt BIGINT , @CommRcpt bigint , @SalesInv BIGINT, @RentRcpt BIGINT
@@ -168,18 +399,7 @@ SET NOCOUNT ON;
   
 	IF( @SCostCenterID  = 95)
 	BEGIN  
-	 
-	 
-		if exists(select Value from COM_CostCenterPreferences WITH(NOLOCK) where Name='CancelIncomeonTerminate' and Value='true') and @StatusID in(465,428)
-		BEGIN
-			update b
-			set statusid=376
-			FROM REN_CONTRACTDOCMAPPING a WITH(NOLOCK)
-			join acc_docdetails b WITH(NOLOCK) on a.docid=b.docid
-			where doctype=5 and contractid=@ContractID
-			and b.docdate>convert(float,@TerminationDate)
-		END	
-			
+	 	
 	 	if(@SRTXML is not null and @SRTXML<>'')
 		BEGIN
 			select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)
@@ -225,18 +445,18 @@ SET NOCOUNT ON;
 				end
 				
 				set @Prefix=''
-				EXEC [sp_GetDocPrefix] @DocXml,@TerminationPostingDate,@RcptCCID,@Prefix   output
+				EXEC [sp_GetDocPrefix] @DocXml,@TerminationDate,@RcptCCID,@Prefix   output
 				
 				set @DocXml=Replace(@DocXml,'<RowHead/>','')
 				set @DocXml=Replace(@DocXml,'</DocumentXML>','')
 				set @DocXml=Replace(@DocXml,'<DocumentXML>','')
-		
+				
 				EXEC	@return_value = [dbo].[spDOC_SetTempInvDoc]
 						@CostCenterID = @RcptCCID,
 						@DocID = 0,
 						@DocPrefix = @Prefix,
 						@DocNumber = 1,
-						@DocDate = @TerminationPostingDate,
+						@DocDate = @TerminationDate,
 						@DueDate = NULL,
 						@BillNo = @SNO,
 						@InvDocXML =@DocXml,
@@ -259,12 +479,11 @@ SET NOCOUNT ON;
 						SET @SalesInv  = @return_value  
 
 				set @XML = @AA  
-						
+				
 				INSERT INTO  [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,COSTCENTERID,IsAccDoc,DocType,ContractCCID) 
 				values(@ContractID,-1,0,@SalesInv,@RcptCCID,0,0,95)
 			END
 		END 
-		
 		if(@PaymentXML is not null and @PaymentXML<>'')
 		BEGIN
 		
@@ -275,7 +494,7 @@ SET NOCOUNT ON;
 			from @XML.nodes('/ReceiptXML/ROWS') as Data(X)  
 			select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)
 			where CostCenterID=95 and Name='ContractPayment'
-			
+
 			SELECT @AA = TRANSXML , @AccountType = AccountType , @Documents = Documents  FROM @TermPaymentXML WHERE  ID = 1  
 
 			SELECT   @AccValue =  X.value ('@DD', 'NVARCHAR(100)' )        
@@ -285,7 +504,7 @@ SET NOCOUNT ON;
 			 
 			select @DocIDValue=DOCID from  [REN_ContractDocMapping] WITH(nolock)
 			where contractid=@ContractID and Doctype =1 AND ContractCCID = 95
-		
+
 			IF(@AccValue = 'BANK')
 			BEGIN
 				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)  
@@ -305,16 +524,16 @@ SET NOCOUNT ON;
 			SET @DocIDValue = ISNULL(@DocIDValue,0)
 			if(@DocIDValue = '')
 				set @DocIDValue=0
-		
+
 			set @Prefix=''
-			EXEC [sp_GetDocPrefix] @DocXml,@TerminationPostingDate,@RcptCCID,@Prefix   output
+			EXEC [sp_GetDocPrefix] @DocXml,@TerminationDate,@RcptCCID,@Prefix   output
  
 			EXEC	@return_value = [dbo].[spDOC_SetTempAccDocument]
 			@CostCenterID = @RcptCCID,
 			@DocID = 0,
 			@DocPrefix = @Prefix,
 			@DocNumber =1,
-			@DocDate = @TerminationPostingDate,
+			@DocDate = @TerminationDate,
 			@DueDate = NULL,
 			@BillNo = @SNO,
 			@InvDocXML = @DocXml,
@@ -342,7 +561,7 @@ SET NOCOUNT ON;
 		if(@PDPaymentXML is not null and @PDPaymentXML<>'')
 		BEGIN  
 
-			DECLARE @MPSNO NVARCHAR(MAX)
+			DECLARE @MPSNO NVARCHAR(MAX),@CancelDOCID bigint  
 
 			SET @XML =   @PDPaymentXML   
 			CREATE TABLE #tblListPDR(ID int identity(1,1),TRANSXML NVARCHAR(MAX) , DateXML NVARCHAR(MAX), AccountType NVARCHAR(100) ,Documents NVARCHAR(200) )      
@@ -400,14 +619,14 @@ SET NOCOUNT ON;
 				Set @DocXml = convert(nvarchar(max), @AA)  
 
 				set @Prefix=''
-				EXEC [sp_GetDocPrefix] @DocXml,@TerminationPostingDate,@RcptCCID,@Prefix   output
-			
+				EXEC [sp_GetDocPrefix] @DocXml,@TerminationDate,@RcptCCID,@Prefix   output
+
 				EXEC	@return_value = [dbo].[spDOC_SetTempAccDocument]
 				@CostCenterID = @RcptCCID,
 				@DocID = 0,
 				@DocPrefix = @Prefix,
 				@DocNumber =1,
-				@DocDate = @TerminationPostingDate,
+				@DocDate = @TerminationDate,
 				@DueDate = NULL,
 				@BillNo = @SNO,
 				@InvDocXML = @DocXml,
@@ -490,14 +709,14 @@ SET NOCOUNT ON;
 				END
 				
 				set @Prefix=''
-				EXEC [sp_GetDocPrefix] @DocXml,@TerminationPostingDate,@RcptCCID,@Prefix   output
-			
+				EXEC [sp_GetDocPrefix] @DocXml,@TerminationDate,@RcptCCID,@Prefix   output
+
 				EXEC	@return_value = [dbo].[spDOC_SetTempAccDocument]
 				@CostCenterID = @RcptCCID,
 				@DocID = 0,
 				@DocPrefix = @Prefix,
 				@DocNumber =1,
-				@DocDate = @TerminationPostingDate,
+				@DocDate = @TerminationDate,
 				@DueDate = NULL,
 				@BillNo = @SNO,
 				@InvDocXML = @DocXml,
@@ -523,8 +742,6 @@ SET NOCOUNT ON;
  
 		IF(@RentPayXML is not null and @RentPayXML<>'')
 		BEGIN
-
-
 
 			select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)  
 			where CostCenterID=95 and Name='ContractRentPay'  
@@ -559,49 +776,15 @@ SET NOCOUNT ON;
 					SELECT @DocIDValue=0
 				end
 				Set @DDXML = convert(nvarchar(max), @DateXML)  
-				set @CancelDOCID=0
 				 
-				SELECT   @DDValue =  X.value ('@DD', 'NVARCHAR(MAX)' ) ,@CancelDOCID= X.value('@CancelDOCID', 'BIGINT')        
+				SELECT   @DDValue =  X.value ('@DD', 'NVARCHAR(MAX)' )        
 				from @DateXML.nodes('/ChequeDocDate') as Data(X)  
-				
-				
-				iF(@CancelDOCID is not null and @CancelDOCID>0)
-				BEGIN
-					 
-					SELECT @DELDocPrefix = DocPrefix,@DELDocNumber=  DocNumber , @DELETECCID = COSTCENTERID FROM ACC_DocDetails  WITH(nolock)  
-					where DocID=@CancelDOCID
-						    
-					 EXEC @return_value = [dbo].[spDOC_SuspendAccDocument]  
-					 @CostCenterID = @DELETECCID, 
-					 @DocID=@CancelDOCID,
-					 @DocPrefix = @DELDocPrefix,  
-					 @DocNumber = @DELDocNumber, 
-					 @Remarks=N'', 
-					 @UserID = @UserID,  
-					 @UserName = @UserName,
-					 @RoleID=@RoleID,
-					 @LangID = @LangID  
-
-					continue;
-				END	
-					
+		     
 				Set @DocXml = convert(nvarchar(max), @AA)  
 				
-				if(@TerminationPostingDate>convert(datetime,@DDValue))
-					set @DDValue=@TerminationPostingDate
-				else if(@incMontEnd=1)
-				BEGIN
-					if(month(@TerminationPostingDate)=month(convert(datetime,@DDValue)) and  year(@TerminationPostingDate)=year(convert(datetime,@DDValue)))	
-						 set @DDValue=@TerminationPostingDate
-					else if(month(@EndDate)=month(convert(datetime,@DDValue)) and  year(@EndDate)=year(convert(datetime,@DDValue)))	
-						 set @DDValue=@EndDate	 
-					else
-						 set @DDValue=  dateadd(d,-1,dateadd(m,datediff(m,0,convert(datetime,@DDValue))+1,0))
-				END
-
 				set @Prefix=''
-				EXEC [sp_GetDocPrefix] @DocXml,@DDValue,@RcptCCID,@Prefix   output
-				
+				EXEC [sp_GetDocPrefix] @DocXml,@TerminationDate,@RcptCCID,@Prefix   output
+
 				EXEC	@return_value = [dbo].[spDOC_SetTempAccDocument]
 					@CostCenterID = @RcptCCID,
 					@DocID = 0,
@@ -637,7 +820,7 @@ SET NOCOUNT ON;
 			where CostCenterID=95 and Name='TerminatePenaltyJV' 
 			
 			set @Prefix=''
-			EXEC [sp_GetDocPrefix] @PenaltyXML,@TerminationPostingDate,@RcptCCID,@Prefix   output
+			EXEC [sp_GetDocPrefix] @DocXml,@TerminationDate,@RcptCCID,@Prefix   output
 
 			if exists(select * from adm_documenttypes WITH(NOLOCK) where costcenterid= @RcptCCID and isinventory=1)
 			BEGIN
@@ -650,7 +833,7 @@ SET NOCOUNT ON;
 				@DocID = 0,  
 				@DocPrefix = @Prefix,  
 				@DocNumber = 1,  
-				@DocDate = @TerminationPostingDate,  
+				@DocDate = @TerminationDate,  
 				@DueDate = NULL,  
 				@BillNo = @SNO,  
 				@InvDocXML =@PenaltyXML,  
@@ -1088,40 +1271,7 @@ SET NOCOUNT ON;
 				@UserID=@UserID,    
 				@LangID=@LangID    
 	END 
-	IF( @SCostCenterID = 95)
-	BEGIN
-		if(@WID>0 and @wfAction is not null)
-		BEGIN	 
-		 
-			INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID   
-			  ,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)      
-			VALUES(95,@ContractID,@StatusID,CONVERT(FLOAT,getdate()),'',@UserID
-			  ,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
-	 
-		    if(@StatusID not in(426,427))
-			BEGIN
-				update INV_DOCDETAILS
-				set StatusID=371
-				FROM INV_DOCDETAILS a WITH(NOLOCK)
-				join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-				WHERE CONTRACTID = @ContractID  AND ISACCDOC = 0 and RefNodeID = @ContractID and b.Type<0      
-						
-				update ACC_DOCDETAILS
-				set StatusID=371
-				FROM ACC_DOCDETAILS b WITH(NOLOCK)
-				join INV_DOCDETAILS a WITH(NOLOCK) on b.INVDOCDETAILSID=a.INVDOCDETAILSID
-				join REN_CONTRACTDOCMAPPING c WITH(NOLOCK) on a.DocID=b.DocID 
-				WHERE CONTRACTID = @ContractID  AND ISACCDOC = 0 and a.RefNodeid = @ContractID   and c.Type<0    
-
-				update ACC_DOCDETAILS
-				set StatusID=371
-				FROM ACC_DOCDETAILS a WITH(NOLOCK)
-				join REN_CONTRACTDOCMAPPING b WITH(NOLOCK) on a.DocID=b.DocID 
-				WHERE CONTRACTID = @ContractID AND ISACCDOC = 1  and RefNodeID = @ContractID and b.Type<0   
-				and not (StatusID in(369,429) and DocumentType in(14,19))
-			END	
-		END	
-	END
+	
 	IF( @SCostCenterID = 95 OR @SCostCenterID = 104)
 	BEGIN		
 		update ACC_DocDetails

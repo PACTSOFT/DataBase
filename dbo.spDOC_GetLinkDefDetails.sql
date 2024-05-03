@@ -3,12 +3,10 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetLinkDefDetails]
-	@CostcenterID [int],
-	@LinkCostCenterID [int],
+	@CostcenterID [bigint],
+	@LinkCostCenterID [bigint],
 	@Vouchers [nvarchar](max),
 	@productids [nvarchar](max),
-	@DocSeqNos [nvarchar](max),
-	@CCColIDs [nvarchar](max),
 	@UserID [int] = 0,
 	@RoleID [int] = 0,
 	@LangID [int] = 1
@@ -16,12 +14,8 @@ WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY     
 SET NOCOUNT ON  
-    declare @sql nvarchar(max),@sql2 nvarchar(max),@VoucherWhere nvarchar(max),@OrderBy nvarchar(max)
-    SET @sql=''
-    SET @sql2=''
-    SET @VoucherWhere=''
-    SET @OrderBy=''
-    IF(@Vouchers='')
+    
+    if(@Vouchers='')
     BEGIN
 	   --Getting Linking Fields    
 	   SELECT B.SysColumnName BASECOL,L.SysColumnName LINKCOL ,A.[VIEW],A.CostCenterColIDLinked  
@@ -51,77 +45,21 @@ SET NOCOUNT ON
 	  AND (C.SysColumnName NOT LIKE '%dcCurrID%') AND (C.SysColumnName NOT LIKE 'dcPOSRemarksNum%')  
 	  AND (C.SysColumnName <> 'UOMConversion')   AND (C.SysColumnName <> 'UOMConvertedQty')  
     END
-    ELSE 
-    BEGIN			
-		SET @VoucherWhere=' Where a.VoucherNo IN ('+@Vouchers+') '
-
-		IF (ISNULL(@DocSeqNos,'')<>'')
-			SET @VoucherWhere=@VoucherWhere+' and a.DocSeqNo in('+@DocSeqNos+')'
-		ELSE IF (ISNULL(@productids,'')<>'')
-			SET @VoucherWhere=@VoucherWhere+' and a.ProductID in('+@productids+')'
-
-		SET @OrderBy=' order by a.VoucherNo,a.DocSeqNo,a.vouchertype'
-		--Table0
-		SET @sql='Select a.InvDocDetailsID,A.[AccDocDetailsID],a.VoucherNO,a.[DocID],a.[CostCenterID],a.[DocumentType],a.[VersionNo],a.[DocAbbr],a.[DocPrefix],a.[DocNumber],CONVERT(DATETIME,a.[DocDate]) AS DocDate,CONVERT(DATETIME,a.[DueDate]) AS DueDate    
-                   ,CONVERT(DATETIME,a.[BillDate]) AS BillDat,a.[StatusID],a.[BillNo],a.[LinkedInvDocDetailsID],a.[CommonNarration],a.LineNarration,a.[DebitAccount],a.[CreditAccount],a.[DocSeqNo],a.[ProductID],p.QtyAdjustType,p.IsPacking,p.IsBillOfEntry,p.ProductTypeID,p.ProductName,p.ProductCode,p.Volume,p.Weight,p.ParentID,p.IsGroup,p.Wastage
-                   ,isnull(p.MaxTolerancePer,0) ToleranceLimitsPercentage,isnull(p.MaxToleranceVal,0)  ToleranceLimitsValue,a.[Quantity],a.Unit,u.UnitName,a.[HoldQuantity],a.[ReleaseQuantity],a.[IsQtyIgnored],a.[IsQtyFreeOffer],a.[Rate],a.[AverageRate],a.[Gross], a.[GrossFC],a.[StockValue]  ,a.[StockValueFC]   
-                   ,a.[CurrencyID],a.[ExchangeRate],a.ParentSchemeID,a.[CreatedBy],a.vouchertype,a.[CreatedDate],UOMConversion,UOMConvertedQty,a.DynamicInvDocDetailsID,a.ReserveQuantity,a.ProductID ID '
+    ELSE
+    BEGIN
+		declare @sql nvarchar(max)
+		set @sql='select InvDocDetailsID,ProductID,VoucherNo,CostCenterID 
+		from INV_DocDetails where VoucherNo in('+@Vouchers+') and ProductID in('+@productids+')'
 		
-		IF (ISNULL(@CCColIDs,'')<>'')                   
-            SET @sql=@sql+' ,Cr.AccountName as CreditAcc, Dr.AccountName as DebitAcc '
-        
-        SET @sql=@sql+' From INV_DocDetails a with(nolock) join INV_Product p with(nolock) on a.ProductID=p.ProductID '
+		exec(@sql)
 		
-		IF (ISNULL(@CCColIDs,'')<>'')                   
-			SET @sql=@sql+' join dbo.Acc_Accounts Cr  WITH(NOLOCK) on  Cr.AccountID=a.CreditAccount join dbo.Acc_Accounts Dr WITH(NOLOCK)  on  Dr.AccountID=a.DebitAccount  '
-
-	    SET @sql=@sql+' left join com_uom u WITH(NOLOCK)  on a.Unit=u.UOMID   '
-		SET @sql=@sql+@VoucherWhere+@OrderBy	 
+		set @sql='select CostCenterIDLinked,b.SysColumnName from COM_DocumentLinkDef a
+		join ADM_CostCenterDef b on a.CostCenterColIDBase=b.CostCenterColID
+		where CostCenterIDBase='+CONVERT(nvarchar,@LinkCostCenterID)+' 
+		and CostCenterIDLinked iN(select CostCenterID from INV_DocDetails where VoucherNo in('+@Vouchers+') and ProductID in('+@productids+'))'
 		
-		--IF (ISNULL(@DocSeqNos,'')<>'')
-		--	SET @sql=@sql+' and a.DocSeqNo in('+@DocSeqNos+')'
-		--ELSE IF (ISNULL(@productids,'')<>'')
-		--	SET @sql=@sql+' and a.ProductID in('+@productids+')'	
-			               
-		--SET @sql=@sql+@OrderBy	
-		
-		--Table1
-		SET @sql2=' SELECT a.InvDocDetailsID,Cc.* From INV_DocDetails a with(nolock) inner join COM_DocCCData Cc with(nolock) on a.InvDocDetailsID=Cc.InvDocDetailsID '
-		SET @sql2=@sql2+@VoucherWhere+@OrderBy
-		
-		--Table2	                 
-		SET @sql2=@sql2+' SELECT a.InvDocDetailsID,Num.* From INV_DocDetails a with(nolock) inner join COM_DocNumData Num with(nolock) on a.InvDocDetailsID=Num.InvDocDetailsID '
-		SET @sql2=@sql2+@VoucherWhere+@OrderBy
-	        
-		--Table3	                   
-		SET @sql2=@sql2+' SELECT a.InvDocDetailsID,Txt.* From INV_DocDetails a with(nolock) inner join COM_DocTextData Txt with(nolock) on a.InvDocDetailsID=Txt.InvDocDetailsID '
-		SET @sql2=@sql2+@VoucherWhere+@OrderBy
-
-		--Table4	                     
-		SET @sql2=@sql2+' DECLARE @CCIDLinked INT
-					      SET  @CCIDLinked=(Select Top 1 CostCenterID FROM Inv_DocDetails WITH(NOLOCK) WHERE  VoucherNo IN ('+@Vouchers+'))
-					      SELECT B.SysColumnName BASECOL,L.SysColumnName LINKCOL ,A.[VIEW],A.CostCenterColIDLinked,A.CalcValue 
-					      FROM COM_DocumentLinkDetails A WITH(NOLOCK) JOIN COM_DocumentLinkDef D WITH(NOLOCK) ON A.DocumentLinkDeFID=D.DocumentLinkDeFID  
-					      JOIN ADM_CostCenterDef B WITH(NOLOCK) ON B.CostCenterColID=A.CostCenterColIDBase LEFT JOIN ADM_CostCenterDef L WITH(NOLOCK)  ON L.CostCenterColID=A.CostCenterColIDLinked    
-					      WHERE A.CostCenterColIDLinked<>0 AND D.CostCenterIDBase='+CONVERT(nvarchar,@LinkCostCenterID)+' AND D.CostCenterIDLinked=@CCIDLinked  '
-		IF (ISNULL(@CCColIDs,'')<>'')
-			SET @sql2=@sql2+' AND A.CostCenterColIDBase NOT IN ('+@CCColIDs+')'
-
-		--Table5				
-		SET @sql2=@sql2+' select CostCenterIDLinked,b.SysColumnName from COM_DocumentLinkDef a WITH(NOLOCK)
-				join ADM_CostCenterDef b WITH(NOLOCK) on a.CostCenterColIDBase=b.CostCenterColID
-				where CostCenterIDBase='+CONVERT(nvarchar,@LinkCostCenterID)+' 
-				and CostCenterIDLinked iN(select CostCenterID from INV_DocDetails WITH(NOLOCK) where VoucherNo in('+@Vouchers+')'
-		IF (ISNULL(@DocSeqNos,'')<>'')
-			Set @sql2=@sql2+' and DocSeqNo in('+@DocSeqNos+'))'	
-		ELSE
-			Set @sql2=@sql2+' and ProductID in('+@productids+'))'
-		--
-		
-		SET @sql=@sql+@sql2
-		PRINT (@sql)    	
-		EXEC(@sql)
-	END
+		exec(@sql)
+    END
          
  SET NOCOUNT OFF;    
 RETURN 1    

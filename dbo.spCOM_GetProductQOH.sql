@@ -6,7 +6,7 @@ CREATE PROCEDURE [dbo].[spCOM_GetProductQOH]
 	@ProductIDs [nvarchar](max),
 	@DocDate [datetime],
 	@QtyWhere [nvarchar](max),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -15,12 +15,14 @@ BEGIN TRY
 SET NOCOUNT ON;      
 	declare @sql nvarchar(max)
 	  
+
 	set @sql='SELECT isnull(sum(UOMConvertedQty*VoucherType),0) QOH,D.ProductID FROM INV_DocDetails D WITH(NOLOCK)      
-	INNER JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID'+
+	INNER JOIN COM_DocCCData DCC ON DCC.InvDocDetailsID=D.InvDocDetailsID'+
 	' WHERE D.ProductID in('+convert(nvarchar(max),@ProductIDs)+') '+isnull(@QtyWhere,'')+' and statusid=369 AND IsQtyIgnored=0 AND D.DocDate<='+convert(nvarchar,convert(float,@DocDate))+' and (VoucherType=-1 or VoucherType=1)
 	 group by D.ProductID'
 		
-    exec sp_executesql @sql
+	 print @sql
+    exec(@sql)
     
     
     
@@ -43,5 +45,13 @@ BEGIN CATCH
 ROLLBACK TRANSACTION      
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH
+END CATCH      
+
+
+
+
+
+
+
+
 GO

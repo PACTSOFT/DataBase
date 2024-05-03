@@ -12,19 +12,12 @@ BEGIN TRANSACTION
 BEGIN TRY                         
 SET NOCOUNT ON                        
                         
-	declare @RenewRefID BIGINT,@QuotationID BIGINT,@cnt int,@Ed float,@parentID BIGINT,@sno BIGINT
+	declare @RenewRefID BIGINT,@QuotationID BIGINT,@cnt int,@Ed float
 	declare @tab table(StartDate Float,EndDate Float)
 
-	SELECT @RenewRefID=isnull(RenewRefID,0),@QuotationID=isnull(QuotationID,0),@parentID=isnull(ParentContractID,0)
+	SELECT @RenewRefID=isnull(RenewRefID,0),@QuotationID=isnull(QuotationID,0)	
 	FROM REN_CONTRACT WITH(NOLOCK)                       
 	where ContractID = @ContractID
-	
-	if(@parentID>0)
-	BEGIN
-		SELECT @parentID=isnull(ContractID,0),@sno=SNO
-		FROM REN_CONTRACT WITH(NOLOCK)
-		where RenewRefID = @parentID and isnull(RefContractID,0)=0
-	END
 	
 	insert into @tab
 	select StartDate,EndDate FROM REN_CONTRACT WITH(NOLOCK)                       
@@ -71,13 +64,6 @@ SET NOCOUNT ON
 		LEFT JOIN ACC_Accounts ACC WITH(NOLOCK) ON ACC.ACCOUNTID = CP.DebitAccID                         
 		where CP.QuotationID = @QuotationID --and CDM.TYPE = 2                     
 	END
-	ELSE
-	BEGIN
-		SElect 1 where 1<>1
-		SElect 1 where 1<>1
-	END
-	
-	SELECT @parentID ParentRefID,@sno ParentSno
                      
 COMMIT TRANSACTION                        
 SET NOCOUNT OFF;                        

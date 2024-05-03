@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_GetAccountDetails]
-	@AccountID [int] = 0,
-	@UserID [int],
+	@AccountID [bigint] = 0,
+	@UserID [bigint],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -54,8 +54,8 @@ SET NOCOUNT ON
 		EXEC [spCOM_GetAttachments] 2,@AccountID,@UserID
 
 		--Getting CostCenterMap
-		SELECT * FROM COM_CCCCDATA WITH(NOLOCK) 
-		WHERE NodeID = @AccountID AND CostCenterID  = 2 
+		  SELECT * FROM COM_CCCCDATA WITH(NOLOCK) 
+		  WHERE NodeID = @AccountID AND CostCenterID  = 2 
 
 		--Getting Schemes
 		SELECT 1 SchemesTableDeleted where 1!=1
@@ -71,8 +71,8 @@ SET NOCOUNT ON
 		select AccountCode,AccountName from Acc_Accounts with(nolock) where 
 		AccountID in (select ParentID from Acc_Accounts with(nolock) where AccountID=@AccountID)
 		
-		DECLARE @CDSQL NVARCHAR(MAX),@CID INT
-		SELECT @CID=ISNULL(CONVERT(INT,[Value]),0) FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE [Name]='DimWiseCreditDebit'
+		DECLARE @CDSQL NVARCHAR(MAX),@CID BIGINT
+		SELECT @CID=ISNULL(CONVERT(BIGINT,[Value]),0) FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE [Name]='DimWiseCreditDebit'
 		
 		--TO GET Credit & Debit TAB Details by Khaja
 		SET @CDSQL='SELECT CDA.*,L.Name Location,D.Name Division,CDA.CurrencyID,c.Name Currency'
@@ -89,11 +89,11 @@ SET NOCOUNT ON
 		EXEC (@CDSQL)
 		 
 		 --CCmap display data 
-		CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),COSTCENTERID INT,NODEID INT)
-		CREATE TABLE #TBLTEMP1 (CostCenterId INT,CostCenterName nvarchar(max),NodeID INT,[Value] NVARCHAR(300),Code nvarchar(300)) 
+		CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),COSTCENTERID BIGINT,NODEID BIGINT)
+		CREATE TABLE #TBLTEMP1 (CostCenterId bigint,CostCenterName nvarchar(max),NodeID BIGINT,[Value] NVARCHAR(300),Code nvarchar(300)) 
 		INSERT INTO #TBLTEMP
 		SELECT CostCenterID,NODEID  FROM COM_CostCenterCostCenterMap with(nolock) WHERE ParentCostCenterID=2 AND ParentNodeID=@AccountID
-		DECLARE @COUNT INT,@I INT,@TABLENAME NVARCHAR(300),@SQL NVARCHAR(MAX),@CCID INT,@NODEID INT,@FEATURENAME NVARCHAR(300), @IsGroup bit
+		DECLARE @COUNT INT,@I INT,@TABLENAME NVARCHAR(300),@SQL NVARCHAR(MAX),@CCID BIGINT,@NODEID BIGINT,@FEATURENAME NVARCHAR(300), @IsGroup bit
 		SELECT @I=1,@COUNT=COUNT(*) FROM #TBLTEMP with(nolock)
 		WHILE @I<=@COUNT
 		BEGIN
@@ -122,12 +122,11 @@ SET NOCOUNT ON
 		DROP TABLE #TBLTEMP1
 		DROP TABLE #TBLTEMP 
 		
-		 
 		--WorkFlow
 		EXEC spCOM_CheckCostCentetWFApprove 2,@AccountID,@UserID,@RoleID
 		
-		declare @rptid INT, @tempsql nvarchar(500)
-		select @rptid=CONVERT(INT,value) from ADM_GlobalPreferences WITH(NOLOCK) where Name='Report Template Dimension'
+		declare @rptid bigint, @tempsql nvarchar(500)
+		select @rptid=CONVERT(bigint,value) from ADM_GlobalPreferences WITH(NOLOCK) where Name='Report Template Dimension'
 		if(@rptid>0)
 		begin
 			set @tempsql= 'select NodeID, Name, Code from '+(select tablename from ADM_Features with(nolock)  where FeatureID=@rptid)+'  with(nolock)' 
@@ -163,123 +162,6 @@ SET NOCOUNT ON
 		from [COM_CostCenterStatusMap] with(nolock)
 		where CostCenterID=2 and NodeID=@AccountID
 		order by FromDate,ToDate
-
-
-		Declare @WID INT,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@Type int,@escDays int,@CreatedDate datetime
-		SELECT @StatusID=StatusID,@WID=WFID,@Level=WFLevel,@CreatedDate=CONVERT(datetime,createdDate)
-		FROM ACC_Accounts WITH(NOLOCK) where AccountID=@AccountID
-		
-		if(@WID is not null and @WID>0)  
-		BEGIN  
-			SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]   WITH(NOLOCK)   
-			where WorkFlowID=@WID and  UserID =@UserID
-
-			if(@Userlevel is null )  
-				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]  WITH(NOLOCK)    
-				where WorkFlowID=@WID and  RoleID =@RoleID
-
-			if(@Userlevel is null)       
-				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
-				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
-				where g.UserID=@UserID and WorkFlowID=@WID
-
-			if(@Userlevel is null)  
-				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
-				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
-				where g.RoleID =@RoleID and WorkFlowID=@WID
-			
-			if(@Userlevel is null )  	
-				SELECT @Type=[type] FROM [COM_WorkFlow] WITH(NOLOCK) where WorkFlowID=@WID
-		end 
-     
-		set @canEdit=1  
-       
-		if(@StatusID =1002)  
-		begin  
-			if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
-			begin  
-				set @canEdit=0   
-			end    
-		end
-		ELSE if(@StatusID=1003)
-		BEGIN
-		    if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
-			begin  
-				set @canEdit=1
-			end
-			ELSE
-				set @canEdit=0
-		END
-			print '@Userlevel'
-		print @Userlevel
-		print '@Level'
-		print @Level
-		print '@StatusID'
-		print @StatusID
-		print '@WID'
-		print @WID
-		if(@StatusID=1001 or @StatusID=1002)  
-		begin    
-			if(@Userlevel is not null and  @Level is not null and @Userlevel>@level)  
-			begin
-				if(@Type=1 or @Level+1=@Userlevel)
-					set @canApprove=1   
-				ELSE
-				BEGIN
-					if exists(select EscDays FROM [COM_WorkFlow]
-					where workflowid=@WID and ApprovalMandatory=1 and LevelID<@Userlevel and LevelID>@Level)
-						set @canApprove=0
-					ELSE
-					BEGIN	
-						select @escDays=sum(escdays) from (select max(escdays) escdays from [COM_WorkFlow] WITH(NOLOCK) 
-						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
-						group by LevelID) as t
-						 
-						set @CreatedDate=dateadd("d",@escDays,@CreatedDate)
-						
-						select @escDays=sum(escdays) from (select max(eschours) escdays from [COM_WorkFlow] WITH(NOLOCK) 
-						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
-						group by LevelID) as t
-						
-						set @CreatedDate=dateadd("HH",@escDays,@CreatedDate)
-						
-						if (@CreatedDate<getdate())
-							set @canApprove=1   
-						ELSE
-							set @canApprove=0
-					END	
-				END	
-			end   
-			else if(@Userlevel is not null and  @Level is not null and @Level=@Userlevel and @StatusID=1001)  
-			begin
-				set @canApprove=1  
-			end
-			else  
-				set @canApprove= 0   
-		end  		
-		else  
-			set @canApprove= 0   
-
-		IF @WID is not null and @WID>0
-		begin
-
-			
-			select @canEdit canEdit,@canApprove canApprove
-
-			SELECT CONVERT(DATETIME, A.CreatedDate) Date,A.WorkFlowLevel,
-			(SELECT TOP 1 LevelName FROM COM_WorkFlow L with(nolock) WHERE L.WorkFlowID=@WID AND L.LevelID=A.WorkFlowLevel) LevelName,
-			A.CreatedBy,A.StatusID,S.Status,A.Remarks,U.FirstName,U.LastName
-			FROM COM_Approvals A with(nolock),COM_Status S with(nolock),ADM_Users U with(nolock)
-			WHERE A.RowType=1 AND S.StatusID=A.StatusID AND CCID=2 AND CCNodeID=@AccountID AND A.USERID=U.USERID
-			ORDER BY A.CreatedDate
-			
-			select @WID WID,levelID,LevelName from COM_WorkFlow with(nolock) 
-			where WorkFlowID=@WID
-			group by levelID,LevelName
-		end
-
-
-
 			
 COMMIT TRANSACTION
 SET NOCOUNT OFF;
@@ -300,5 +182,7 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
+
+
 GO

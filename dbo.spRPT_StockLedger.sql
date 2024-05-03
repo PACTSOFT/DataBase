@@ -25,18 +25,17 @@ BEGIN TRY
 SET NOCOUNT ON;  
 
 	DECLARE @SQL NVARCHAR(MAX),@From NVARCHAR(20),@To NVARCHAR(20),@TagSQL NVARCHAR(MAX),@Order NVARCHAR(100),@CloseDt nvarchar(20),
-			@PRD_I INT,@PRD_COUNT INT,@ProductID INT,@UnAppSQL NVARCHAR(50),@Valuation INT,@ShowNegativeStock bit,
-			@CurrWHERE nvarchar(30),@ValColumn nvarchar(20),@GrossColumn nvarchar(20),@TransactionsBy nvarchar(100),
-			@TransactionsByOp nvarchar(100),@TransactionsByOpHardClose nvarchar(50),
+			@PRD_I INT,@PRD_COUNT INT,@ProductID BIGINT,@UnAppSQL NVARCHAR(50),@Valuation INT,@ShowNegativeStock bit,
+			@CurrWHERE nvarchar(30),@ValColumn nvarchar(20),@GrossColumn nvarchar(20),@TransactionsBy nvarchar(100),@TransactionsByOp nvarchar(100),@TransactionsByOpHardClose nvarchar(50),
 			@DateFilterCol nvarchar(60),@DateFilterLPRate nvarchar(60),@DateFilterOp1 nvarchar(120),@DateFilterOp2 nvarchar(80)
 
-	DECLARE @TblOpening AS TABLE(ProductID INT,OpQty FLOAT,AvgRate FLOAT,OpValue FLOAT,DocumentType INT)
+	DECLARE @TblOpening AS TABLE(ProductID BIGINT,OpQty FLOAT,AvgRate FLOAT,OpValue FLOAT,DocumentType INT)
 
 	if(select Value from adm_globalpreferences with(nolock) where Name='ShowNegativeStockInReports')='True'
 		set @ShowNegativeStock=1
 	else
 		set @ShowNegativeStock=0
-		
+
 	SET @From=CONVERT(FLOAT,@FromDate)
 	SET @To=CONVERT(FLOAT,@ToDate)
 	SET @Valuation=@DefValuation
@@ -44,14 +43,13 @@ SET NOCOUNT ON;
 	IF @IncludeUpPostedDocs=0
 		SET @UnAppSQL=' AND D.StatusID=369'
 	ELSE
-		SET @UnAppSQL=' AND D.StatusID<>376'
+		SET @UnAppSQL=''
 
 	IF @CurrencyID>0
 	BEGIN
 		SET @ValColumn='StockValueFC'
 		SET @GrossColumn='GrossFC'
 		SET @CurrWHERE=' AND D.CurrencyID='+CONVERT(NVARCHAR,@CurrencyID)
-		
 	END
 	ELSE
 	BEGIN
@@ -162,11 +160,11 @@ SET NOCOUNT ON;
 		if(@LocationWHERE IS NOT NULL AND @LocationWHERE<>'')
 			set @DIMWHERE=@DIMWHERE+' AND DCC.DCCCNID'+CONVERT(NVARCHAR,@DimensionID-50000)+' IN ('+@LocationWHERE+') '
 		set @TagSQL=@DIMWHERE			
-		set @Order=@SortTransactionsBy+',ST DESC,VoucherType DESC,VoucherNo,RecQty DESC'
+		set @Order=@SortTransactionsBy+',ST DESC,VoucherType DESC,VoucherNo'
 	end
 	else
 	begin
-		set @Order=@SortTransactionsBy+',ST DESC,VoucherNo,VoucherType DESC,RecQty DESC'
+		set @Order=@SortTransactionsBy+',ST DESC,VoucherNo,VoucherType DESC'
 	end
 	
 	/*if @LocationWHERE IS NOT NULL AND @LocationWHERE<>''
@@ -183,20 +181,14 @@ SET NOCOUNT ON;
 	if(@DefValuation=4)
 		set @SELECTQUERY=@SELECTQUERY+','+@GrossColumn+' Gross'
 	
-	if(@DefValuation=8)
-		set @SELECTQUERY=@SELECTQUERY+','+@GrossColumn+' BatchValue'
-		
 	--case when Quantity=0 then StockValue else StockValue/Quantity end
 	
 	SET @SQL='
 	SELECT P.ProductID,'+@TransactionsBy+',D.VoucherNo,D.InvDocDetailsID,case when D.DocumentType=5 then Dr.AccountName else A.AccountName end CustomerName,
-	D.Quantity RecQty,UOM.UnitName RecUnit,D.'+@ValColumn+'/D.Quantity RecRate,D.'+@ValColumn+' RecValue,
-	NULL IssQty,NULL IssUnit,NULL IssRate,NULL IssValue,D.UOMConvertedQty,D.VoucherType,D.DocumentType,case when D.DocumentType=3 then 1 else 2 end OP,case when D.DocumentType=5 then 1 else 2 end ST'
-	if(@DefValuation=8)
-		SET @SQL=@SQL+',D.'+@ValColumn+' BatchValue'	
-	SET @SQL=@SQL+@SELECTQUERY+'
-	FROM INV_DocDetails D WITH(NOLOCK) 
-	INNER JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID
+	Quantity RecQty,UOM.UnitName RecUnit,'+@ValColumn+'/Quantity RecRate,'+@ValColumn+' RecValue,
+	NULL IssQty,NULL IssUnit,NULL IssRate,NULL IssValue,UOMConvertedQty,VoucherType,D.DocumentType,case when D.DocumentType=3 then 1 else 2 end OP,case when D.DocumentType=5 then 1 else 2 end ST'+@SELECTQUERY+'
+	FROM INV_DocDetails D WITH(NOLOCK) INNER JOIN 
+	INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID
 	LEFT JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@FROMQUERY+'
 	LEFT JOIN COM_UOM UOM WITH(NOLOCK) ON UOM.UOMID=D.Unit
 	LEFT JOIN ACC_Accounts A WITH(NOLOCK) ON A.AccountID=D.CreditAccount
@@ -206,12 +198,9 @@ SET NOCOUNT ON;
 	UNION ALL
 	SELECT P.ProductID,'+@TransactionsBy+',D.VoucherNo,D.InvDocDetailsID,A.AccountName,
 	NULL RecQty,NULL RecUnit,NULL RecRate,NULL RecValue,
-	Quantity IssQty,UOM.UnitName IssUnit,D.'+@ValColumn+'/D.Quantity IssRate,D.'+@ValColumn+' IssValue,D.UOMConvertedQty,D.VoucherType,D.DocumentType,2 OP,case when D.DocumentType=5 then 1 else 0 end ST'
-	if(@DefValuation=8)
-		SET @SQL=@SQL+',CASE WHEN P.ProductTypeID=5 THEN ISNULL((SELECT TOP 1 BD.'+@ValColumn+'/BD.Quantity FROM INV_DocDetails BD WITH(NOLOCK) WHERE BD.InvDocDetailsID=D.RefInvDocDetailsID AND BD.BatchID=D.BatchID),0)*D.Quantity ELSE D.'+@ValColumn+' END BatchValue'	
-	SET @SQL=@SQL+@SELECTQUERY+'
-	FROM INV_DocDetails D WITH(NOLOCK) 
-	INNER JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID
+	Quantity IssQty,UOM.UnitName IssUnit,'+@ValColumn+'/Quantity IssRate,'+@ValColumn+' IssValue,UOMConvertedQty,VoucherType,D.DocumentType,2 OP,case when D.DocumentType=5 then 1 else 0 end ST'+@SELECTQUERY+'
+	FROM INV_DocDetails D WITH(NOLOCK) INNER JOIN
+	INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID
 	LEFT JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@FROMQUERY+'
 	LEFT JOIN COM_UOM UOM WITH(NOLOCK) ON UOM.UOMID=D.Unit
 	LEFT JOIN ACC_Accounts A WITH(NOLOCK) ON A.AccountID=D.DebitAccount
@@ -225,7 +214,7 @@ SET NOCOUNT ON;
 	
 	
 	DECLARE @LPRateI int,@LPRateCNT int
-	DECLARE @TblLastRate AS TABLE(ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,ProductID INT,Rate FLOAT)
+	DECLARE @TblLastRate AS TABLE(ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,ProductID BIGINT,Rate FLOAT)
 	if (@DefValuation=4 or @DefValuation=5)
 	begin
 		SET @SQL='SELECT P.ProductID,'
@@ -234,8 +223,8 @@ SET NOCOUNT ON;
 		else if @DefValuation=5
 			SET @SQL=@SQL+@ValColumn+'/UOMConvertedQty RecRate'
 		SET @SQL=@SQL+'
-	FROM INV_DocDetails D WITH(NOLOCK) 
-	INNER JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID
+	FROM INV_DocDetails D WITH(NOLOCK) INNER JOIN 
+	INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID
 	LEFT JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@FROMQUERY+'
 	LEFT JOIN ACC_Accounts A WITH(NOLOCK) ON A.AccountID=D.CreditAccount
 	WHERE P.ProductID IN ('+@Products+') AND IsQtyIgnored=0 AND D.VoucherType=1 AND D.DocumentType<>3
@@ -247,8 +236,8 @@ SET NOCOUNT ON;
 		SELECT @LPRateCNT=COUNT(*) FROM @TblLastRate
 	end
 	
-	DECLARE @TblProducts AS TABLE(ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,ProductID INT)
-	DECLARE @TblOpeningTransaction AS TABLE(ProductID INT,Qty FLOAT,Rate FLOAT,DocumentType INT)--ID INT IDENTITY(1,1) NOT NULL
+	DECLARE @TblProducts AS TABLE(ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,ProductID BIGINT)
+	DECLARE @TblOpeningTransaction AS TABLE(ProductID BIGINT,Qty FLOAT,Rate FLOAT,DocumentType INT)--ID INT IDENTITY(1,1) NOT NULL
 
 	INSERT INTO @TblProducts(ProductID)
 	EXEC SPSplitString @Products,','
@@ -276,7 +265,7 @@ SET NOCOUNT ON;
 		IF @DefValuation=0
 			SELECT @Valuation=ValuationID FROM INV_Product WITH(NOLOCK) WHERE ProductID=@ProductID
 			
-		SET @SQL='DECLARE @FromDate FLOAT,@ToDate FLOAT,@ProductID INT
+		SET @SQL='DECLARE @FromDate FLOAT,@ToDate FLOAT,@ProductID BIGINT
 		SET @FromDate='+CONVERT(NVARCHAR,CONVERT(FLOAT,@FromDate))+'
 		SET @ToDate='+CONVERT(NVARCHAR,CONVERT(FLOAT,@ToDate))+'
 		SET @ProductID='+CONVERT(NVARCHAR,@ProductID)+' '
@@ -293,25 +282,20 @@ SET NOCOUNT ON;
 				SET @SQL=@SQL+' UNION ALL '
 			end
 			SET @SQL=@SQL+'
-			SELECT '+@TransactionsByOp+',D.VoucherNo,D.UOMConvertedQty Qty,D.'+@ValColumn+'/D.UOMConvertedQty RecRate,D.'+@ValColumn+' RecValue,D.VoucherType,D.DocumentType,case when D.DocumentType=3 then 1 else 2 end OP,case when D.DocumentType=5 then 1 else 2 end ST
+			SELECT '+@TransactionsByOp+',D.VoucherNo,UOMConvertedQty Qty,'+@ValColumn+'/UOMConvertedQty RecRate,'+@ValColumn+' RecValue,VoucherType,DocumentType,case when DocumentType=3 then 1 else 2 end OP,case when DocumentType=5 then 1 else 2 end ST
 			FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
-			WHERE D.ProductID=@ProductID AND D.IsQtyIgnored=0 AND D.UOMConvertedQty!=0 AND D.VoucherType=1'+@DateFilterOp1+@UnAppSQL+@CurrWHERE+@WHERE
+			WHERE D.ProductID=@ProductID AND IsQtyIgnored=0 AND UOMConvertedQty!=0 AND D.VoucherType=1'+@DateFilterOp1+@UnAppSQL+@CurrWHERE+@WHERE
 			--IF @Valuation=3
 			--BEGIN
 				SET @SQL=@SQL+' UNION ALL
-				SELECT '+@TransactionsByOp+',D.VoucherNo,D.UOMConvertedQty,0 RecRate'
+				SELECT '+@TransactionsByOp+',D.VoucherNo,UOMConvertedQty,NULL RecRate'
 				if @DefValuation=7
-					SET @SQL=@SQL+',D.'+@ValColumn+' RecValue'
-				else if @DefValuation=8
-					SET @SQL=@SQL+',CASE WHEN P.ProductTypeID=5 THEN ISNULL((SELECT TOP 1 BD.'+@ValColumn+'/BD.Quantity FROM INV_DocDetails BD WITH(NOLOCK) WHERE BD.InvDocDetailsID=D.RefInvDocDetailsID AND BD.BatchID=D.BatchID),0)*D.Quantity ELSE D.'+@ValColumn+' END RecValue'
+					SET @SQL=@SQL+','+@ValColumn+' RecValue'
 				else
-					SET @SQL=@SQL+',0 RecValue'					
-				SET @SQL=@SQL+',-1 VoucherType,D.DocumentType,2 OP,case when D.DocumentType=5 then 1 else 0 end ST
-				FROM INV_DocDetails D WITH(NOLOCK) '
-				if @DefValuation=8
-					SET @SQL=@SQL+'INNER JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID '
-				SET @SQL=@SQL+@TagSQL+'
-				WHERE D.ProductID=@ProductID AND D.IsQtyIgnored=0 AND D.VoucherType=-1'
+					SET @SQL=@SQL+',NULL RecValue'					
+				SET @SQL=@SQL+',-1 VoucherType,DocumentType,2 OP,case when DocumentType=5 then 1 else 0 end ST
+				FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
+				WHERE D.ProductID=@ProductID AND IsQtyIgnored=0 AND D.VoucherType=-1'
 					+@DateFilterOp2+@UnAppSQL+@CurrWHERE+@WHERE
 			--END
 			--ELSE
@@ -325,7 +309,7 @@ SET NOCOUNT ON;
 		SET @SQL=@SQL+') AS T'
 		
 		--BELOW CODE COMMENTED TO ADD ST ORDER BY 
-		SET @SQL=@SQL+' ORDER BY '+replace(@Order,',RecQty DESC',',Qty DESC')--DocDate,ST DESC,VoucherNo,VoucherType DESC'
+		SET @SQL=@SQL+' ORDER BY '+@Order--DocDate,ST DESC,VoucherNo,VoucherType DESC'
 		
 		--print(@SQL)
 		--print(@TotalSaleSQL)
@@ -430,7 +414,7 @@ SET NOCOUNT ON;
 			SET @nStatusOuter = @@FETCH_STATUS
 
 			SELECT @OpBalanceValue=0,@OpBalanceQty=0,@lstI=1,@lstCNT=0,@dblAvgRate=0
-	
+			
 			delete from @lstRecTbl
 			
 			--Set Last Purchase Rate
@@ -450,12 +434,6 @@ SET NOCOUNT ON;
 			SET @I=1
 			WHILE(@nStatusOuter <> -1)
 			BEGIN
-				if(@RecQty<0)
-				begin
-					set @RecQty=-@RecQty
-					set @VoucherType=-@VoucherType
-				end	
-			
 				if @VoucherType=1
 				begin
 					--if(@OpBalanceValue<0)
@@ -463,7 +441,6 @@ SET NOCOUNT ON;
 						
 					set @dblValue = @RecValue
 					set @dblUOMRate = @dblValue / @RecQty;
-					
 					if (@OpBalanceQty < 0)
 					begin
 						set @OpBalanceQty = @RecQty + @OpBalanceQty;
@@ -484,7 +461,7 @@ SET NOCOUNT ON;
 					
 					if (@Valuation=4 or @Valuation=5)--Last Purchase Rate/Landing Rate
 						 set @dblUOMRate=@dblAvgRate
-	              --       select @RecQty,@ShowNegativeStock
+	                     
 					if ((@RecQty>0 and @ShowNegativeStock=0) or (@RecQty!=0 and @ShowNegativeStock=1))--NegStkChange (@RecQty>0)
 					begin
 						--For Sales Return Voucher Avg Rate will be current Avg Rate
@@ -492,7 +469,7 @@ SET NOCOUNT ON;
 						BEGIN
 							if @dblAvgRate IS NULL
 								set @dblAvgRate=0
-							if (@Valuation=7 OR @Valuation=8)
+							if (@Valuation=7)
 								set @dblAvgRate=@dblUOMRate
 							else
 								set @dblUOMRate=@dblAvgRate
@@ -543,7 +520,7 @@ SET NOCOUNT ON;
 
 					if (@Valuation=3 or @Valuation=4 or @Valuation=5)--WEIGHTED AVGG
 						set @OpBalanceValue = @dblAvgRate * @OpBalanceQty;
-					else if (@Valuation=7 or @Valuation=8)--Invoice Rate
+					else if (@Valuation=7)--Invoice Rate
 					begin
 						set @OpBalanceValue=@OpBalanceValue-@RecValue
 						if(@OpBalanceValue<0)
@@ -553,19 +530,19 @@ SET NOCOUNT ON;
 						else	
 							set @dblAvgRate=@OpBalanceValue/@OpBalanceQty
 					end
-					--else if (@Valuation=7)--Invoice Rate
-					--begin
-					--	set @OpBalanceValue=@OpBalanceValue-@RecValue
-					--	if(@OpBalanceValue<0)
-					--		set @OpBalanceValue=0
-					--	if(@OpBalanceQty<=0)
-					--	begin
-					--		set @dblAvgRate=0
-					--		set @OpBalanceValue=0
-					--	end
-					--	else	
-					--		set @dblAvgRate=@OpBalanceValue/@OpBalanceQty
-					--end
+					else if (@Valuation=7)--Invoice Rate
+					begin
+						set @OpBalanceValue=@OpBalanceValue-@RecValue
+						if(@OpBalanceValue<0)
+							set @OpBalanceValue=0
+						if(@OpBalanceQty<=0)
+						begin
+							set @dblAvgRate=0
+							set @OpBalanceValue=0
+						end
+						else	
+							set @dblAvgRate=@OpBalanceValue/@OpBalanceQty
+					end
 					else if (@Valuation = 1 OR @Valuation = 2)--FIFO & LIFO
 					begin
 						set @dblCOGS = 0;

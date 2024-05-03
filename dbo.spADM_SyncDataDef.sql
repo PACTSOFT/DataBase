@@ -5,7 +5,7 @@ GO
 CREATE PROCEDURE [dbo].[spADM_SyncDataDef]
 	@Type [int],
 	@CCXML [nvarchar](max) = null,
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -16,13 +16,13 @@ SET NOCOUNT ON
 		----Declaration Section
 		--DECLARE @HasAccess bit,@FEATUREID int
 
-	declare @ID INT,@i int,@cnt int,@CCID int,@SQL nvarchar(MAX),@TableName nvarchar(50),@POSItemCodeDim int,@XML xml
+	declare @ID bigint,@i int,@cnt int,@CCID int,@SQL nvarchar(MAX),@TableName nvarchar(50),@POSItemCodeDim int,@XML xml
 	
 	set @ID=1
 	
 	if @Type=1 or @Type=2--Getting Offline Master Data Changes
 	begin
-		declare @Tbl as Table(CCID int,NewNodes int,MaxNodeID INT,ModDate float,ModDateTime datetime)
+		declare @Tbl as Table(CCID int,NewNodes int,MaxNodeID bigint,ModDate float,ModDateTime datetime)
 		
 		if @Type=1 and (select count(*) from ADM_OfflineOnlineIDMap with(nolock) where OnlineID=0)=0--For Transaction
 		begin
@@ -35,7 +35,7 @@ SET NOCOUNT ON
 		if @SQL!='' and isnumeric(@SQL)=1
 			set @POSItemCodeDim=@SQL
 		
-		select @i=max(FeatureId) from adm_features with(nolock) where FeatureId>50000 
+		set @i=50100
 		while(@i>=50001)
 		begin
 			if exists (select * from adm_features with(nolock) where FeatureId=@i and IsEnabled=1)
@@ -90,7 +90,7 @@ SET NOCOUNT ON
 		order by CONVERT(int,REPLACE(VersionNo,'.','')) desc 
 		
 		select Name,Value from adm_globalPreferences with(nolock)
-		where Name in ('UseGlobalPrefForFileUploadPath','File Upload Path','ftpuserid','ftppassword','isSftp','ftpport','Syncbatchproductasgeneral','Syncserialproductasgeneral')
+		where Name in ('UseGlobalPrefForFileUploadPath','File Upload Path','ftpuserid','ftppassword','Syncbatchproductasgeneral','Syncserialproductasgeneral')
 	end
 	else if @Type=4--EXECUTE SCRIPTS
 	begin
@@ -98,44 +98,44 @@ SET NOCOUNT ON
 	end
 	else if @Type=5--EXECUTE SCRIPTS WITH IDENTITY VALUE
 	begin
-		EXEC sp_executesql @CCXML,N'@ID INT OUTPUT',@ID OUTPUT
+		EXEC sp_executesql @CCXML,N'@ID BIGINT OUTPUT',@ID OUTPUT
 	end
 	else if @Type=6--Delete Offline Masters and update references
 	begin
-		declare @CC int,@OfflineID INT
-		create table #TMap(ID int identity(1,1), OfflineID INT,OnlineID INT)
+		declare @CC int,@OfflineID bigint
+		create table #TMap(ID int identity(1,1), OfflineID bigint,OnlineID bigint)
 		set @CC=convert(int,@CCXML)
 		
 		insert into #TMap(OfflineID,OnlineID)
 		select distinct OfflineID,OnlineID from ADM_OfflineOnlineIDMap with(nolock) where CostCenterID=@CC and OnlineID>0
 		
-		select @i=1,@Cnt=count(*) from #TMap with(nolock)
+		select @i=1,@Cnt=count(*) from #TMap
 
 		if @CC=2
 		begin
-			if exists (select DebitAccount from inv_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.DebitAccount=T.OfflineID)
+			if exists (select DebitAccount from inv_docdetails A inner join #TMap T ON A.DebitAccount=T.OfflineID)
 				update inv_docdetails
 				set DebitAccount=T.OnlineID
-				from inv_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.DebitAccount=T.OfflineID
+				from inv_docdetails A inner join #TMap T ON A.DebitAccount=T.OfflineID
 			
-			if exists (select CreditAccount from inv_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.CreditAccount=T.OfflineID)
+			if exists (select CreditAccount from inv_docdetails A inner join #TMap T ON A.CreditAccount=T.OfflineID)
 				update inv_docdetails
 				set CreditAccount=T.OnlineID
-				from inv_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.CreditAccount=T.OfflineID
+				from inv_docdetails A inner join #TMap T ON A.CreditAccount=T.OfflineID
 				
-			if exists (select DebitAccount from acc_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.DebitAccount=T.OfflineID)
+			if exists (select DebitAccount from acc_docdetails A inner join #TMap T ON A.DebitAccount=T.OfflineID)
 				update acc_docdetails
 				set DebitAccount=T.OnlineID
-				from acc_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.DebitAccount=T.OfflineID
+				from acc_docdetails A inner join #TMap T ON A.DebitAccount=T.OfflineID
 			
-			if exists (select CreditAccount from acc_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.CreditAccount=T.OfflineID)
+			if exists (select CreditAccount from acc_docdetails A inner join #TMap T ON A.CreditAccount=T.OfflineID)
 				update acc_docdetails
 				set CreditAccount=T.OnlineID
-				from acc_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.CreditAccount=T.OfflineID
+				from acc_docdetails A inner join #TMap T ON A.CreditAccount=T.OfflineID
 			
 			while(@i<=@Cnt)
 			begin
-				select @OfflineID=OfflineID from #TMap with(nolock) where ID=@i
+				select @OfflineID=OfflineID from #TMap where ID=@i
 				
 				EXEC spACC_DeleteAccount @AccountID=@OfflineID,@UserID=@UserID,@RoleID=1,@LangID=@LangID
 				
@@ -146,14 +146,14 @@ SET NOCOUNT ON
 		end
 		else if @CC=3
 		begin
-			if exists (select ProductID from inv_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.ProductID=T.OfflineID)
+			if exists (select ProductID from inv_docdetails A inner join #TMap T ON A.ProductID=T.OfflineID)
 				update inv_docdetails
 				set ProductID=T.OnlineID
-				from inv_docdetails A with(nolock) inner join #TMap T with(nolock) ON A.ProductID=T.OfflineID
+				from inv_docdetails A inner join #TMap T ON A.ProductID=T.OfflineID
 			
 			while(@i<=@Cnt)
 			begin
-				select @OfflineID=OfflineID from #TMap with(nolock) where ID=@i
+				select @OfflineID=OfflineID from #TMap where ID=@i
 				
 				EXEC spINV_DeleteProduct @ProductID=@OfflineID,@UserID=@UserID,@RoleID=1,@LangID=@LangID
 				
@@ -162,33 +162,33 @@ SET NOCOUNT ON
 				set @i=@i+1
 			end
 		end
-		else if @CC>50000 
+		else if @CC>50000 and @CC<=50050
 		begin
 			declare @CCName nvarchar(50)
 			select @TableName=TableName,@CCName=Name from adm_features with(nolock) where FeatureID=@CCID
-			set @SQL='if exists (select A.dcCCNID'+convert(nvarchar,@CC-50000)+' from com_docccdata A with(nolock) inner join #TMap T with(nolock) ON A.dcCCNID'+convert(nvarchar,@CC-50000)+'=T.OfflineID)
+			set @SQL='if exists (select A.dcCCNID'+convert(nvarchar,@CC-50000)+' from com_docccdata A inner join #TMap T ON A.dcCCNID'+convert(nvarchar,@CC-50000)+'=T.OfflineID)
 				update com_docccdata
 				set dcCCNID'+convert(nvarchar,@CC-50000)+'=T.OnlineID
-				from com_docccdata A with(nolock) inner join #TMap T with(nolock) ON A.dcCCNID'+convert(nvarchar,@CC-50000)+'=T.OfflineID'
+				from com_docccdata A inner join #TMap T ON A.dcCCNID'+convert(nvarchar,@CC-50000)+'=T.OfflineID'
 			--print( @SQL)
 			exec(@SQL)
 
-			set @SQL='if exists (select A.CCNID'+convert(nvarchar,@CC-50000)+' from com_ccccdata A with(nolock) inner join #TMap T with(nolock) ON A.CCNID'+convert(nvarchar,@CC-50000)+'=T.OfflineID)
+			set @SQL='if exists (select A.CCNID'+convert(nvarchar,@CC-50000)+' from com_ccccdata A inner join #TMap T ON A.CCNID'+convert(nvarchar,@CC-50000)+'=T.OfflineID)
 				update com_ccccdata
 				set CCNID'+convert(nvarchar,@CC-50000)+'=T.OnlineID
-				from com_ccccdata A with(nolock) inner join #TMap T with(nolock) ON A.CCNID'+convert(nvarchar,@CC-50000)+'=T.OfflineID'
+				from com_ccccdata A inner join #TMap T ON A.CCNID'+convert(nvarchar,@CC-50000)+'=T.OfflineID'
 			exec(@SQL)
 			
-			set @SQL='if exists (select NodeID from com_docbridge A with(nolock) inner join #TMap T with(nolock) ON A.RefDimensionNodeID=T.OfflineID AND A.RefDimensionID='+convert(nvarchar,@CC)+')
+			set @SQL='if exists (select NodeID from com_docbridge A inner join #TMap T ON A.RefDimensionNodeID=T.OfflineID AND A.RefDimensionID='+convert(nvarchar,@CC)+')
 				update com_docbridge
 				set RefDimensionNodeID=T.OnlineID
-				from com_docbridge A with(nolock) inner join #TMap T with(nolock) ON A.RefDimensionNodeID=T.OfflineID AND A.RefDimensionID='+convert(nvarchar,@CC)
+				from com_docbridge A inner join #TMap T ON A.RefDimensionNodeID=T.OfflineID AND A.RefDimensionID='+convert(nvarchar,@CC)
 			exec(@SQL)
 			
 			
 			while(@i<=@Cnt)
 			begin
-				select @OfflineID=OfflineID from #TMap with(nolock) where ID=@i
+				select @OfflineID=OfflineID from #TMap where ID=@i
 
 				EXEC spCOM_DeleteCostCenter @CC,@OfflineID,1,@UserID,@LangID
 				
@@ -222,14 +222,14 @@ SET NOCOUNT ON
 	end
 	else if @Type=10--Get Offline Settings
 	begin
-		declare @TblSettings as table(CCID int,TableName nvarchar(50),PrimaryKey nvarchar(50),IsModDate bit,ChunkSize int,MaxNodeID INT,ModDate float)
+		declare @TblSettings as table(CCID int,TableName nvarchar(50),PrimaryKey nvarchar(50),IsModDate bit,ChunkSize int,MaxNodeID bigint,ModDate float)
 		
 		--insert into @TblSettings
 		--select * from ADM_SynSettings with(nolock) order by ID
 					
-		DECLARE @SPInvoice cursor, @nStatusOuter int,@PrimaryKey nvarchar(100),@IsModDate bit,@ChunkSize int,@MaxNodeID INT,@ModDate float,@tempCode nvarchar(max)
+		DECLARE @SPInvoice cursor, @nStatusOuter int,@PrimaryKey nvarchar(100),@IsModDate bit,@ChunkSize int,@MaxNodeID bigint,@ModDate float,@tempCode nvarchar(max)
 		SET @SPInvoice = cursor for 
-		SELECT ID,TableName,PrimaryKey,IsModDate,ChunkSize FROM ADM_SynSettings with(nolock)
+		SELECT ID,TableName,PrimaryKey,IsModDate,ChunkSize FROM ADM_SynSettings
 		where ID in (1,45,46)
 		
 		OPEN @SPInvoice 
@@ -241,7 +241,7 @@ SET NOCOUNT ON
 		WHILE(@nStatusOuter <> -1)
 		BEGIN
 			set @SQL='select '+convert(nvarchar,@ID)+','''+@TableName+''','''+@PrimaryKey+''','+convert(nvarchar,@IsModDate)+','+convert(nvarchar,@ChunkSize)+',max('+@PrimaryKey+') MaxNodeID,'+(case when @IsModDate=1 then 'max(isnull(ModifiedDate,createdDate))+0.000002' else '0' end )+' ModDate from '+@TableName+' with(nolock)'
-			-- SET @tempCode='@MaxNodeID INT OUTPUT,@ModDate float OUTPUT'    
+			-- SET @tempCode='@MaxNodeID bigint OUTPUT,@ModDate float OUTPUT'    
 			print(@SQL)
 			insert into @TblSettings
 			exec(@SQL)
@@ -265,7 +265,7 @@ SET NOCOUNT ON
 		where V.Module is not null
 		group by V.Module
 		
-		select CompanyID from PACT2C.dbo.ADM_Company with(nolock) where DBName=DB_NAME()
+		select CompanyID from PACT2C.dbo.ADM_Company where DBName=DB_NAME()
 	end
 	else if @Type=12
 	begin
@@ -293,7 +293,7 @@ SET NOCOUNT ON
 	end
 	else if @Type=14
 	begin
-		declare @table as table(ID int identity(1,1),DocName nvarchar(100),CCID int,IsInv bit,DocID INT,ModDate float)
+		declare @table as table(ID int identity(1,1),DocName nvarchar(100),CCID int,IsInv bit,DocID bigint,ModDate float)
 		insert into @table(CCID)
 		exec SPSplitString @CCXML,','
 		
@@ -305,7 +305,7 @@ SET NOCOUNT ON
 		set DocID=D.DocID,ModDate=D.ModDate
 		from @table T
 		join (select T.CCID,max(D.DocID) DocID,max(ModifiedDate) ModDate from @table T
-			join INV_DocDetails D with(nolock) on D.CostCenterID=T.CCID
+			join INV_DocDetails D on D.CostCenterID=T.CCID
 			where T.IsInv=1
 			Group by T.CCID) AS D on D.CCID=T.CCID
 		
@@ -313,7 +313,7 @@ SET NOCOUNT ON
 		set DocID=D.DocID,ModDate=D.ModDate
 		from @table T
 		join (select T.CCID,max(D.DocID) DocID,max(ModifiedDate) ModDate from @table T
-			join ACC_DocDetails D with(nolock) on D.CostCenterID=T.CCID
+			join ACC_DocDetails D on D.CostCenterID=T.CCID
 			where T.IsInv=0
 			Group by T.CCID) AS D on D.CCID=T.CCID
 			
@@ -338,5 +338,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

@@ -3,13 +3,13 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCRM_SetOpportunity]
-	@OpportunityID [int] = 0,
+	@OpportunityID [bigint] = 0,
 	@Code [nvarchar](200) = null,
 	@Subject [nvarchar](200) = NULL,
 	@Description [nvarchar](500) = NULL,
 	@StatusID [int],
 	@IsGroup [bit],
-	@SelectedNodeID [int],
+	@SelectedNodeID [bigint],
 	@ContactType [int] = 0,
 	@Date [datetime] = null,
 	@Leadid [int] = 0,
@@ -44,32 +44,33 @@ CREATE PROCEDURE [dbo].[spCRM_SetOpportunity]
 	@LoginRoleID [int] = 0,
 	@LangId [int] = 1,
 	@CodePrefix [nvarchar](200) = NULL,
-	@CodeNumber [int] = 0,
+	@CodeNumber [bigint] = 0,
 	@IsCode [bit] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 SET NOCOUNT ON 
-BEGIN TRANSACTION
-BEGIN TRY
- 
-	DECLARE @UpdateSql nvarchar(max),@Dt FLOAT, @lft INT,@rgt INT,@TempGuid nvarchar(50),@Selectedlft INT,@Selectedrgt INT,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsOpportunityCodeAutoGen bit  ,@IsIgnoreSpace bit  ,
-	@Depth int,@ParentID INT,@SelectedIsGroup int ,@ActionType INT,  @XML XML,@DetailXML XML,@ParentCode nvarchar(200),@DetailContact int
-	Declare @CostCenterID int,@return_value int,@LinkDim_NodeID INT,@Dimesion INT ,@RefSelectedNodeID INT ,@CCStatusID INT
-	declare @LocalXml XML ,@DOCXML XML,@oppid int,@TabXML XML,@sql NVARCHAR(MAX) 
+	BEGIN TRANSACTION
+	BEGIN TRY
+	 
+  select 'a'
+    DECLARE @UpdateSql nvarchar(max),@Dt FLOAT, @lft bigint,@rgt bigint,@TempGuid nvarchar(50),@Selectedlft bigint,@Selectedrgt bigint,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsOpportunityCodeAutoGen bit  ,@IsIgnoreSpace bit  ,
+	@Depth int,@ParentID bigint,@SelectedIsGroup int ,@ActionType INT,  @XML XML,@DetailXML XML,@ParentCode nvarchar(200),@DetailContact int
+	Declare @CostCenterID int
+	declare @LocalXml XML ,@PRDXML XML,@DOCXML XML,@oppid int,@TabXML XML
 	declare @ScheduleID int,@MaxCount int, @Count int, @stract nvarchar(max), @isRecur bit, @strsch nvarchar(max), @feq int
 	set @CostCenterID=89
-		
-	set @TabXML =@tabdetails 
-	set @DetailXML =@Details
-	IF EXISTS(SELECT OpportunityID FROM CRM_Opportunities WITH(nolock) WHERE OpportunityID=@OpportunityID AND ParentID=0)  
-	BEGIN  
-		RAISERROR('-123',16,1)  
-	END  
 	
-	CREATE TABLE #tblActivities (rowno int ,ActivityID	INT,ActivityTypeID	int,ScheduleID	int,CostCenterID	int,NodeID	int,
+ set @TabXML =@tabdetails 
+ set @DetailXML =@Details
+  IF EXISTS(SELECT OpportunityID FROM CRM_Opportunities WITH(nolock) WHERE OpportunityID=@OpportunityID AND ParentID=0)  
+   BEGIN  
+    RAISERROR('-123',16,1)  
+   END  
+	 CREATE TABLE #tblActivities
+			(rowno int ,ActivityID	bigint,ActivityTypeID	int,ScheduleID	int,CostCenterID	int,NodeID	int,
 Status	int,Subject	nvarchar(MAX),Priority	int,PctComplete	float,Location	nvarchar(max),IsAllDayActivity	bit,
-ActualCloseDate	float,ActualCloseTime	varchar(20),CustomerID	nvarchar(max),Remarks	nvarchar(MAX),AssignUserID	INT,
-AssignRoleID	INT,AssignGroupID	INT,Name	nvarchar(200),StatusID	int,
+ActualCloseDate	float,ActualCloseTime	varchar(20),CustomerID	nvarchar(max),Remarks	nvarchar(MAX),AssignUserID	bigint,
+AssignRoleID	bigint,AssignGroupID	bigint,Name	nvarchar(200),StatusID	int,
 FreqType	int,FreqInterval	int,FreqSubdayType	int,FreqSubdayInterval	int,FreqRelativeInterval	int,
 FreqRecurrenceFactor	int,StartDate	nvarchar(20),EndDate	nvarchar(20),StartTime	nvarchar(20),
 EndTime	nvarchar(20),Message	nvarchar(MAX),isRecur bit)
@@ -78,12 +79,10 @@ EndTime	nvarchar(20),Message	nvarchar(MAX),isRecur bit)
   SELECT @IsDuplicateNameAllowed=Value FROM COM_CostCenterPreferences WITH(nolock) WHERE COSTCENTERID=89 and  Name='DuplicateNameAllowed'  
   SELECT @IsOpportunityCodeAutoGen=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=89 and  Name='CodeAutoGen'  
   SELECT @IsIgnoreSpace=Value FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=89 and  Name='IgnoreSpaces'  
-  SELECT @Dimesion=ISNULL([Value],0) FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE FeatureID=89 AND [Name]='LinkDimension'
-			
     IF @IsCode=1 and @IsOpportunityCodeAutoGen IS NOT NULL AND @IsOpportunityCodeAutoGen=1 AND @OpportunityID=0 and @CodePrefix=''  
 	BEGIN 
 		--CALL AUTOCODEGEN 
-		create table #temp1(prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+		create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
 		if(@SelectedNodeID is null)
 		insert into #temp1
 		EXEC [spCOM_GetCodeData] 89,1,''  
@@ -91,7 +90,7 @@ EndTime	nvarchar(20),Message	nvarchar(MAX),isRecur bit)
 		insert into #temp1
 		EXEC [spCOM_GetCodeData] 89,@SelectedNodeID,''  
 		--select * from #temp1
-		select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1 WITH(nolock)
+		select @Code=code,@CodePrefix= prefix, @CodeNumber=number from #temp1
 		--select @AccountCode,@ParentID
 	END	
 	  --User acces check FOR ACCOUNTS  
@@ -164,36 +163,19 @@ END
   END  
   
   --User acces check FOR Attachments  
-	IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')    
-	BEGIN    
-		SET @XML=@AttachmentsXML
-		SET @HasAccess=dbo.fnCOM_HasAccess(@LoginRoleID,89,12)    
-
-		IF exists (SELECT X.value('@FilePath','NVARCHAR(500)') FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
-		WHERE X.value('@Action','NVARCHAR(10)')='NEW') and @HasAccess=0     
-		BEGIN    
-			RAISERROR('-105',16,1)    
-		END 
-		
-		SET @HasAccess=dbo.fnCOM_HasAccess(@LoginRoleID,89,14)    
-
-		IF exists (SELECT X.value('@FilePath','NVARCHAR(500)') FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
-		WHERE X.value('@Action','NVARCHAR(10)')='MODIFY') and @HasAccess=0     
-		BEGIN    
-			RAISERROR('-105',16,1)    
-		END 
-		
-		SET @HasAccess=dbo.fnCOM_HasAccess(@LoginRoleID,89,15)    
-
-		IF exists (SELECT X.value('@FilePath','NVARCHAR(500)') FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
-		WHERE X.value('@Action','NVARCHAR(10)')='DELETE') and @HasAccess=0     
-		BEGIN    
-			RAISERROR('-105',16,1)    
-		END 
-	END 
+  IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')  
+  BEGIN  
+   SET @HasAccess=dbo.fnCOM_HasAccess(@LoginRoleID,89,12)  
+  
+   IF @HasAccess=0  
+   BEGIN  
+    RAISERROR('-105',16,1)  
+   END  
+  END  
   
 	SET @Dt=convert(float,getdate())--Setting Current Date  
 
+	set @PRDXML=@ProductXML
 	set @DOCXML=@DocumentXML
 	set @oppid=@OpportunityID
 
@@ -202,46 +184,46 @@ END
  @FirstName NVARCHAR(50),
  @MiddleName NVARCHAR(50),
  @LastName NVARCHAR(50),
- @Salutation INT,
+ @Salutation bigint,
  @jobTitle NVARCHAR(50),
  @Phone1 NVARCHAR(50),
  @Phone2 NVARCHAR(50),
  @Email NVARCHAR(50),
  @Fax NVARCHAR(50),
  @Department NVARCHAR(50),
- @RoleID INT,
+ @RoleID bigint,
  @Address1 NVARCHAR(50),
  @Address2 NVARCHAR(50),
  @Address3 NVARCHAR(50),
  @City NVARCHAR(50),
  @State NVARCHAR(50),
  @Zip NVARCHAR(50),
- @CountryID INT,
+ @CountryID bigint,
  @Gender NVARCHAR(50),
  @Birthday datetime,
  @Anniversary datetime,
- @PreferredID INT,
+ @PreferredID bigint,
  @PreferredName NVARCHAR(50)
 
  create table #detailtbl(
  FirstName NVARCHAR(50)  null,
  MiddleName NVARCHAR(50)  null,
  LastName NVARCHAR(50)  null,
- Salutation INT  null,
+ Salutation bigint  null,
  jobTitle NVARCHAR(50)  null,
  Phone1 NVARCHAR(50)  null,
  Phone2 NVARCHAR(50)  null,
  Email NVARCHAR(50)  null,
  Fax NVARCHAR(50)  null,
  Department NVARCHAR(50)  null,
- RoleID INT  null)
+ RoleID bigint  null)
 
  if(@DetailXML is not null)
  begin
  insert into #detailtbl
- select x.value('@FirstName','NVARCHAR(50)'),x.value('@MiddleName','NVARCHAR(50)'),x.value('@LastName','NVARCHAR(50)'),x.value('@Salutation','INT'),
+ select x.value('@FirstName','NVARCHAR(50)'),x.value('@MiddleName','NVARCHAR(50)'),x.value('@LastName','NVARCHAR(50)'),x.value('@Salutation','bigint'),
  x.value('@JobTitle','NVARCHAR(50)'),x.value('@Phone1','NVARCHAR(50)'),x.value('@Phone2','NVARCHAR(50)'),x.value('@Email','NVARCHAR(50)'),x.value('@Fax','NVARCHAR(50)'),
- x.value('@Department','NVARCHAR(50)'),x.value('@Role','INT') from  @DetailXML.nodes('Row') as data(x)
+ x.value('@Department','NVARCHAR(50)'),x.value('@Role','bigint') from  @DetailXML.nodes('Row') as data(x)
  end
    create table #tabdetailtbl(
  Address1 NVARCHAR(50) null,
@@ -250,19 +232,19 @@ END
  City NVARCHAR(50) null,
  State NVARCHAR(50) null,
  Zip NVARCHAR(50) null,
- CountryID INT null 
+ CountryID bigint null 
   )
  
  if(@TabXML is not null)
  begin
  insert into #tabdetailtbl
  select x.value('@Address1','NVARCHAR(50)'),x.value('@Address2','NVARCHAR(50)'),x.value('@Address3','NVARCHAR(50)'),
- x.value('@City','NVARCHAR(50)'),x.value('@State','NVARCHAR(50)'),x.value('@Zip','NVARCHAR(50)'),x.value('@Country','INT') 
+ x.value('@City','NVARCHAR(50)'),x.value('@State','NVARCHAR(50)'),x.value('@Zip','NVARCHAR(50)'),x.value('@Country','bigint') 
  from  @TabXML.nodes('Row') as data(x)
  end
 
  select @FirstName=FirstName,@MiddleName=MiddleName,@LastName=LastName,@Salutation=Salutation,@jobTitle=jobTitle,@Phone1=Phone1,@Phone2=Phone2,
- @Email=Email,@Fax=Fax,@Department=Department,@RoleID=RoleID from #detailtbl WITH(nolock)
+ @Email=Email,@Fax=Fax,@Department=Department,@RoleID=RoleID from #detailtbl
 
   select @Address1=Address1,
  @Address2 =Address2,
@@ -271,7 +253,7 @@ END
  @State =State,
  @Zip =Zip,
  @CountryID =CountryID 
-  from #tabdetailtbl WITH(nolock)
+  from #tabdetailtbl
  
 IF @CountryID='' OR @CountryID IS NULL
  SET @CountryID=NULL
@@ -431,28 +413,29 @@ insert into CRM_CONTACTS
    INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[Guid],[CreatedBy],[CreatedDate])
      VALUES(89,@OpportunityID,newid(),  @UserName, @Dt) 
 
-		IF @Dimesion>0 
-		BEGIN
-			SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
-			WHERE CostCenterID=89 AND RefDimensionID=@Dimesion AND NodeID=@SelectedNodeID 
-			SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
-			
-			select @CCStatusID = statusid from com_status WITH(NOLOCK) where costcenterid=@Dimesion and [status] = 'Active'
-		
-			EXEC @LinkDim_NodeID = [dbo].[spCOM_SetCostCenter]
-				@NodeID = 0,@SelectedNodeID = @RefSelectedNodeID,@IsGroup = 0,
-				@Code = @Code,
-				@Name = @Company,
-				@AliasName=@Company,
-				@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
-				@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
-				@CustomCostCenterFieldsQuery=NULL,@ContactsXML=NULL,@NotesXML=NULL,
-				@CostCenterID =@Dimesion,@CompanyGUID=@COMPANYGUID,@GUID='GUID',@UserName=@USERNAME,@RoleID=1,@UserID=@USERID
-		END
-		
-		--Link Dimension Mapping
-		INSERT INTO COM_DocBridge(CostCenterID, NodeID,InvDocID,AccDocID,RefDimensionID,RefDimensionNodeID,CompanyGUID,guid,Createdby,CreatedDate,Abbreviation)
-		values(89,@OpportunityID,0,0,@Dimesion,@LinkDim_NodeID,'',newid(),@UserName, @dt,'Cases')   
+	        DECLARE @return_value int,@LinkCostCenterID INT
+			SELECT @LinkCostCenterID=ISNULL([Value],0) FROM COM_CostCenterPreferences WITH(NOLOCK) 
+			WHERE FeatureID=89 AND [Name]='OppLinkDimension'
+		 
+			IF @LinkCostCenterID>0 AND @IsGroup=0  
+			BEGIN
+			print @Company
+			print @Code
+				EXEC @return_value = [dbo].[spCOM_SetCostCenter]
+					@NodeID = 0,@SelectedNodeID = 0,@IsGroup = 0,
+					@Code = @Code,
+					@Name = @Company,
+					@AliasName=@Company,
+					@PurchaseAccount=0,@SalesAccount=0,@StatusID=@StatusID,
+					@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
+					@CustomCostCenterFieldsQuery=NULL,@ContactsXML=NULL,@NotesXML=NULL,
+					@CostCenterID =@LinkCostCenterID,@CompanyGUID=@COMPANYGUID,@GUID='GUID',@UserName=@USERNAME,@RoleID=1,@UserID=@USERID
+				 
+					--@return_value
+					UPDATE [CRM_Opportunities]
+					SET CCOpportunityID=@return_value
+					WHERE OpportunityID=@OpportunityID
+			END
 		
 		 --INSERT PRIMARY CONTACT  
 		INSERT  [COM_Contacts]  
@@ -508,39 +491,7 @@ insert into CRM_CONTACTS
 						WHERE OpportunityID = @OpportunityID
 						
 					       --Update Extra fields
-			select @LinkDim_NodeID = CCOpportunityID  from CRM_Opportunities WITH(nolock) where OpportunityID=@OpportunityID    
-
-			if(@Dimesion>0 and @LinkDim_NodeID is not null and @LinkDim_NodeID <>'' )  
-			begin    
-				declare @Gid nvarchar(50) , @Table nvarchar(100), @CGid nvarchar(50)  
-				declare @NodeidXML nvarchar(max)   
-				select @Table=Tablename from adm_features WITH(nolock) where featureid=@Dimesion  
-				declare @str nvarchar(max)   
-				set @str='@Gid nvarchar(50) output'   
-				set @NodeidXML='set @Gid= (select GUID from '+convert(nvarchar,@Table)+' WITH(nolock) where NodeID='+convert(nvarchar,@LinkDim_NodeID)+')'  
-
-				exec sp_executesql @NodeidXML, @str, @Gid OUTPUT   
-
-				select @CCStatusID = statusid from com_status WITH(nolock) where costcenterid=@Dimesion and status = 'Active'  
-
-				if(@Gid is null	 and @LinkDim_NodeID >0)
-					set @LinkDim_NodeID=0
-				
-				SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
-				WHERE CostCenterID=89 AND RefDimensionID=@Dimesion AND NodeID=@SelectedNodeID 
-				SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
 			
-				EXEC @LinkDim_NodeID = [dbo].[spCOM_SetCostCenter]  
-				@NodeID = @LinkDim_NodeID,@SelectedNodeID = @RefSelectedNodeID,@IsGroup = 0,
-				@Code = @Code,
-				@Name = @Company,
-				@AliasName=@Company,
-				@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
-				@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
-				@CustomCostCenterFieldsQuery=NULL,@ContactsXML=NULL,@NotesXML=NULL,
-				@CostCenterID =@Dimesion,@CompanyGUID=@COMPANYGUID,@GUID='GUID',@UserName=@USERNAME,@RoleID=1,@UserID=@USERID, @CheckLink = 0    
-				
-			END
 					  
 						 if( @DetailXML is not null)
 						  begin
@@ -577,7 +528,22 @@ insert into CRM_CONTACTS
 		      set @UpdateSql='update COM_CCCCDATA  
 			 SET '+@CustomCostCenterFieldsQuery+'[ModifiedBy] ='''+ @UserName+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID = '+convert(nvarchar,@OpportunityID) + ' AND CostCenterID = 89' 
 				 exec(@UpdateSql)  
-			
+
+	  --ADDED CONDIDTION ON JAN 30 2013 BY HAFEEZ
+	  --TO SET OPPORTUNITY LINK DIMENSION=@@OpportunityID AND MAKE THAT COLUMN AS READONLY
+	  IF(EXISTS(SELECT VALUE FROM COM_COSTCENTERPREFERENCES WHERE COSTCENTERID=89 AND NAME='OPPLINKDIMENSION'))
+	  BEGIN
+			DECLARE @DIMID BIGINT
+			SET @DIMID=0
+			SELECT @DIMID=VALUE-50000 FROM COM_COSTCENTERPREFERENCES WHERE COSTCENTERID=89 AND NAME='OPPLINKDIMENSION'
+			IF(@DIMID>0)
+			BEGIN
+					SET @UpdateSql=' UPDATE COM_CCCCDATA SET CCNID'+CONVERT(NVARCHAR(30),@DIMID)+'=
+					(SELECT CCOpportunityID FROM CRM_Opportunities WHERE OpportunityID='+convert(nvarchar,@OpportunityID) + ') 
+									WHERE NodeID = '+convert(nvarchar,@OpportunityID) + ' AND CostCenterID = 89'
+					  exec(@UpdateSql)  
+			END
+	  END				
 		  
    IF  @FeedbackXML IS NOT NULL
 	BEGIN
@@ -585,20 +551,30 @@ insert into CRM_CONTACTS
 	SET @DATAFEEDBACK=@FeedbackXML
 	
 				Delete from CRM_FEEDBACK where CCNodeID = @OpportunityID and CCID=89
-		SET @Sql=''
-	 	SET @UpdateSql=''
-	 	select @Sql=@Sql+',['+name+']' 
-		,@UpdateSql=@UpdateSql+',X.value(''@'+name+''','''+CASE WHEN name LIKE 'ccnid%' THEN 'nvarchar(200)' ELSE 'INT' END+''')' 
-		from sys.columns  WITH(NOLOCK)
-		where object_id=object_id('CRM_FEEDBACK') and (name LIKE 'ccnid%' OR name LIKE 'Alpha%')
-			
-		SET @Sql='INSERT into CRM_FEEDBACK(CCID,CCNodeID,Date,Feedback,CreatedBy,CreatedDate'+@Sql+')
-		select 89,@OpportunityID,  
-		convert(float,x.value(''@Date'',''datetime'')),x.value(''@FeedBack'',''nvarchar(max)''),x.value(''@CreatedBy'',''nvarchar(200)'') ,'+CONVERT(NVARCHAR,convert(float,@Dt))+'
-		'+@UpdateSql+'
-		from @XML.nodes(''XML/Row'') as data(x)'
-		
-		EXEC sp_executesql @SQL,N'@XML XML,@OpportunityID INT',@XML,@OpportunityID 
+			 
+					INSERT into CRM_FEEDBACK
+				   select 89,@OpportunityID,
+			       convert(float,x.value('@Date','datetime')),x.value('@FeedBack','nvarchar(200)'), @UserName,convert(float,@Dt),x.value('@Alpha1','nvarchar(200)'),x.value('@Alpha2','nvarchar(200)'),x.value('@Alpha3','nvarchar(200)'),x.value('@Alpha4','nvarchar(200)'),x.value('@Alpha5','nvarchar(200)'),
+			       x.value('@Alpha6','nvarchar(200)'),x.value('@Alpha7','nvarchar(200)'),x.value('@Alpha8','nvarchar(200)'),x.value('@Alpha9','nvarchar(200)'),x.value('@Alpha10','nvarchar(200)'),
+			       x.value('@Alpha11','nvarchar(200)'),x.value('@Alpha12','nvarchar(200)'),x.value('@Alpha13','nvarchar(200)'),x.value('@Alpha14','nvarchar(200)'),x.value('@Alpha15','nvarchar(200)'),
+			       x.value('@Alpha16','nvarchar(200)'),x.value('@Alpha17','nvarchar(200)'),x.value('@Alpha18','nvarchar(200)'),x.value('@Alpha19','nvarchar(200)'),x.value('@Alpha20','nvarchar(200)'),
+			       x.value('@Alpha21','nvarchar(200)'),x.value('@Alpha22','nvarchar(200)'),x.value('@Alpha23','nvarchar(200)'),x.value('@Alpha24','nvarchar(200)'),x.value('@Alpha25','nvarchar(200)'),
+			       x.value('@Alpha26','nvarchar(200)'),x.value('@Alpha27','nvarchar(200)'),x.value('@Alpha28','nvarchar(200)'),x.value('@Alpha29','nvarchar(200)'),x.value('@Alpha30','nvarchar(200)'),
+			       x.value('@Alpha31','nvarchar(200)'),x.value('@Alpha32','nvarchar(200)'),x.value('@Alpha33','nvarchar(200)'),x.value('@Alpha34','nvarchar(200)'),x.value('@Alpha35','nvarchar(200)'),
+			       x.value('@Alpha36','nvarchar(200)'),x.value('@Alpha37','nvarchar(200)'),x.value('@Alpha38','nvarchar(200)'),x.value('@Alpha39','nvarchar(200)'),x.value('@Alpha40','nvarchar(200)'),
+			       x.value('@Alpha41','nvarchar(200)'),x.value('@Alpha42','nvarchar(200)'),x.value('@Alpha43','nvarchar(200)'),x.value('@Alpha44','nvarchar(200)'),x.value('@Alpha45','nvarchar(200)'),
+			       x.value('@Alpha46','nvarchar(200)'),x.value('@Alpha47','nvarchar(200)'),x.value('@Alpha48','nvarchar(200)'),x.value('@Alpha49','nvarchar(200)'),x.value('@Alpha50','nvarchar(200)'),
+				    x.value('@CCNID1','bigint'),x.value('@CCNID2','bigint'),x.value('@CCNID3','bigint'),x.value('@CCNID4','bigint'),x.value('@CCNID5','bigint'),
+			       x.value('@CCNID6','bigint'),x.value('@CCNID7','bigint'),x.value('@CCNID8','bigint'),x.value('@CCNID9','bigint'),x.value('@CCNID10','bigint'),
+			       x.value('@CCNID11','bigint'),x.value('@CCNID12','bigint'),x.value('@CCNID13','bigint'),x.value('@CCNID14','bigint'),x.value('@CCNID15','bigint'),
+			       x.value('@CCNID16','bigint'),x.value('@CCNID17','bigint'),x.value('@CCNID18','bigint'),x.value('@CCNID19','bigint'),x.value('@CCNID20','bigint'),
+			       x.value('@CCNID21','bigint'),x.value('@CCNID22','bigint'),x.value('@CCNID23','bigint'),x.value('@CCNID24','bigint'),x.value('@CCNID25','bigint'),
+			       x.value('@CCNID26','bigint'),x.value('@CCNID27','bigint'),x.value('@CCNID28','bigint'),x.value('@CCNID29','bigint'),x.value('@CCNID30','bigint'),
+			       x.value('@CCNID31','bigint'),x.value('@CCNID32','bigint'),x.value('@CCNID33','bigint'),x.value('@CCNID34','bigint'),x.value('@CCNID35','bigint'),
+			       x.value('@CCNID36','bigint'),x.value('@CCNID37','bigint'),x.value('@CCNID38','bigint'),x.value('@CCNID39','bigint'),x.value('@CCNID40','bigint'),
+			       x.value('@CCNID41','bigint'),x.value('@CCNID42','bigint'),x.value('@CCNID43','bigint'),x.value('@CCNID44','bigint'),x.value('@CCNID45','bigint'),
+			       x.value('@CCNID46','bigint'),x.value('@CCNID47','bigint'),x.value('@CCNID48','bigint'),x.value('@CCNID49','bigint'),x.value('@CCNID50','bigint')    
+				   from @DATAFEEDBACK.nodes('XML/Row') as data(x)
 				    
 				   
 	END
@@ -609,35 +585,53 @@ insert into CRM_CONTACTS
 		  Delete from CRM_ProductMapping where CCNodeID = @OpportunityID and CostCenterID=89
 		   if(@ProductXML is not null and @ProductXML <> '')
 		   begin
-					
-				set @XML=@ProductXML 
-				
-				SET @Sql=''
- 				SET @UpdateSql=''
-				select @Sql=@Sql+',['+name+']' 
-				,@UpdateSql=@UpdateSql+',X.value(''@'+name+''','''+CASE WHEN name LIKE 'ccnid%' THEN 'INT' ELSE 'nvarchar(200)' END+''')' 
-				from sys.columns  WITH(NOLOCK)
-				where object_id=object_id('CRM_ProductMapping') and (name LIKE 'ccnid%' OR name LIKE 'Alpha%')
-			
-				SET @Sql='INSERT into CRM_ProductMapping(CCNodeID,CostCenterID,ProductID,CRMProduct,UOMID,Description,
-				   Quantity,CurrencyID,CompanyGUID,GUID,CreatedBy,CreatedDate'+@Sql+')
+					 
+								 
+				   INSERT into CRM_ProductMapping(CCNodeID,CostCenterID,ProductID,CRMProduct,UOMID,Description,
+				   Quantity,CurrencyID, Alpha1, Alpha2, Alpha3, Alpha4, Alpha5, Alpha6, Alpha7, Alpha8, Alpha9, Alpha10, Alpha11, Alpha12, Alpha13, Alpha14, Alpha15, Alpha16, Alpha17, Alpha18, Alpha19, Alpha20, Alpha21, Alpha22, Alpha23, Alpha24, Alpha25, Alpha26, Alpha27, Alpha28, Alpha29, Alpha30, Alpha31, Alpha32, Alpha33, Alpha34, Alpha35, Alpha36, Alpha37, Alpha38, Alpha39, Alpha40, Alpha41, Alpha42, Alpha43, Alpha44, Alpha45, Alpha46,
+				    Alpha47, Alpha48, Alpha49, Alpha50, CCNID1, CCNID2, CCNID3, CCNID4, CCNID5, CCNID6, CCNID7, CCNID8, CCNID9, CCNID10, CCNID11, CCNID12, CCNID13, CCNID14, CCNID15, CCNID16, CCNID17, CCNID18, CCNID19, CCNID20, CCNID21, CCNID22, CCNID23, CCNID24, CCNID25, CCNID26, CCNID27, CCNID28, CCNID29, CCNID30, CCNID31, CCNID32, CCNID33, CCNID34, CCNID35, CCNID36, CCNID37, CCNID38, CCNID39, CCNID40, CCNID41, CCNID42, CCNID43, CCNID44, CCNID45, CCNID46,
+				    CCNID47, CCNID48, CCNID49, CCNID50,CompanyGUID,GUID,CreatedBy,CreatedDate)
 				   select @OpportunityID,89,
-				   x.value(''@Product'',''INT''), x.value(''@CRMProduct'',''INT''),
-				   x.value(''@UOM'',''INT''), x.value(''@Desc'',''nvarchar(MAX)''),
-				   x.value(''@Qty'',''float''),ISNULL(x.value(''@Currency'',''INT''),1)
-				   ,'''+@CompanyGUID+''',newid(),'''+ @UserName+''','+CONVERT(NVARCHAR,convert(float,@Dt))+@UpdateSql+' 
-				   from @XML.nodes(''XML/Row'') as data(x)
-				   where  x.value(''@Product'',''INT'')is not null and   x.value(''@Product'',''INT'') <> '''' ' 
+			       x.value('@Product','BIGINT'),  x.value('@CRMProduct','BIGINT'),
+				   x.value('@UOM','bigint'), x.value('@Desc','nvarchar(MAX)'),
+				   x.value('@Qty','float'),ISNULL(x.value('@Currency','INT'),1),
+					 x.value('@Alpha1','nvarchar(MAX)'),x.value('@Alpha2','nvarchar(MAX)'),x.value('@Alpha3','nvarchar(MAX)'),x.value('@Alpha4','nvarchar(MAX)'),x.value('@Alpha5','nvarchar(MAX)'),
+			       x.value('@Alpha6','nvarchar(MAX)'),x.value('@Alpha7','nvarchar(MAX)'),x.value('@Alpha8','nvarchar(MAX)'),x.value('@Alpha9','nvarchar(MAX)'),x.value('@Alpha10','nvarchar(MAX)'),
+			       x.value('@Alpha11','nvarchar(MAX)'),x.value('@Alpha12','nvarchar(MAX)'),x.value('@Alpha13','nvarchar(MAX)'),x.value('@Alpha14','nvarchar(MAX)'),x.value('@Alpha15','nvarchar(MAX)'),
+			       x.value('@Alpha16','nvarchar(MAX)'),x.value('@Alpha17','nvarchar(MAX)'),x.value('@Alpha18','nvarchar(MAX)'),x.value('@Alpha19','nvarchar(MAX)'),x.value('@Alpha20','nvarchar(MAX)'),
+			       x.value('@Alpha21','nvarchar(MAX)'),x.value('@Alpha22','nvarchar(MAX)'),x.value('@Alpha23','nvarchar(MAX)'),x.value('@Alpha24','nvarchar(MAX)'),x.value('@Alpha25','nvarchar(MAX)'),
+			       x.value('@Alpha26','nvarchar(MAX)'),x.value('@Alpha27','nvarchar(MAX)'),x.value('@Alpha28','nvarchar(MAX)'),x.value('@Alpha29','nvarchar(MAX)'),x.value('@Alpha30','nvarchar(MAX)'),
+			       x.value('@Alpha31','nvarchar(MAX)'),x.value('@Alpha32','nvarchar(MAX)'),x.value('@Alpha33','nvarchar(MAX)'),x.value('@Alpha34','nvarchar(MAX)'),x.value('@Alpha35','nvarchar(MAX)'),
+			       x.value('@Alpha36','nvarchar(MAX)'),x.value('@Alpha37','nvarchar(MAX)'),x.value('@Alpha38','nvarchar(MAX)'),x.value('@Alpha39','nvarchar(MAX)'),x.value('@Alpha40','nvarchar(MAX)'),
+			       x.value('@Alpha41','nvarchar(MAX)'),x.value('@Alpha42','nvarchar(MAX)'),x.value('@Alpha43','nvarchar(MAX)'),x.value('@Alpha44','nvarchar(MAX)'),x.value('@Alpha45','nvarchar(MAX)'),
+			       x.value('@Alpha46','nvarchar(MAX)'),x.value('@Alpha47','nvarchar(MAX)'),x.value('@Alpha48','nvarchar(MAX)'),x.value('@Alpha49','nvarchar(MAX)'),x.value('@Alpha50','nvarchar(MAX)'),
+			       
+				   x.value('@CCNID1','bigint'),x.value('@CCNID2','bigint'),x.value('@CCNID3','bigint'),x.value('@CCNID4','bigint'),x.value('@CCNID5','bigint'),
+			       x.value('@CCNID6','bigint'),x.value('@CCNID7','bigint'),x.value('@CCNID8','bigint'),x.value('@CCNID9','bigint'),x.value('@CCNID10','bigint'),
+			       x.value('@CCNID11','bigint'),x.value('@CCNID12','bigint'),x.value('@CCNID13','bigint'),x.value('@CCNID14','bigint'),x.value('@CCNID15','bigint'),
+			       x.value('@CCNID16','bigint'),x.value('@CCNID17','bigint'),x.value('@CCNID18','bigint'),x.value('@CCNID19','bigint'),x.value('@CCNID20','bigint'),
+			       x.value('@CCNID21','bigint'),x.value('@CCNID22','bigint'),x.value('@CCNID23','bigint'),x.value('@CCNID24','bigint'),x.value('@CCNID25','bigint'),
+			       x.value('@CCNID26','bigint'),x.value('@CCNID27','bigint'),x.value('@CCNID28','bigint'),x.value('@CCNID29','bigint'),x.value('@CCNID30','bigint'),
+			       x.value('@CCNID31','bigint'),x.value('@CCNID32','bigint'),x.value('@CCNID33','bigint'),x.value('@CCNID34','bigint'),x.value('@CCNID35','bigint'),
+			       x.value('@CCNID36','bigint'),x.value('@CCNID37','bigint'),x.value('@CCNID38','bigint'),x.value('@CCNID39','bigint'),x.value('@CCNID40','bigint'),
+			       x.value('@CCNID41','bigint'),x.value('@CCNID42','bigint'),x.value('@CCNID43','bigint'),x.value('@CCNID44','bigint'),x.value('@CCNID45','bigint'),
+			       x.value('@CCNID46','bigint'),x.value('@CCNID47','bigint'),x.value('@CCNID48','bigint'),x.value('@CCNID49','bigint'),x.value('@CCNID50','bigint'),
+		
+				   @CompanyGUID,
+				   newid(),
+				   @UserName,
+				   convert(float,@Dt)
+				   from @PRDXML.nodes('XML/Row') as data(x)
+				   where  x.value('@Product','BIGINT')is not null and   x.value('@Product','BIGINT') <> ''				   
+				    
 				
-				EXEC sp_executesql @SQL,N'@XML XML,@OpportunityID INT',@XML,@OpportunityID
-					
 			end
 
     	  if(@DocumentXML is not null and @DocumentXML <> '')
 		begin
 			insert into CRM_OpportunityDocMap(OpportunityID,DocID,CompanyGUID,GUID,CreatedBy,CreatedDate)
 		    select @OpportunityID,
-			       x.value('@DocID','INT'),
+			       x.value('@DocID','BIGINT'),
 				   @CompanyGUID,
 				   newid(),
 				   @UserName,
@@ -646,7 +640,7 @@ insert into CRM_CONTACTS
 				   where  x.value('@Action','nvarchar(50)')='NEW'and @oppid=0
 		
 			update CRM_OpportunityDocMap set 
-			DocID= x.value('@DocID','INT')
+			DocID= x.value('@DocID','BIGINT')
 			from @DOCXML.nodes('OppDocXML/Row') as data(x) 
 			where OpportunityID = @OpportunityID and  x.value('@Action','nvarchar(50)')='MODIFY'and @oppid<>0
 
@@ -674,12 +668,12 @@ insert into CRM_CONTACTS
     ModifiedDate=@Dt  
    FROM COM_Notes C   
    INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X)    
-   ON convert(INT,X.value('@NoteID','INT'))=C.NoteID  
+   ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID  
    WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
   
    --If Action is DELETE then delete Notes  
    DELETE FROM COM_Notes  
-   WHERE NoteID IN(SELECT X.value('@NoteID','INT')  
+   WHERE NoteID IN(SELECT X.value('@NoteID','bigint')  
     FROM @XML.nodes('/NotesXML/Row') as Data(X)  
     WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
   
@@ -687,7 +681,40 @@ insert into CRM_CONTACTS
   
   --Inserts Multiple Attachments  
   IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')  
-		exec [spCOM_SetAttachments] @OpportunityID,89,@AttachmentsXML,@UserName,@Dt 
+  BEGIN  
+   SET @XML=@AttachmentsXML  
+  
+   INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,
+   FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,  
+   GUID,CreatedBy,CreatedDate)  
+   SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(50)'),  
+   X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),89,89,@OpportunityID,  
+   X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt  
+   FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
+   WHERE X.value('@Action','NVARCHAR(10)')='NEW'  
+  
+   --If Action is MODIFY then update Attachments  
+   UPDATE COM_Files  
+   SET FilePath=X.value('@FilePath','NVARCHAR(500)'),  
+    ActualFileName=X.value('@ActualFileName','NVARCHAR(50)'),  
+    RelativeFileName=X.value('@RelativeFileName','NVARCHAR(50)'),  
+    FileExtension=X.value('@FileExtension','NVARCHAR(50)'),  
+    FileDescription=X.value('@FileDescription','NVARCHAR(500)'),  
+    IsProductImage=X.value('@IsProductImage','bit'),        
+    GUID=X.value('@GUID','NVARCHAR(50)'),  
+    ModifiedBy=@UserName,  
+    ModifiedDate=@Dt  
+   FROM COM_Files C   
+   INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)    
+   ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID  
+   WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
+  
+   --If Action is DELETE then delete Attachments  
+   DELETE FROM COM_Files  
+   WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')  
+    FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)  
+    WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
+  END  	
   
    -- , BEFORE MODIFIEDBY  REQUIRES A NULL CHECK OF @PrimaryContactQuery 
   IF(@PrimaryContactQuery IS NOT NULL AND @PrimaryContactQuery<>'')
@@ -712,32 +739,10 @@ insert into CRM_CONTACTS
   --Insert Notifications
 	EXEC spCOM_SetNotifEvent @ActionType,89,@OpportunityID,@CompanyGUID,@UserName,@UserID,@LoginRoleID
 	
-	IF EXISTS (SELECT * FROM CRM_Opportunities WITH(nolock) WHERE OpportunityID=@OpportunityID AND CloseDate IS NOT NULL AND LEN(CLOSEDATE)>0)
+	IF EXISTS (SELECT * FROM CRM_Opportunities WHERE OpportunityID=@OpportunityID AND CloseDate IS NOT NULL AND LEN(CLOSEDATE)>0)
 	BEGIN
 			EXEC spCOM_SetNotifEvent -1015,89,@OpportunityID,@CompanyGUID,@UserName,@UserID,@LoginRoleID
 	END
-	
-	--UPDATE LINK DATA
-	if(@LinkDim_NodeID>0)
-	begin
-		UPDATE [CRM_Opportunities] SET CCOpportunityID=@LinkDim_NodeID
-		WHERE OpportunityID=@OpportunityID
-		
-		set @UpdateSql='update COM_CCCCDATA  
-		SET CCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@LinkDim_NodeID)+'  WHERE NodeID = '+
-		convert(nvarchar,@OpportunityID) + ' AND CostCenterID = 89' 
-		EXEC (@UpdateSql)
-
-		Exec [spDOC_SetLinkDimension]
-			@InvDocDetailsID=@OpportunityID, 
-			@Costcenterid=89,         
-			@DimCCID=@Dimesion,
-			@DimNodeID=@LinkDim_NodeID,
-			@UserID=@UserID,    
-			@LangID=@LangID  
-	end
-	
-				
 
 	COMMIT TRANSACTION
 	SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
@@ -770,5 +775,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION  
  SET NOCOUNT OFF    
  RETURN -999     
-END CATCH
+END CATCH  
 GO

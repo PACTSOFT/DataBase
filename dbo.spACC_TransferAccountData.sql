@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_TransferAccountData]
-	@FromID [int],
-	@ToID [int],
-	@CostCenterID [int],
+	@FromID [bigint],
+	@ToID [bigint],
+	@CostCenterID [bigint],
 	@Assign [bit],
 	@Contacts [bit],
 	@Adress [bit],
@@ -13,7 +13,7 @@ CREATE PROCEDURE [dbo].[spACC_TransferAccountData]
 	@Attachments [bit],
 	@Activities [bit],
 	@WHERE [nvarchar](max),
-	@UserID [int],
+	@UserID [bigint],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -23,7 +23,10 @@ BEGIN TRY
 SET NOCOUNT ON; 
  
 	--Declaration Section  
-	DECLARE @HasAccess BIT,@SQL nvarchar(max)
+	DECLARE @lft BIGINT,@rgt BIGINT,@Width INT,@Selectedlft BIGINT,@Selectedrgt BIGINT,@SelectedDepth INT,@Depth INT,@ParentID BIGINT  
+	DECLARE @Temp TABLE (ID BIGINT) 
+	DECLARE @HasAccess BIT,@SelectedIsGroup BIT,@SQL nvarchar(max)
+	
 
 	--Check for manadatory paramters  
 	IF(@FromID=0 OR @ToID=0)
@@ -44,79 +47,96 @@ SET NOCOUNT ON;
 			begin
 				--For Accounting Vouchers
 				set @SQL='update B set B.AccountID='+convert(nvarchar(max),@FromID)+'
-				from Acc_DocDetails D WITH(NOLOCK)
-				join com_docccdata DCC WITH(NOLOCK) on D.AccDocDetailsID=DCC.AccDocDetailsID
-				join COM_Billwise B WITH(NOLOCK) on B.DocNo=D.VoucherNo
+				from Acc_DocDetails D 
+				join com_docccdata DCC on D.AccDocDetailsID=DCC.AccDocDetailsID
+				join COM_Billwise B on B.DocNo=D.VoucherNo
 				WHERE D.InvDocDetailsID is null and B.AccountID='+convert(nvarchar,@FromID)+replace(@WHERE,'DCC.dc','B.dc')
 				EXEC(@SQL)
 				
 				set @SQL='UPDATE D set D.DebitAccount='+convert(nvarchar(max),@ToID)+'
-				from Acc_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.AccDocDetailsID=DCC.AccDocDetailsID
+				from Acc_DocDetails D 
+				join com_docccdata DCC on D.AccDocDetailsID=DCC.AccDocDetailsID
 				WHERE D.InvDocDetailsID is null and D.DebitAccount='+convert(nvarchar,@FromID)+@WHERE
 				EXEC(@SQL)
 				
 				set @SQL='UPDATE D set D.CreditAccount='+convert(nvarchar(max),@ToID)+'
-				from Acc_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.AccDocDetailsID=DCC.AccDocDetailsID
+				from Acc_DocDetails D 
+				join com_docccdata DCC on D.AccDocDetailsID=DCC.AccDocDetailsID
 				WHERE D.InvDocDetailsID is null and D.CreditAccount='+convert(nvarchar,@FromID)+@WHERE
 				EXEC(@SQL)
 				
 				set @SQL='UPDATE D set D.BankAccountID='+convert(nvarchar(max),@ToID)+'
-				from Acc_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.AccDocDetailsID=DCC.AccDocDetailsID
+				from Acc_DocDetails D 
+				join com_docccdata DCC on D.AccDocDetailsID=DCC.AccDocDetailsID
 				WHERE D.InvDocDetailsID is null and D.BankAccountID='+convert(nvarchar,@FromID)+@WHERE
 				EXEC(@SQL)
 
 				
 				--Inventory Vouchers
 				set @SQL='UPDATE N set N.remarks=replace(convert(nvarchar(max),remarks),''DebitAccount="'+convert(nvarchar(max),@FromID)+'"'',''DebitAccount="'+convert(nvarchar(max),@ToID)+'"'')
-				from Acc_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.InvDocDetailsID=DCC.InvDocDetailsID
-				join com_docnumdata N WITH(NOLOCK) on D.InvDocDetailsID=N.InvDocDetailsID
+				from Acc_DocDetails D 
+				join com_docccdata DCC on D.InvDocDetailsID=DCC.InvDocDetailsID
+				join com_docnumdata N on D.InvDocDetailsID=N.InvDocDetailsID
 				WHERE D.InvDocDetailsID is not null and DebitAccount='+convert(nvarchar,@FromID)+@WHERE +' and N.remarks is not null and convert(nvarchar(max),N.remarks)<>'''''
 				EXEC(@SQL)
 				
 				set @SQL='UPDATE N set N.remarks=replace(convert(nvarchar(max),remarks),''CreditAccount="'+convert(nvarchar(max),@FromID)+'"'',''CreditAccount="'+convert(nvarchar(max),@ToID)+'"'')
-				from Acc_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.InvDocDetailsID=DCC.InvDocDetailsID
-				join com_docnumdata N WITH(NOLOCK) on D.InvDocDetailsID=N.InvDocDetailsID
+				from Acc_DocDetails D 
+				join com_docccdata DCC on D.InvDocDetailsID=DCC.InvDocDetailsID
+				join com_docnumdata N on D.InvDocDetailsID=N.InvDocDetailsID
 				WHERE D.InvDocDetailsID is not null and CreditAccount='+convert(nvarchar,@FromID)+@WHERE +' and N.remarks is not null and convert(nvarchar(max),N.remarks)<>'''''
 				EXEC(@SQL)
 				
 				set @SQL='update B set B.AccountID='+convert(nvarchar(max),@FromID)+'
-				from Acc_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.InvDocDetailsID=DCC.InvDocDetailsID
-				join COM_Billwise B WITH(NOLOCK) on B.DocNo=D.VoucherNo
+				from Acc_DocDetails D 
+				join com_docccdata DCC on D.InvDocDetailsID=DCC.InvDocDetailsID
+				join COM_Billwise B on B.DocNo=D.VoucherNo
 				WHERE D.InvDocDetailsID is not null and B.AccountID='+convert(nvarchar,@FromID)+replace(@WHERE,'DCC.dc','B.dc')
 				EXEC(@SQL)
 				
 				set @SQL='UPDATE D set D.DebitAccount='+convert(nvarchar(max),@ToID)+'
-				from Acc_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.InvDocDetailsID=DCC.InvDocDetailsID
+				from Acc_DocDetails D 
+				join com_docccdata DCC on D.InvDocDetailsID=DCC.InvDocDetailsID
 				WHERE D.InvDocDetailsID is not null and D.DebitAccount='+convert(nvarchar,@FromID)+@WHERE
 				print(@SQL)
 				EXEC(@SQL)
 				
 				set @SQL='UPDATE D set D.CreditAccount='+convert(nvarchar(max),@ToID)+'
-				from Acc_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.InvDocDetailsID=DCC.InvDocDetailsID
+				from Acc_DocDetails D 
+				join com_docccdata DCC on D.InvDocDetailsID=DCC.InvDocDetailsID
 				WHERE D.InvDocDetailsID is not null and D.CreditAccount='+convert(nvarchar,@FromID)+@WHERE
 				print(@SQL)
 				EXEC(@SQL)
 				
 				set @SQL='UPDATE D set D.DebitAccount='+convert(nvarchar(max),@ToID)+'
-				from INV_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.InvDocDetailsID=DCC.InvDocDetailsID
+				from INV_DocDetails D 
+				join com_docccdata DCC on D.InvDocDetailsID=DCC.InvDocDetailsID
 				WHERE D.DebitAccount='+convert(nvarchar,@FromID)+@WHERE
 				EXEC(@SQL)
 				
 				set @SQL='UPDATE D set D.CreditAccount='+convert(nvarchar(max),@ToID)+'
-				from INV_DocDetails D WITH(NOLOCK) 
-				join com_docccdata DCC WITH(NOLOCK) on D.InvDocDetailsID=DCC.InvDocDetailsID
+				from INV_DocDetails D 
+				join com_docccdata DCC on D.InvDocDetailsID=DCC.InvDocDetailsID
 				WHERE D.CreditAccount='+convert(nvarchar,@FromID)+@WHERE
 				EXEC(@SQL)
 				
+				--UPDATE REN_Contract SET RentAccID=@ToID WHERE RentAccID=@FromID
+				
+				--UPDATE REN_Contract SET IncomeAccID=@ToID WHERE IncomeAccID=@FromID
+				
+				--UPDATE REN_ContractParticulars SET DebitAccID=@ToID WHERE DebitAccID=@FromID
+				
+				--UPDATE REN_ContractParticulars SET CreditAccID=@ToID WHERE CreditAccID=@FromID
+
+				--UPDATE REN_ContractParticulars SET CreditAccID=@ToID WHERE CreditAccID=@FromID
+				
+				--UPDATE REN_ContractPayTerms SET DebitAccID=@ToID WHERE DebitAccID=@FromID
+
+				--For Inventory Vouchers
+	
+				--UPDATE COM_Billwise SET DiscAccountID=@ToID WHERE DiscAccountID=@FromID
+				
+				--update SVC_Customers SET AccountName =@ToID WHERE AccountName=@FromID
 			end
 			else
 			begin
@@ -126,6 +146,18 @@ SET NOCOUNT ON;
 				UPDATE Acc_DocDetails SET CreditAccount=@ToID WHERE CreditAccount=@FromID
 				
 				UPDATE Acc_DocDetails SET BankAccountID=@ToID WHERE BankAccountID=@FromID
+				
+				UPDATE REN_Contract SET RentAccID=@ToID WHERE RentAccID=@FromID
+				
+				UPDATE REN_Contract SET IncomeAccID=@ToID WHERE IncomeAccID=@FromID
+				
+				UPDATE REN_ContractParticulars SET DebitAccID=@ToID WHERE DebitAccID=@FromID
+				
+				UPDATE REN_ContractParticulars SET CreditAccID=@ToID WHERE CreditAccID=@FromID
+
+				UPDATE REN_ContractParticulars SET CreditAccID=@ToID WHERE CreditAccID=@FromID
+				
+				UPDATE REN_ContractPayTerms SET DebitAccID=@ToID WHERE DebitAccID=@FromID
 
 				--For Inventory Vouchers
 				UPDATE Inv_DocDetails SET DebitAccount=@ToID WHERE DebitAccount=@FromID
@@ -137,27 +169,7 @@ SET NOCOUNT ON;
 
 				UPDATE COM_Billwise SET DiscAccountID=@ToID WHERE DiscAccountID=@FromID
 				
-				--Rentals
-				if exists(select name from sys.tables where name='REN_Contract')
-				begin
-					set @SQL='UPDATE REN_Contract SET RentAccID='+convert(nvarchar(max),@ToID)+' WHERE RentAccID='+convert(nvarchar,@FromID)+'
-					UPDATE REN_Contract SET IncomeAccID='+convert(nvarchar(max),@ToID)+' WHERE IncomeAccID='+convert(nvarchar,@FromID)
-					EXEC(@SQL)
-				end
-				
-				if exists(select name from sys.tables where name='REN_ContractParticulars')
-				begin
-					set @SQL='UPDATE REN_ContractParticulars SET DebitAccID='+convert(nvarchar(max),@ToID)+' WHERE DebitAccID='+convert(nvarchar,@FromID)+'
-					UPDATE REN_ContractParticulars SET CreditAccID='+convert(nvarchar(max),@ToID)+' WHERE CreditAccID='+convert(nvarchar,@FromID)+'
-					UPDATE REN_ContractParticulars SET CreditAccID='+convert(nvarchar(max),@ToID)+' WHERE CreditAccID='+convert(nvarchar,@FromID)
-					EXEC(@SQL)
-				end
-				
-				if exists(select name from sys.tables where name='REN_ContractPayTerms')
-				begin
-					set @SQL='UPDATE REN_ContractPayTerms SET DebitAccID='+convert(nvarchar(max),@ToID)+' WHERE DebitAccID='+convert(nvarchar,@FromID)
-					EXEC(@SQL)
-				end
+				update SVC_Customers SET AccountName =@ToID WHERE AccountName=@FromID
 				
 				update com_docnumdata
 				set remarks=replace(convert(nvarchar(max),remarks),'DebitAccount="'+convert(nvarchar(max),@FromID)+'"','DebitAccount="'+convert(nvarchar(max),@ToID)+'"')
@@ -184,54 +196,25 @@ SET NOCOUNT ON;
 	 	
 			UPDATE INV_Batches SET ProductID=@ToID WHERE ProductID=@FromID  
 		  	
-		  	if exists(select name from sys.tables where name='PRD_BillOfMaterial')
-			begin
-				set @SQL='UPDATE PRD_BillOfMaterial SET ProductID='+convert(nvarchar(max),@ToID)+' WHERE ProductID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PRD_BillOfMaterial SET ProductID=@ToID WHERE ProductID=@FromID 
+		  	 
+			UPDATE PRD_BOMProducts  SET ProductID=@ToID WHERE  ProductID=@FromID
 			
-			if exists(select name from sys.tables where name='PRD_BOMProducts')
-			begin
-				set @SQL='UPDATE PRD_BOMProducts SET ProductID='+convert(nvarchar(max),@ToID)+' WHERE ProductID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
-			
-			if exists(select name from sys.tables where name='PRD_JobOuputProducts')
-			begin
-				set @SQL='UPDATE PRD_JobOuputProducts SET ProductID='+convert(nvarchar(max),@ToID)+' WHERE ProductID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PRD_JobOuputProducts  SET ProductID=@ToID WHERE  ProductID=@FromID
 		  	
-		  	if exists(select name from sys.tables where name='CRM_Cases')
-			begin
-				set @SQL='UPDATE CRM_Cases SET ProductID='+convert(nvarchar(max),@ToID)+' WHERE ProductID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE CRM_Cases SET ProductID=@ToID WHERE ProductID=@FromID
 			
-			if exists(select name from sys.tables where name='CRM_CampaignProducts')
-			begin
-				set @SQL='UPDATE CRM_CampaignProducts SET ProductID='+convert(nvarchar(max),@ToID)+' WHERE ProductID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
-			
-			if exists(select name from sys.tables where name='CRM_CampaignResponse')
-			begin
-				set @SQL='UPDATE CRM_CampaignResponse SET ProductID='+convert(nvarchar(max),@ToID)+' WHERE ProductID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
-			 
-			if exists(select name from sys.tables where name='CRM_LeadCVRDetails')
-			begin
-				set @SQL='UPDATE CRM_LeadCVRDetails SET Product='+convert(nvarchar(max),@ToID)+' WHERE Product='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
-			
-			if exists(select name from sys.tables where name='CRM_ProductMapping')
-			begin
-				set @SQL='UPDATE CRM_ProductMapping SET ProductID='+convert(nvarchar(max),@ToID)+' WHERE ProductID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE CRM_CampaignProducts SET ProductID=@ToID WHERE ProductID=@FromID 
+
+			UPDATE CRM_CampaignResponse SET ProductID=@ToID WHERE ProductID=@FromID
 		  	
+			UPDATE CRM_LeadCVRDetails SET Product=@ToID WHERE Product=@FromID 
+			
+			UPDATE CRM_ProductMapping SET ProductID=@ToID WHERE ProductID=@FromID 
+			   
+			UPDATE SVC_ServicePartsInfo SET ProductID=@ToID WHERE ProductID=@FromID
+			
+			UPDATE SVC_ServicePartsInfoHistory SET ProductID=@ToID WHERE ProductID=@FromID
   		 
 	END
 	ELSE IF(@CostCenterID=50051)
@@ -243,87 +226,35 @@ SET NOCOUNT ON;
 				RAISERROR('-105',16,1)
 			END
 			
+			UPDATE COM_DOCCCDATA SET dcCCNID51=@ToID WHERE dcCCNID51=@FromID
+			
 			UPDATE COM_HISTORYDETAILS SET NodeID=@ToID WHERE NodeID=@FromID AND CostCenterID=50051
 			
 			UPDATE COM_CCCCData SET NodeID=@ToID WHERE NodeID=@FromID AND CostCenterID=50051
 			
-			if exists(select * from sys.columns where object_id=object_id('COM_DOCCCDATA') and name='dcCCNID51')
-			begin
-				set @SQL='UPDATE COM_DOCCCDATA SET dcCCNID51='+convert(nvarchar(max),@ToID)+' WHERE dcCCNID51='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_EmpDetail SET EmployeeID=@ToID WHERE EmployeeID=@FromID
 			
-			if exists(select name from sys.tables where name='PAY_EmpDetail')
-			begin
-				set @SQL='UPDATE PAY_EmpDetail SET EmployeeID='+convert(nvarchar(max),@ToID)+' WHERE EmployeeID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE pay_empaccountslinking SET EmpSeqNo=@ToID WHERE EmpSeqNo=@FromID
 			
-			if exists(select name from sys.tables where name='pay_empaccountslinking')
-			begin
-				set @SQL='UPDATE pay_empaccountslinking SET EmpSeqNo='+convert(nvarchar(max),@ToID)+' WHERE EmpSeqNo='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE pay_employeeLeaveDetails SET EmployeeID=@ToID WHERE EmployeeID=@FromID
 			
-			if exists(select name from sys.tables where name='pay_employeeLeaveDetails')
-			begin
-				set @SQL='UPDATE pay_employeeLeaveDetails SET EmployeeID='+convert(nvarchar(max),@ToID)+' WHERE EmployeeID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_EmpMonthlyAdjustments SET EmpSeqNo=@ToID WHERE EmpSeqNo=@FromID
 			
-			if exists(select name from sys.tables where name='PAY_EmpMonthlyAdjustments')
-			begin
-				set @SQL='UPDATE PAY_EmpMonthlyAdjustments SET EmpSeqNo='+convert(nvarchar(max),@ToID)+' WHERE EmpSeqNo='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_EmpMonthlyArrears SET EmpSeqNo=@ToID WHERE EmpSeqNo=@FromID
 			
-			if exists(select name from sys.tables where name='PAY_EmpMonthlyArrears')
-			begin
-				set @SQL='UPDATE PAY_EmpMonthlyArrears SET EmpSeqNo='+convert(nvarchar(max),@ToID)+' WHERE EmpSeqNo='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_EmpMonthlyDues SET EmpSeqNo=@ToID WHERE EmpSeqNo=@FromID
 			
-			if exists(select name from sys.tables where name='PAY_EmpMonthlyDues')
-			begin
-				set @SQL='UPDATE PAY_EmpMonthlyDues SET EmpSeqNo='+convert(nvarchar(max),@ToID)+' WHERE EmpSeqNo='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_EmpPay SET EmployeeID=@ToID WHERE EmployeeID=@FromID
 			
-			if exists(select name from sys.tables where name='PAY_EmpPay')
-			begin
-				set @SQL='UPDATE PAY_EmpPay SET EmployeeID='+convert(nvarchar(max),@ToID)+' WHERE EmployeeID='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_EmpTaxComputation SET EmpNode=@ToID WHERE EmpNode=@FromID
 			
-			if exists(select name from sys.tables where name='PAY_EmpTaxComputation')
-			begin
-				set @SQL='UPDATE PAY_EmpTaxComputation SET EmpNode='+convert(nvarchar(max),@ToID)+' WHERE EmpNode='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_EmpTaxDeclaration SET EmpNode=@ToID WHERE EmpNode=@FromID
 			
-			if exists(select name from sys.tables where name='PAY_EmpTaxDeclaration')
-			begin
-				set @SQL='UPDATE PAY_EmpTaxDeclaration SET EmpNode='+convert(nvarchar(max),@ToID)+' WHERE EmpNode='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_EmpTaxHRAInfo SET EmpNode=@ToID WHERE EmpNode=@FromID
 			
-			if exists(select name from sys.tables where name='PAY_EmpTaxHRAInfo')
-			begin
-				set @SQL='UPDATE PAY_EmpTaxHRAInfo SET EmpNode='+convert(nvarchar(max),@ToID)+' WHERE EmpNode='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_FinalSettlement SET EmpSeqNo=@ToID WHERE EmpSeqNo=@FromID
 			
-			if exists(select name from sys.tables where name='PAY_FinalSettlement')
-			begin
-				set @SQL='UPDATE PAY_FinalSettlement SET EmpSeqNo='+convert(nvarchar(max),@ToID)+' WHERE EmpSeqNo='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
-			
-			if exists(select name from sys.tables where name='PAY_LoanGuarantees')
-			begin
-				set @SQL='UPDATE PAY_LoanGuarantees SET GEmpSeqNo='+convert(nvarchar(max),@ToID)+' WHERE GEmpSeqNo='+convert(nvarchar,@FromID)
-				EXEC(@SQL)
-			end
+			UPDATE PAY_LoanGuarantees SET GEmpSeqNo=@ToID WHERE GEmpSeqNo=@FromID
 			
 			
 	END
@@ -336,59 +267,35 @@ SET NOCOUNT ON;
 			BEGIN
 				RAISERROR('-105',16,1)
 			END
-			declare @CCName nvarchar(50)
+			declare @DSQL nvarchar(max), @CCName nvarchar(50)
 			set @CCName= 'CCNID'+CONVERT(nvarchar,@CostCenterID-50000) 
 				
 			--For Dimension Data 
-			set @SQL='UPDATE COM_CCCCData SET '+@CCName+'='+Convert(nvarchar,@ToID)+' WHERE '+@CCName+'='+Convert(nvarchar,@FromID)+''
-			--print (@SQL)
-			exec (@SQL)
-
-			--For Schemes & Discounts
-			set @SQL='UPDATE ADM_SchemesDiscounts SET '+@CCName+'='+Convert(nvarchar,@ToID)+' WHERE '+@CCName+'='+Convert(nvarchar,@FromID)+''
-			--print (@SQL)
-			exec (@SQL)
-
-			-----------------------------------------------------------------------
+			set @DSQL='UPDATE COM_CCCCData SET '+@CCName+'='+Convert(nvarchar,@ToID)+' WHERE '+@CCName+'='+Convert(nvarchar,@FromID)+''
+			--print (@DSQL)
+			exec (@DSQL)
+			set @DSQL=''
+			
 			set @CCName= 'dcCCNID'+CONVERT(nvarchar,@CostCenterID-50000) 
 			--For Dimension Document data
-			set @SQL='UPDATE COM_DocCCData SET '+@CCName+'='+Convert(nvarchar,@ToID)+' WHERE '+@CCName+'='+Convert(nvarchar,@FromID)+''
-			--print (@SQL)
-			exec (@SQL)
-			set @SQL=''
+			set @DSQL='UPDATE COM_DocCCData SET '+@CCName+'='+Convert(nvarchar,@ToID)+' WHERE '+@CCName+'='+Convert(nvarchar,@FromID)+''
+			--print (@DSQL)
+			exec (@DSQL)
+			set @DSQL=''
 			
 			--For BillWise
-			set @SQL='UPDATE COM_Billwise SET '+@CCName+'='+Convert(nvarchar,@ToID)+' WHERE '+@CCName+'='+Convert(nvarchar,@FromID)+''
-			--print (@SQL)
-			exec (@SQL)
-
-
-			IF EXISTS (SELECT * FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='UnitLinkDimension' AND Value=@CostCenterID)
-			BEGIN
-				set @SQL='UPDATE REN_Units SET NodeID='+Convert(nvarchar,@ToID)+' WHERE NodeID='+Convert(nvarchar,@FromID)+' AND CCID='+Convert(nvarchar,@CostCenterID)
-				--print (@SQL)
-				exec (@SQL)
-			END
+			set @DSQL='UPDATE COM_Billwise SET '+@CCName+'='+Convert(nvarchar,@ToID)+' WHERE '+@CCName+'='+Convert(nvarchar,@FromID)+''
+			--print (@DSQL)
+			exec (@DSQL)
 			
 			IF(@CostCenterID = 50068)
 			BEGIN
-				
-				if exists(select name from sys.tables where name='COM_CC50051')
-				begin
-					set @SQL='UPDATE COM_CC50051 SET iBank='+convert(nvarchar(max),@ToID)+' WHERE iBank='+convert(nvarchar,@FromID)
-					EXEC(@SQL)
-				end
-				
-				if exists(select * from sys.columns where object_id=object_id('COM_DOCTEXTDATA') and name='dcAlpha15')
-				begin
-					set @SQL='UPDATE T SET T.dcAlpha15='''+Convert(nvarchar,@ToID)+''' 
-								FROM COM_DOCTEXTDATA T WITH(NOLOCK) 
-								JOIN INV_DOCDETAILS I WITH(NOLOCK) ON I.INVDOCDETAILSID=T.INVDOCDETAILSID
-								WHERE T.dcAlpha15='''+Convert(nvarchar,@FromID)+''' AND I.COSTCENTERID=40054'
-					EXEC(@SQL)
-				end
-				
-				
+			
+			UPDATE COM_CC50051 SET iBank=@ToID WHERE iBank=@FromID
+			
+			UPDATE COM_DOCTEXTDATA SET dcAlpha15=Convert(nvarchar,@ToID) 
+			FROM COM_DOCTEXTDATA T JOIN INV_DOCDETAILS I ON I.INVDOCDETAILSID=T.INVDOCDETAILSID
+			WHERE dcAlpha15=Convert(nvarchar,@FromID) AND I.COSTCENTERID=40054
 			
 			END
 			
@@ -398,11 +305,7 @@ SET NOCOUNT ON;
 	ELSE IF(@CostCenterID =83)
 	BEGIN
 		--For Dimension Document data
-		if exists(select * from sys.columns where object_id=object_id('COM_DocCCData') and name='CustomerID')
-		begin
-			set @SQL='UPDATE COM_DocCCData SET CustomerID='+convert(nvarchar(max),@ToID)+' WHERE CustomerID='+convert(nvarchar,@FromID)
-			EXEC(@SQL)
-		end
+		UPDATE COM_DocCCData SET CustomerID=@ToID WHERE CustomerID=@FromID
 	END
 
 	if(@Assign=1)
@@ -448,7 +351,7 @@ SET NOCOUNT ON;
 	
 	if(@Contacts=1)
 	begin
-		if(select count(*) from COM_Contacts WITH(NOLOCK) where FeatureID=@CostCenterID and FeaturePK=@ToID)>0
+		if(select count(*) from COM_Contacts where FeatureID=@CostCenterID and FeaturePK=@ToID)>0
 		begin
 			update COM_Contacts 
 			set AddressTypeID=2,FeaturePK=@ToID
@@ -464,7 +367,7 @@ SET NOCOUNT ON;
 	
 	if(@Adress=1)
 	begin
-		if(select count(*) from COM_Address WITH(NOLOCK) where FeatureID=@CostCenterID and FeaturePK=@ToID)>0
+		if(select count(*) from COM_Address where FeatureID=@CostCenterID and FeaturePK=@ToID)>0
 		begin
 			update COM_Address 
 			set AddressTypeID=2,FeaturePK=@ToID
@@ -494,10 +397,9 @@ SET NOCOUNT ON;
 	
 	if(@Activities=1)
 	begin
-		SET @SQL='update CRM_Activities 
-		set NodeID='+CONVERT(NVARCHAR,@ToID)+'
-		where CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+' and NodeID='+CONVERT(NVARCHAR,@FromID)
-		EXEC (@SQL)
+		update CRM_Activities 
+		set NodeID=@ToID
+		where CostCenterID=@CostCenterID and NodeID=@FromID
 	end
 	
 		

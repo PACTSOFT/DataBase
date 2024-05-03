@@ -4,9 +4,9 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetDocumentHistory]
 	@CostCenterID [int],
-	@DocID [int],
+	@DocID [bigint],
 	@UserID [int] = 0,
-	@RoleID [int] = 0,
+	@RoleID [bigint] = 0,
 	@UserName [nvarchar](50),
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -16,8 +16,7 @@ SET NOCOUNT ON
 
 		--Declaration Section
 		DECLARE @IsInventory bit
-		declare @tblhist table(ModifiedBy nvarchar(max),ModifiedDate datetime,maxid bigint)
-
+		
 		--SP Required Parameters Check
 		IF (@CostCenterID < 40000)
 		BEGIN
@@ -26,55 +25,19 @@ SET NOCOUNT ON
 		
 		select @IsInventory=IsInventory From adm_documentTypes WITH(NOLOCK)
 		Where CostCenterID=@CostCenterID
-		
+
 		if(@IsInventory=1)
 		BEGIN
-			--SElect distinct ModifiedBy,convert(datetime,ModifiedDate) ModifiedDate,max(InvDocDetailsHistoryID) maxid from INV_DocDetails_History WITH(NOLOCK)
-			insert into @tblhist
-			Select distinct case when U.FirstName is not null and U.FirstName<>'' then U.FirstName else max(H.ModifiedBy) end ModifiedBy,convert(datetime,H.ModifiedDate) ModifiedDate,max(H.InvDocDetailsHistoryID) maxid 
-			from INV_DocDetails_History H WITH(NOLOCK)
-			JOIN ADM_Users U WITH(NOLOCK) on U.UserName=H.ModifiedBy
-			where H.CostCenterID=@CostCenterID and H.DocID=@DocID
-			group by U.FirstName,convert(datetime,H.ModifiedDate)
-			order by ModifiedDate
-			
-			if not exists(select * from @tblhist)
-			BEGIN
-				insert into @tblhist
-				Select distinct case when U.FirstName is not null and U.FirstName<>'' then U.FirstName else max(H.CreatedBy) end ModifiedBy,convert(datetime,H.CreatedDate) ModifiedDate,max(H.InvDocDetailsID) maxid
-					 from INV_DocDetails H WITH(NOLOCK)
-				JOIN ADM_Users U WITH(NOLOCK) on U.UserName=H.CreatedBy
-				where H.CostCenterID=@CostCenterID and H.DocID=@DocID
-				group by U.FirstName,convert(datetime,H.CreatedDate)
-				order by convert(datetime,H.CreatedDate)
-				
-			END
-			
+			SElect distinct ModifiedBy,convert(datetime,ModifiedDate) ModifiedDate,max(InvDocDetailsHistoryID) maxid from INV_DocDetails_History WITH(NOLOCK)
+			where CostCenterID=@CostCenterID and DocID=@DocID
+			group by ModifiedBy,convert(datetime,ModifiedDate)
 		END
 		ELSE
 		BEGIN
-			insert into @tblhist
-			Select distinct case when U.FirstName is not null and U.FirstName<>'' then U.FirstName else max(H.ModifiedBy) end ModifiedBy,convert(datetime,H.ModifiedDate) ModifiedDate,max(H.AccDocDetailsHistoryID) maxid 
-			 from ACC_DocDetails_History H WITH(NOLOCK)
-			JOIN ADM_Users U WITH(NOLOCK) on U.UserName=H.ModifiedBy
-			where H.CostCenterID=@CostCenterID and H.DocID=@DocID
-			group by U.FirstName,convert(datetime,H.ModifiedDate)
-			order by ModifiedDate
-			
-			if not exists(select * from @tblhist)
-			BEGIN
-				insert into @tblhist
-				Select distinct case when U.FirstName is not null and U.FirstName<>'' then U.FirstName else max(H.CreatedBy) end ModifiedBy,convert(datetime,H.CreatedDate) ModifiedDate,max(H.AccDocDetailsID) maxid
-					 from ACC_DocDetails H WITH(NOLOCK)
-				JOIN ADM_Users U WITH(NOLOCK) on U.UserName=H.CreatedBy
-				where H.CostCenterID=@CostCenterID and H.DocID=@DocID
-				group by U.FirstName,convert(datetime,H.CreatedDate)
-				order by convert(datetime,H.CreatedDate)
-				
-			END	
+			SElect distinct ModifiedBy,convert(datetime,ModifiedDate) ModifiedDate,max(AccDocDetailsHistoryID) maxid from ACC_DocDetails_History WITH(NOLOCK)
+			where CostCenterID=@CostCenterID and DocID=@DocID
+			group by ModifiedBy,convert(datetime,ModifiedDate)
 		END 
-		
-		select * from @tblhist
 			
 SET NOCOUNT OFF;
 RETURN 1
@@ -92,6 +55,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
-
+END CATCH  
 GO

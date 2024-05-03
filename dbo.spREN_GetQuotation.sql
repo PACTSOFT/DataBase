@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_GetQuotation]
-	@QuotationID [int] = 0,
-	@RoleID [int],
-	@UserID [int],
+	@QuotationID [bigint] = 0,
+	@RoleID [bigint],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -13,22 +13,16 @@ BEGIN TRANSACTION
 BEGIN TRY                         
 SET NOCOUNT ON 
 
-	declare @ccid int,@ContractExists bit,@dimCid int,@table nvarchar(100)
-	Declare @WID INT,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@Type int,@escDays int,@CreatedDate datetime
-	DECLARE @Status NVARCHAR(MAX),@sql NVARCHAR(MAX),@PROPERTYID INT , @UnitID INT
+	declare @ccid int,@ContractExists bit                      
+	Declare @WID bigint,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@Type int,@escDays int,@CreatedDate datetime
 
 	set @ContractExists=0            
-	SELECT @ccid=CostCenterID,@PROPERTYID = PropertyID,@UnitID = UNITID
+	SELECT @ccid=CostCenterID
 	,@StatusID=StatusID, @WID=WorkFlowID,@Level=WorkFlowLevel,@CreatedDate=CONVERT(datetime,createdDate)
 	 FROM  REN_Quotation WITH(NOLOCK) where QuotationID = @QuotationID
-	 
-	select @dimCid=Value from COM_CostCenterPreferences WITH(NOLOCK)
-	where Name='DimensionWiseContract' and costcenterid=95 and Value is not null and Value<>'' and ISNUMERIC(value)=1
 
 	if exists(SELECT ContractID FROM  REN_Contract WITH(NOLOCK) where QuotationID = @QuotationID)
 		set @ContractExists=1
-	else if(@ccid=103 and exists(SELECT QuotationID FROM  REN_Quotation WITH(NOLOCK) where LinkedQuotationID = @QuotationID))
-		set @ContractExists=1	
 
 	if(@WID is not null and @WID>0)  
 		BEGIN  
@@ -55,7 +49,7 @@ SET NOCOUNT ON
      
 		set @canEdit=1  
        
-		if(@StatusID in(467,468,466,426))  
+		if(@StatusID in(467,468,466))  
 		begin  
 			if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
 			begin  
@@ -110,6 +104,7 @@ SET NOCOUNT ON
 		else  
 			set @canApprove= 0  
 	
+	DECLARE @Status NVARCHAR(MAX)
 	
 	SELECT @Status='['+CS.[Status]+']' FROM REN_Contract RC WITH(NOLOCK) 
 	JOIN COM_Status CS WITH(NOLOCK) ON CS.StatusID=RC.StatusID
@@ -121,59 +116,19 @@ SET NOCOUNT ON
 			
 	SELECT QuotationID ContractID, Prefix ContractPrefix, convert(datetime,Date) ContractDate,Number ContractNumber, StatusID, PropertyID, UnitID, TenantID, RentAccID,                      
 	IncomeAccID, Purpose, convert(datetime,StartDate) StartDate,  convert(datetime,ExtendTill) ExtndTill,convert(datetime, EndDate) EndDate, TotalAmount, NonRecurAmount, RecurAmount,  [GUID], LocationID , DivisionID , CurrencyID ,TermsConditions , SalesmanID , AccountantID,LandlordID , Narration,
-	BasedOn,SNO,@ContractExists ContractExists,RefQuotation,multiName,CostCenterID,LinkedQuotationID QuotationID
+	BasedOn,SNO,@ContractExists ContractExists,RefQuotation,multiName,CostCenterID
 	,@canEdit canEdit,@canApprove canApprove,WorkFlowID,WorkFlowLevel,@Userlevel Userlevel,NoOfUnits,RecurDuration,@Status [Status]
-	,convert(datetime,ExpectedEndDate) ExpectedEndDate,GracePeriod
 	 FROM  REN_Quotation WITH(NOLOCK) where QuotationID = @QuotationID
-     
-     
-     set @sql='SELECT    DISTINCT  CP.NodeID, CP.QuotationID ContractID, CP.CCID, CP.CCNodeID, CP.CreditAccID, CP.ChequeNo, convert(datetime,CP.ChequeDate) ChequeDate, CP.PayeeBank,                      
-	CP.DebitAccID, CP.RentAmount RentAmount, CP.Discount DiscountAmount, CP.Amount, UNT.RENT RENTAMT , CASE WHEN UNT.DISCOUNTPERCENTAGE = -100 THEN UNT.DISCOUNTAMOUNT ELSE (UNT.RENT  * UNT.DISCOUNTPERCENTAGE) / 100 END  DICOUNT                         
-	,CP.SPType,CP.TaxableAmt,CP.RecurInvoice,CP.InclChkGen,CP.VatPer,CP.VatAmount, ACC.ACCOUNTNAME CREDITNAME , ACCD.ACCOUNTNAME  DEBITNAME ,CP.IsRecurr ,PARTP.Refund  ,PART.Refund UnitRefund , Sts.Status StatusID'
-		
-	if exists(select * from adm_globalpreferences
-	where name ='VATVersion')					
-		set @sql=@sql+' ,Tx.Name TaxCategory,SPT.Name SPTypeName'
-	ELSE
-		set @sql=@sql+' ,'''' TaxCategory,'''' SPTypeName'
-
-	if (@dimCid>50000)
-		set @sql=@sql+' ,Dim.Name Dimname'
-	ELSE
-		set @sql=@sql+' ,'''' Dimname'
-	
-	set @sql=@sql+',CP.TaxCategoryID,CP.VatType, Doc.VoucherNo ,Doc.DocPrefix DocPrefix ,Doc.DocNumber DocNumber , doc.CostCenterID                       
-	CostCenterID, ADF.DocumentName DocumentName ,Doc.DocID DocID , Doc.StatusID  DocStatusID,CP.Narration,cp.Detailsxml,CP.Sqft,CP.Rate                 
-	,cp.LocationID,loc.name locname,cp.DimNodeID'
-	
-	set @sql=@sql+' FROM REN_QuotationParticulars  CP WITH(NOLOCK)
-	LEFT JOIN REN_Quotation CNT WITH(NOLOCK) ON CP.QuotationID = CNT.QuotationID  
-	LEFT JOIN Com_location Loc WITH(NOLOCK) ON Loc.NodeID = CP.LocationID  
-	LEFT JOIN REN_UNITS UNT WITH(NOLOCK) ON CNT.UNITID = UNT.UNITID                          
+                   
+	SELECT    DISTINCT  CP.NodeID, CP.QuotationID ContractID, CP.CCID, CP.CCNodeID, CP.CreditAccID, CP.ChequeNo, convert(datetime,CP.ChequeDate) ChequeDate, CP.PayeeBank,                      
+	CP.DebitAccID, CP.Amount, CP.RentAmount RentAmount, CP.Discount DiscountAmount,CP.Narration
+	,CP.InclChkGen,CP.vattype,CP.VatPer,CP.VatAmount, ACC.ACCOUNTNAME CREDITNAME , ACCD.ACCOUNTNAME  DEBITNAME ,CP.IsRecurr   ,0 Refund , 0  StatusID                   
+	, '' VoucherNo ,'' DocPrefix ,'' DocNumber , 0  CostCenterID, ''  DocumentName ,0  DocID,cp.Detailsxml,cp.RecurInvoice,CP.Sqft,CP.Rate           
+	FROM REN_QuotationParticulars  CP WITH(NOLOCK)  
+	join REN_Quotation CNT WITH(NOLOCK) ON CP.QuotationID = CNT.QuotationID
 	LEFT JOIN ACC_Accounts ACC WITH(NOLOCK) ON ACC.ACCOUNTID = CP.CreditAccID                         
-	LEFT JOIN ACC_Accounts ACCD WITH(NOLOCK) ON ACCD.ACCOUNTID = CP.DebitAccID                         
-	LEFT JOIN REN_Particulars PART WITH(NOLOCK) ON CP.CCNODEID = PART.ParticularID  and  PART.PropertyID = '+convert(nvarchar(max),@PROPERTYID)+' AND PART.UNITID ='+convert(nvarchar(max), @UnitID)+'
-	LEFT JOIN REN_Particulars PARTP WITH(NOLOCK) ON CP.CCNODEID = PARTP.ParticularID  and  PARTP.PropertyID =  '+convert(nvarchar(max),@PROPERTYID)+' AND PARTP.UNITID = 0 '
-	if (@dimCid>50000)
-    BEGIN
-		select @table=tablename from adm_features with(NOLOCK) where featureid=@dimCid
-		set @sql=@sql+' LEFT JOIN '+@table+' Dim WITH(NOLOCK) ON Dim.NodeID=cp.DimNodeID '
-    END
-
-	set @sql=@sql+'LEFT JOIN REN_ContractDocMapping CDM WITH(NOLOCK) ON CP.QuotationID = CDM.ContractID AND CP.SNO = CDM.SNO  and CDM.isaccdoc = 0   AND CDM.ContractCCID = '+convert(nvarchar(max),@ccid)
-	
-    if exists(select * from adm_globalpreferences
-	where name ='VATVersion')					
-		set @sql=@sql+' LEFT JOIN COM_CC50060 Tx WITH(NOLOCK) ON Tx.NodeID=CP.TaxCategoryID  LEFT JOIN COM_CC50061 SPT WITH(NOLOCK) ON SPT.NodeID=CP.SPType '
-    
-   
-	set @sql=@sql+' LEFT JOIN Inv_DocDetails Doc WITH(NOLOCK) on  CDM.DocID =  Doc.DocID                         
-	left join ADM_DocumentTypes ADF WITH(NOLOCK) on Doc.CostCenterID = ADF.CostCenterID                  
-	LEFT JOIN Com_Status Sts WITH(NOLOCK) on  Sts.StatusID =  Doc.StatusID                      
-	where  CP.QuotationID ='+convert(nvarchar(max),@QuotationID) +' --and CDM.TYPE = 1 and CDM.isaccdoc = 0           
-	and (CDM.TYPE = 1 OR CDM.TYPE IS NULL) and (CDM.isaccdoc = 0 OR CDM.IsAccDoc  IS NULL )'
-	
-	exec(@sql)
+	LEFT JOIN ACC_Accounts ACCD WITH(NOLOCK) ON ACCD.ACCOUNTID = CP.DebitAccID                           
+	where  CP.QuotationID = @QuotationID                   
 	
 	if(@ccid=129)
 		SELECT DISTINCT CDM.SNO, CP.NodeID,CP.ChequeNo, Convert(datetime,CP.ChequeDate) ChequeDate , CP.CustomerBank, CP.DebitAccID, CP.Amount ,  
@@ -189,12 +144,13 @@ SET NOCOUNT ON
 		order by CDM.SNO    
 	ELSE
 		SELECT DISTINCT  CP.NodeID,  CP.ChequeNo, Convert(datetime,CP.ChequeDate) ChequeDate , CP.CustomerBank, CP.DebitAccID, CP.Amount,                 
-		CP.SNO,period,ACC.AccountName DebitAccName , CP.Narration , ''  StatusID   , '' VoucherNo ,''  DocPrefix ,''  DocNumber , 0 CostCenterID,  ''  DocumentName,0 DocID                        
+		period,ACC.AccountName DebitAccName , CP.Narration , ''  StatusID   , '' VoucherNo ,''  DocPrefix ,''  DocNumber , 0 CostCenterID,  ''  DocumentName,0 DocID                        
 		FROM REN_quotationPayTerms CP WITH(NOLOCK)                       
 		LEFT JOIN ACC_Accounts ACC WITH(NOLOCK) ON ACC.ACCOUNTID = CP.DebitAccID                         
-		where CP.QuotationID = @QuotationID --and CDM.TYPE = 2   
-		order by CP.SNO                  
-            
+		where CP.QuotationID = @QuotationID --and CDM.TYPE = 2                     
+     
+   
+              
 	--Getting data from Contract extended table                    
 	SELECT * FROM  REN_QuotationExtended WITH(NOLOCK)                     
 	WHERE QuotationID=@QuotationID                    
@@ -203,9 +159,8 @@ SET NOCOUNT ON
 	SELECT * FROM  COM_CCCCDATA WITH(NOLOCK)                     
 	WHERE NodeID=@QuotationID and CostCenterID = @ccid  
 
-	
-	EXEC [spCOM_GetAttachments] @ccid,@QuotationID,@UserID
-
+	SELECT * FROM  COM_Files WITH(NOLOCK)   
+	WHERE FeatureID=@ccid and  FeaturePK=@QuotationID 
 	
 	SELECT     NoteID, Note, FeatureID, FeaturePK, CompanyGUID, GUID, CreatedBy, convert(datetime,CreatedDate) as CreatedDate, 
 	ModifiedBy, ModifiedDate, CostCenterID
@@ -217,9 +172,7 @@ SET NOCOUNT ON
 	if exists(SELECT *	FROM  REN_Quotation WITH(NOLOCK) where RefQuotation = @QuotationID)
 		SELECT UnitID,multiName uname
 		FROM  REN_Quotation WITH(NOLOCK) where RefQuotation = @QuotationID or QuotationID = @QuotationID
-	else
-		select 1 where 1<>1
-	
+
 	select 1 where 1<>1
 	 
 	IF @WID is not null and @WID>0
@@ -254,5 +207,7 @@ BEGIN CATCH
 ROLLBACK TRANSACTION                        
 SET NOCOUNT OFF                          
 RETURN -999                           
-END CATCH
+END CATCH             
+
+
 GO

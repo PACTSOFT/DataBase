@@ -13,14 +13,14 @@ SET NOCOUNT ON
 
 			--Declaration Section
 			DECLARE @ColumnName varchar(50),@ListViewID int,@CostCenterID int=0,@ListViewTypeID INT,@NodeIDs nvarchar(MAX)
-			Declare @Table nvarchar(50),@Primarycol varchar(50),@SQL nvarchar(max),@xml xml,@I int,@Cnt int,@colID INT
+			Declare @Table nvarchar(50),@Primarycol varchar(50),@SQL nvarchar(max),@xml xml,@I int,@Cnt int,@colID BIGINT
 			
-			declare @tbData TABLE(NodeID INT,Value NVARCHAR(MAX),DBColumnID INT,TypeID int)
+			declare @tbData TABLE(NodeID bigint,Value NVARCHAR(MAX),DBColumnID bigint,TypeID int)
 
 			set @xml=@Data
-			declare @tblList TABLE(ID int identity(1,1),CCID int,TypeID int,NodeIDs NVARCHAR(MAX),DBColumnID INT)      
+			declare @tblList TABLE(ID int identity(1,1),CCID int,TypeID int,NodeIDs NVARCHAR(MAX),DBColumnID bigint)      
 			INSERT INTO @tblList    
-			SELECT X.value('@CCID','int'),X.value('@TypeID','int'),X.value('@NodeID','nvarchar(MAX)'),X.value('@DBColumnID','INT')
+			SELECT X.value('@CCID','int'),X.value('@TypeID','int'),X.value('@NodeID','nvarchar(MAX)'),X.value('@DBColumnID','bigint')
 			from @xml.nodes('/XML/Row') as Data(X)    
 			SELECT @I=0,@Cnt=COUNT(ID) FROM @tblList
 
@@ -42,12 +42,12 @@ SET NOCOUNT ON
 					SET @Primarycol='CurrencyID'
 				ELSE IF(@CostCenterID=81)
 					SET @Primarycol='ContractTemplID'
-				ELSE IF(@CostCenterID=16)
-					SET @Primarycol='BatchID'
 				ELSE IF(@CostCenterID=71)
 					SET @Primarycol='ResourceID'
 				ELSE IF(@CostCenterID=72)
 					SET @Primarycol='AssetID'
+				ELSE IF(@CostCenterID=61)
+					SET @Primarycol='VehicleID'
 				ELSE IF(@CostCenterID=65)
 					SET @Primarycol='ContactID'	
 				ELSE IF(@CostCenterID=83)
@@ -64,8 +64,6 @@ SET NOCOUNT ON
 					SET @Primarycol='ContractTemplID'
 				ELSE IF(@CostCenterID=89)
 					SET @Primarycol='OpportunityID'
-				ELSE IF(@CostCenterID=113)
-					SET @Primarycol='StatusID'
 				ELSE IF(@CostCenterID=144)
 					SET @Primarycol='ActivityID'
 				ELSE IF(@CostCenterID=115)
@@ -76,8 +74,6 @@ SET NOCOUNT ON
 					SET @Primarycol='ReportID'
 				ELSE IF(@CostCenterID=7)
 					SET @Primarycol='UserID'
-				ELSE IF(@CostCenterID=76)
-					SET @Primarycol='BOMID'
 				ELSE
 					SET @Primarycol='NodeID'
 
@@ -110,13 +106,18 @@ print @ListViewID
 				--Getting FIRST COLUMN IN LIST
 				SET @ColumnName=(SELECT Top 1 SysColumnName FROM ADM_CostCenterDef A WITH(NOLOCK)
 								JOIN ADM_ListViewColumns B WITH(NOLOCK) ON A.CostCenterColID=B.CostCenterColID 
-								WHERE B.ListViewID= @ListViewID and ColumnType=1
+								WHERE B.ListViewID= @ListViewID
 								ORDER BY B.ColumnOrder)
 
 				--Prepare query	
 				SET @SQL='select '+ @Primarycol+' AS NodeID ,'+@ColumnName+','+convert(nvarchar,@colID)+' ,'+convert(nvarchar,@ListViewTypeID)+' from '+@Table +'  WITH(NOLOCK) where '+@Primarycol+ ' in ( '+@NodeIDs+')'
 
-				print @SQL
+				if(@CostCenterID=61)
+					SET @SQL='select '+ @Primarycol+' AS NodeID ,Make+''-''+MOdel+''-''+Variant+''-''++''(''+convert(nvarchar,startYear)+''-''+
+					case when (EndYear= ''0'') then convert(nvarchar, Datepart(YEAR,GETDATE())) else convert(nvarchar,endYear) END
+					+'')'' ,'+convert(nvarchar,@colID)+' ,'+convert(nvarchar,@ListViewTypeID)+' from '+@Table +'  WITH(NOLOCK) where '+@Primarycol+ ' in ( '+@NodeIDs+')'
+print @SQL
+print @ListViewTypeID
 				insert into @tbData
 				Exec(@SQL)
 				 
@@ -141,6 +142,6 @@ BEGIN CATCH
 	END
  SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 
 GO

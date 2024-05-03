@@ -5,9 +5,9 @@ GO
 CREATE PROCEDURE [dbo].[spPAY_ExtGetESSWeekdays]
 	@STARTDATE1 [nvarchar](max),
 	@ToDate1 [nvarchar](max),
-	@EmployeeID [int] = 0,
-	@userid [int] = 1,
-	@langid [int] = 1
+	@EmployeeID [bigint] = 0,
+	@userid [bigint] = 1,
+	@langid [bigint] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY
@@ -99,7 +99,7 @@ END
 PRINT @SQL
 
 INSERT INTO @EMPWEEKLYOFF
-EXEC sp_executesql @SQL		
+EXEC (@SQL)		
 		--select * from @EMPWEEKLYOFF
 		--CHECKING FOR EMPLOYEE WEEKLY OFF COUNT FROM WEEKLYOFF MASTER IF NO DATA FOUND
 		--LOADING DATA FROM EMPLOYEE MASTER
@@ -161,7 +161,7 @@ EXEC sp_executesql @SQL
 				select case isnull(WK52,'') when '' then 0 else 5 end,case isnull(WK52,'') when '' then '' else WK52 end FROM @EMPWEEKLYOFF
 		END
 		--START : LOADING WEEKDATE,DAYNAME AND WEEKNO FOR SELECTED DATERANGE
-		DECLARE @WEEKOFFCOUNT TABLE (ID INT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,ISVALIDDAY INT,REMARKS VARCHAR(1000))
+		DECLARE @WEEKOFFCOUNT TABLE (ID BIGINT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,ISVALIDDAY INT,REMARKS VARCHAR(1000))
 		
 			;WITH DATERANGE AS
 			(
@@ -242,7 +242,7 @@ PRINT @SQL
 
 Declare @TEmp table (ID int Identity(1,1),WEEKDATE Nvarchar(max),Remarks nvarchar(max))
 insert into @TEmp
-EXEC sp_executesql @SQL
+exec(@SQL)
 
 insert into @WEEKOFFCOUNT 
 select ID,convert(datetime,WEEKDATE),DATENAME(DW,WEEKDATE) as day,((datepart(day,WEEKDATE)-1)/7)+1,2,Remarks from @TEmp  
@@ -265,4 +265,5 @@ BEGIN CATCH
 SET NOCOUNT OFF    
 RETURN -999     
 END CATCH
+
 GO

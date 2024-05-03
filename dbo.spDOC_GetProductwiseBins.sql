@@ -3,21 +3,21 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetProductwiseBins]
-	@PRODUCTID [int],
-	@DocId [int],
+	@PRODUCTID [bigint],
+	@DocId [bigint],
 	@DocDate [datetime],
 	@VoucherType [int],
-	@DimCCID [int],
-	@DimNodeID [int],
-	@FilterCCID [int],
-	@FilterNodeID [int],
+	@DimCCID [bigint],
+	@DimNodeID [bigint],
+	@FilterCCID [bigint],
+	@FilterNodeID [bigint],
 	@BoeIds [nvarchar](max),
-	@batchID [int],
-	@batchRefInvID [int],
+	@batchID [bigint],
+	@batchRefInvID [bigint],
 	@linkedIDs [nvarchar](max),
-	@CostCenterID [int],
-	@UserID [int],
-	@RoleID [int],
+	@CostCenterID [bigint],
+	@UserID [bigint],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -30,14 +30,14 @@ SET NOCOUNT ON;
 	 
 	 set @Detailids=''
 	 if(@DocId>0)
-		 select @Detailids=@Detailids+CONVERT(nvarchar,InvDocDetailsID)+',' from INV_DocDetails with(nolock)
+		 select @Detailids=@Detailids+CONVERT(nvarchar,InvDocDetailsID)+',' from INV_DocDetails
 		 where DocID=@DocId and ProductID=@PRODUCTID
 	
 	 if(LEN(@Detailids)>1)
 		set @Detailids=SUBSTRING(@Detailids,0,len(@Detailids))
 	   
 	   set @vol=0	
-       select @CCID=convert(INT,Value) from [COM_CostCenterPreferences] with(nolock)
+       select @CCID=convert(bigint,Value) from [COM_CostCenterPreferences] with(nolock)
        where Name='BinsDimension' and costcenterid=3 and isnumeric(Value)=1
       
        select @DefaultBinSort=convert(int,Value) from [COM_CostCenterPreferences] with(nolock)
@@ -62,7 +62,7 @@ SET NOCOUNT ON;
 
 
 	  insert into @tab
-	  select RuleID from INV_ProductBinRules with(nolock)
+	  select RuleID from INV_ProductBinRules
 	  where ProfileID=@binruleid
 	  	
 		select @cnt=COUNT(id) from @tab
@@ -98,11 +98,11 @@ SET NOCOUNT ON;
 			 SET @SQL='select distinct *,1 as a'
 			 
 			 if exists(select * from @tab where ruleid=5)
-				SET @SQL=@SQL+',case when isnumeric(replace(replace(name,''.'',''''),''-'',''''))=1 then replace(replace(name,''.'',''''),''-'','''') else cast(0 as INT) end as NName '
+				SET @SQL=@SQL+',case when isnumeric(replace(replace(name,''.'',''''),''-'',''''))=1 then replace(replace(name,''.'',''''),''-'','''') else cast(0 as bigint) end as NName '
 			 else if(@cnt=0 and @DefaultBinSort=2)
-				SET @SQL=@SQL+',case when isnumeric(replace(replace(Code,''.'',''''),''-'',''''))=1 then replace(replace(Code,''.'',''''),''-'','''') else cast(0 as INT) end as NName '
+				SET @SQL=@SQL+',case when isnumeric(replace(replace(Code,''.'',''''),''-'',''''))=1 then replace(replace(Code,''.'',''''),''-'','''') else cast(0 as bigint) end as NName '
 			 else if(@cnt=0 and @DefaultBinSort=3)
-				SET @SQL=@SQL+',case when isnumeric(replace(replace(name,''.'',''''),''-'',''''))=1 then replace(replace(name,''.'',''''),''-'','''') else cast(0 as INT) end as NName '
+				SET @SQL=@SQL+',case when isnumeric(replace(replace(name,''.'',''''),''-'',''''))=1 then replace(replace(name,''.'',''''),''-'','''') else cast(0 as bigint) end as NName '
 			
 			 SET @SQL=@SQL+' from ( '
 			
@@ -165,7 +165,7 @@ SET NOCOUNT ON;
 			END		
 			
 			set @SQL=@SQL+' where d.StatusID<>376 and d.productid='+CONVERT(nvarchar(max),@PRODUCTID)
-			set @SQL=@SQL+' and bn.IsQtyIgnored=0 and d.vouchertype=1 and d.DocDate<='+CONVERT(NVARCHAR(50),CONVERT(float,@DocDate))
+			set @SQL=@SQL+' and bn.IsQtyIgnored=0 and d.vouchertype=1 '
 			
 			if(@BoeIds<>'')
 					set @SQL=@SQL+' and d.InvDocDetailsID in ('+@BoeIds+') '
@@ -186,8 +186,6 @@ SET NOCOUNT ON;
 				set @SQL=@SQL+' join INV_BinDetails bd with(nolock) on t.invdocdetailsid=bd.RefInvDocDetailsID and t.NodeID=bd.BinID 
 				where bd.invdocdetailsid in('+@linkedIDs+') '
 			END
-			else
-				set @SQL=@SQL+' where BalQty>0'
 			SET @SQL=@SQL+' order by a '
 			
 			while(@i<@cnt)
@@ -218,20 +216,20 @@ SET NOCOUNT ON;
 			 SET @SQL='select distinct  *,1 as a'
 			 
 			 if exists(select * from @tab where ruleid in(2,3,5))
-				SET @SQL=@SQL+',case when isnumeric(replace(replace(name,''.'',''''),''-'',''''))=1 then replace(replace(name,''.'',''''),''-'','''') else cast(0 as INT) end as NName '
+				SET @SQL=@SQL+',case when isnumeric(replace(replace(name,''.'',''''),''-'',''''))=1 then replace(replace(name,''.'',''''),''-'','''') else cast(0 as bigint) end as NName '
 			 else if(@cnt=0 and @DefaultBinSort=2)
-				SET @SQL=@SQL+',case when isnumeric(replace(replace(Code,''.'',''''),''-'',''''))=1 then replace(replace(Code,''.'',''''),''-'','''') else cast(0 as INT) end as NName '
+				SET @SQL=@SQL+',case when isnumeric(replace(replace(Code,''.'',''''),''-'',''''))=1 then replace(replace(Code,''.'',''''),''-'','''') else cast(0 as bigint) end as NName '
 			 else if(@cnt=0 and @DefaultBinSort=3)
-				SET @SQL=@SQL+',case when isnumeric(replace(replace(name,''.'',''''),''-'',''''))=1 then replace(replace(name,''.'',''''),''-'','''') else cast(0 as INT) end as NName '
+				SET @SQL=@SQL+',case when isnumeric(replace(replace(name,''.'',''''),''-'',''''))=1 then replace(replace(name,''.'',''''),''-'','''') else cast(0 as bigint) end as NName '
 
 			if exists(select * from @tab where ruleid =1)
 			BEGIN
 				if(@isVolBased=1)
 				BEGIN
 					if(@inclWaistage=1)
-						SET @SQL=@SQL+',case when BalQty>0 and isnumeric(ccAlpha50)=1 then convert(INT,ccAlpha50)-BalQty-Waistage else 0 end as Used '
+						SET @SQL=@SQL+',case when BalQty>0 and isnumeric(ccAlpha50)=1 then convert(bigint,ccAlpha50)-BalQty-Waistage else 0 end as Used '
 					ELSE	
-						SET @SQL=@SQL+',case when BalQty>0 and isnumeric(ccAlpha50)=1 then convert(INT,ccAlpha50)-BalQty else 0 end as Used '
+						SET @SQL=@SQL+',case when BalQty>0 and isnumeric(ccAlpha50)=1 then convert(bigint,ccAlpha50)-BalQty else 0 end as Used '
 				END	
 				ELSE	
 					SET @SQL=@SQL+',case when BalQty>0 and Capacity is not null then Capacity-BalQty else 0 end as Used '
@@ -350,7 +348,7 @@ SET NOCOUNT ON;
 			SET @SQL=@SQL+' from '+@TableName+' a with(nolock) '
 			
 			if(@VoucherType=-1 and @BoeIds<>'')
-					set @SQL=@SQL+' join INV_BinDetails invbd with(nolock) on a.NodeId=invbd.BinID and invbd.InvDocDetailsID in ('+@BoeIds+') '
+					set @SQL=@SQL+' join INV_BinDetails invbd on a.NodeId=invbd.BinID and invbd.InvDocDetailsID in ('+@BoeIds+') '
 
 			if(@isProdwise=1)
 				SET @SQL=@SQL+' left join INV_ProductBins b with(nolock) on a.NodeID=b.BinNodeID	'
@@ -360,9 +358,6 @@ SET NOCOUNT ON;
 			
 			if(@isProdwise=1)
 				set @SQL=@SQL+' and b.NodeID = '+ CONVERT(NVARCHAR(50),@PRODUCTID)
-			
-			if(@isProdwise=1 and @VoucherType=1)	
-				set @SQL=@SQL+' and (b.StatusID is null or b.StatusID=1)'
 				
 			if(@DimNodeID is not null and @DimNodeID>0)
 					set @SQL=@SQL+' and ccnid'+(CONVERT(NVARCHAR(50),(@DimCCID-50000)))+'='+CONVERT(nvarchar,@DimNodeID)	

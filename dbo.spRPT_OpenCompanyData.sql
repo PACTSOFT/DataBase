@@ -16,7 +16,7 @@ CREATE PROCEDURE [dbo].[spRPT_OpenCompanyData]
 	@CurrencyType [int],
 	@CurrencyID [int],
 	@ExchRate [float],
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -25,10 +25,10 @@ SET NOCOUNT ON;
 
 	DECLARE @SQL NVARCHAR(MAX),@TempFromDate FLOAT,@ACCJOIN NVARCHAR(MAX),@INVJOIN NVARCHAR(MAX),@TblAccJOIN NVARCHAR(MAX),@LWFinalization bit
 	,@AmtColumn NVARCHAR(20),@CurrWHERE NVARCHAR(max),@Tag1 nvarchar(200),@Tag2 nvarchar(200),@Tag3 nvarchar(200),@Tag4 nvarchar(200)
-	CREATE TABLE #TblAcc(AccountID INT,FromDate FLOAT,ToDate FLOAT,LocationID INT)
+	CREATE TABLE #TblAcc(AccountID BIGINT,FromDate FLOAT,ToDate FLOAT,LocationID bigint)
 	CREATE NONCLUSTERED INDEX [TblAcc_Index] ON #TblAcc(FromDate ASC,ToDate ASC)
 
-	CREATE TABLE #TblYearBalance(Mn NVARCHAR(20),AccountID INT,Dr FLOAT,Cr FLOAT)
+	CREATE TABLE #TblYearBalance(Mn NVARCHAR(20),AccountID BIGINT,Dr FLOAT,Cr FLOAT)
 	CREATE TABLE #TblDates(ID INT IDENTITY(1,1),Mn NVARCHAR(10),StartDate FLOAT)
 	
 	if exists (select Value from adm_globalpreferences with(nolock) where Name='EnableLocationWise' and Value='True') 
@@ -38,9 +38,9 @@ SET NOCOUNT ON;
 		set @LWFinalization=0
 	
 	if @GetAllIncomeExpBalance=1
-		set @TblAccJOIN='left join #TblAcc Y with(nolock) on ACC.DocDate BETWEEN Y.FromDate AND Y.ToDate'
+		set @TblAccJOIN='left join #TblAcc Y on ACC.DocDate BETWEEN Y.FromDate AND Y.ToDate'
 	else
-		set @TblAccJOIN='join #TblAcc Y with(nolock) on ACC.DocDate BETWEEN Y.FromDate AND Y.ToDate'
+		set @TblAccJOIN='join #TblAcc Y on ACC.DocDate BETWEEN Y.FromDate AND Y.ToDate'
 	if @LWFinalization=1
 		set @TblAccJOIN=@TblAccJOIN+' and DCC.dcCCNID2=Y.LocationID'
 
@@ -179,10 +179,10 @@ SET NOCOUNT ON;
 		FROM @XML.nodes('XML/Row') as Data(X)  
 	
 	--	select * from #TblDates
-		select @I=1,@CNT=COUNT(*) from #TblDates with(nolock)
+		select @I=1,@CNT=COUNT(*) from #TblDates
 		while(@I<=@CNT)
 		begin
-			SELECT @ColID=Mn,@TempYearFromDate=StartDate FROM #TblDates with(nolock) WHERE ID=@I
+			SELECT @ColID=Mn,@TempYearFromDate=StartDate FROM #TblDates WHERE ID=@I
 			
 			TRUNCATE TABLE #TblAcc
 			
@@ -207,16 +207,16 @@ SET NOCOUNT ON;
 			
 			SET @I=@I+1
 			INSERT INTO #TblYearBalance(AccountID,Dr,Cr)
-			EXEC sp_executesql @SQL
+			EXEC(@SQL)
 		
-			print(@SQL)
+		--	print(@SQL)
 			
 			UPDATE #TblYearBalance
 			SET Mn=@ColID
 			WHERE Mn IS NULL
 		end
 
-		SELECT * FROM #TblYearBalance with(nolock)
+		SELECT * FROM #TblYearBalance
 		
 		--Refreshing Year Slots
 		TRUNCATE TABLE #TblAcc
@@ -256,15 +256,15 @@ SET NOCOUNT ON;
 		if @UserID!=1
 		begin
 			declare @UserDims nvarchar(max)
-			declare @TblUserDims as table(ID INT)
-			select @UserDims=Value from ADM_GlobalPreferences with(nolock) where Name='Dimension List'
+			declare @TblUserDims as table(ID BigiNT)
+			select @UserDims=Value from ADM_GlobalPreferences where Name='Dimension List'
 			insert into @TblUserDims
 			exec SPSplitString @UserDims,','
 			if exists (select ID from @TblUserDims where ID=2)
 			begin
 				delete from #TblAcc where AccountID not in (
 					select T.AccountID from Acc_Accounts A with(nolock)
-					join #TblAcc T with(nolock) on T.AccountID=A.AccountID
+					join #TblAcc T on T.AccountID=A.AccountID
 					where A.AccountID in (select ParentNodeID from COM_CostCenterCostCenterMap with(nolock) where ParentCostCenterID=2 and CostCenterID=7 AND NodeID=@UserID)
 					or A.CreatedBy=(select UserName from ADM_Users with(nolock) where UserID=@UserID)
 				)
@@ -272,18 +272,18 @@ SET NOCOUNT ON;
 		end
 
 		--select *,convert(datetime,fromdate) fromdate,convert(datetime,Todate) Todate from #TblAcc
-		print(@SQL)
-		EXEC sp_executesql @SQL
+	--	print(@SQL)
+		EXEC(@SQL)
 	END
 	
 	set @ToDate=null
 	set @FromDate=null
-	SELECT @ToDate=CONVERT(DATETIME,MAX(ToDate)),@FromDate=CONVERT(DATETIME,MIN(FromDate)) from #TblAcc with(nolock)
+	SELECT @ToDate=CONVERT(DATETIME,MAX(ToDate)),@FromDate=CONVERT(DATETIME,MIN(FromDate)) from #TblAcc
 	SELECT @ToDate PreviousYearEndDate
-		,(SELECT top 1 AccountID from #TblAcc with(nolock) where FromDate=convert(int,@FromDate)) FirstAccount
-		,(SELECT top 1 AccountID from #TblAcc with(nolock) where ToDate=convert(int,@ToDate)) LastAccount
+		,(SELECT top 1 AccountID from #TblAcc where FromDate=convert(int,@FromDate)) FirstAccount
+		,(SELECT top 1 AccountID from #TblAcc where ToDate=convert(int,@ToDate)) LastAccount
 	
-	select AccountID,convert(datetime,FromDate) FromDate,convert(datetime,ToDate) ToDate from #TblAcc with(nolock) order by FromDate
+	select AccountID,convert(datetime,FromDate) FromDate,convert(datetime,ToDate) ToDate from #TblAcc order by FromDate
 	
 	DROP TABLE #TblAcc
 
@@ -303,5 +303,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

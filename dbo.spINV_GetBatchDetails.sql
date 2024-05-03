@@ -13,7 +13,7 @@ BEGIN TRY
 SET NOCOUNT ON;   
 
 		--Declaration Section
-		DECLARE @HasAccess bit,@SQL NVARCHAR(MAX)
+		DECLARE @HasAccess bit
 
 	    --Check for manadatory paramters  
 		IF(@BatchID < 1)  
@@ -27,16 +27,46 @@ SET NOCOUNT ON;
 		BEGIN
 			RAISERROR('-105',16,1)
 		END 
-		
-		SET @SQL='SELECT [BatchID]'
-		SELECT @SQL=@SQL+','+CASE WHEN a.name IN ('MfgDate','ExpiryDate','RetestDate') THEN 'CONVERT(DATETIME,['+a.name+'])' ELSE '' END+'['+a.name+']'
-		FROM sys.columns a
-		JOIN sys.tables b on a.object_id=b.object_id
-		WHERE b.name='INV_Batches' AND a.name<>'BatchID'
-		
-		SET @SQL=@SQL+' FROM [INV_Batches] WITH(NOLOCK) WHERE BatchID='+CONVERT(NVARCHAR(MAX),@BatchID)
-		EXEC (@SQL)	
-			
+
+			SELECT [BatchID]
+				  ,[BatchNumber]
+				  ,[MfgDateFormat]
+				  ,CONVERT(DATETIME,[MfgDate]) [MfgDate]
+				  ,[ExpiryDateFormat]
+				  ,CONVERT(DATETIME,[ExpiryDate])[ExpiryDate]
+				  ,[StatusID]
+				  ,[MRPRate]
+				  ,[MRPCurrID]
+				  ,[MRPExchRT]
+				  ,[RetailRate]
+				  ,[RRCurrID]
+				  ,[RRExchRT]
+				  ,[StockistRate]
+				  ,[SRCurrID]
+				  ,[SRExchRT]
+				  ,[ProductID]
+				  ,[VendorAccountID]
+				  ,[AlertDays]
+				  ,[PreExpiryDays]
+				  ,[Depth]
+				  ,[ParentID]
+				  ,[lft]
+				  ,[rgt]
+				  ,[IsGroup]
+				  ,[CompanyGUID]
+				  ,[GUID]
+				  ,[Description]
+				  ,[CreatedBy]
+				  ,[CreatedDate]
+				  ,[ModifiedBy]
+				  ,[ModifiedDate], CONVERT(DATETIME,RetestDate)RetestDate, BatchCode, CodePrefix, CodeNumber,
+				   Alpha1  , Alpha2   ,Alpha3 ,  Alpha4 ,  Alpha5   ,Alpha6   ,Alpha7   ,Alpha8   ,Alpha9   ,Alpha10  ,
+ Alpha11  ,Alpha12  ,Alpha13  ,Alpha14  ,Alpha15  ,Alpha16  ,Alpha17  ,Alpha18  ,Alpha19  ,Alpha20  ,
+ Alpha21  ,Alpha22  ,Alpha23  ,Alpha24  ,Alpha25  ,Alpha26  ,Alpha27  ,Alpha28  ,Alpha29  ,Alpha30  ,
+ Alpha31  ,Alpha32  ,Alpha33  ,Alpha34  ,Alpha35  ,Alpha36  ,Alpha37  ,Alpha38  ,Alpha39  ,Alpha40  ,
+ Alpha41  ,Alpha42  ,Alpha43  ,Alpha44  ,Alpha45  ,Alpha46  ,Alpha47  ,Alpha48  ,Alpha49  ,Alpha50  
+			  FROM [INV_Batches] WHERE BATCHID=@BatchID
+
 		--Getting data from Products extended table  
 	    SELECT * FROM  INV_ProductExtended WITH(NOLOCK)   
 	    WHERE ProductID=@BatchID 
@@ -75,5 +105,17 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
+  
+  
+  
+  
+
+
+
+
+
+
+
+
 GO

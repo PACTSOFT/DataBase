@@ -6,8 +6,7 @@ CREATE PROCEDURE [dbo].[spDOC_GetBudgetDefn]
 	@BudgetID [int],
 	@CostCenterID [int],
 	@DocDate [datetime],
-	@DimWhere [nvarchar](max),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -15,8 +14,9 @@ BEGIN TRY
 SET NOCOUNT ON
 
 	--Declaration Section
-	declare @BudDim nvarchar(20),@BudAcc nvarchar(20),@BudAccID INT
-	DECLARE @SQL NVARCHAR(max),@MultipleBudgets nvarchar(max)
+	DECLARE @PQty FLOAT, @SQty FLOAT, @Bal FLOAT,@PendingOrdersQty FLOAT
+	declare @BudDim nvarchar(20),@BudAcc nvarchar(20),@BudAccID bigint
+	DECLARE @FinYear FLOAT,@SQL NVARCHAR(500),@I INT,@MultipleBudgets nvarchar(max)
 	
 	--SELECT TOP 1 @BudgetID=BudgetDefID FROM COM_BudgetDef 
 	--WHERE IsGroup=0 AND StatusID=1 AND @DocDate>=CONVERT(DATETIME,FinYearStartDate) AND @DocDate<dateadd(year,1,CONVERT(DATETIME,FinYearStartDate))
@@ -68,17 +68,8 @@ SET NOCOUNT ON
 		SET @SQL=@SQL+'A.BudgetDefID IN ('+@MultipleBudgets+')'
 	else 
 		SET @SQL=@SQL+'A.BudgetDefID='+CONVERT(NVARCHAR,@BudgetID)
-		
-	if @DimWhere is not null and @DimWhere<>''
-	BEGIN
-		IF EXISTS(SELECT ChkBudgetOnlyForDefnAccounts FROM COM_BudgetDef  WITH(NOLOCK)
-					WHERE BudgetDefID=@BudgetID AND ChkBudgetOnlyForDefnAccounts=1)
-			SET @DimWhere=REPLACE(REPLACE(@DimWhere,'(',''),')','')			
-		SET @SQL=@SQL+' AND ( '+@DimWhere+' ) '
-	END 
-		
-	SET @SQL=@SQL+' Order By A.RowID ASC'
- print(@SQL)
+	SET @SQL=@SQL+'Order By A.RowID ASC'
+--print(@SQL)
 	EXEC(@SQL)
 	
 	--select * from COM_BudgetAlloc
@@ -86,7 +77,7 @@ SET NOCOUNT ON
 	if @BudDim!='' and isnumeric(@BudDim)=1
 	begin
 		select @BudAcc=value from ADM_GlobalPreferences with(nolock) where  name='BudgetAccount'
-		if @BudAcc!='' and isnumeric(@BudAcc)=1 and convert(INT,@BudAcc)>0
+		if @BudAcc!='' and isnumeric(@BudAcc)=1 and convert(bigint,@BudAcc)>0
 		begin
 			set @BudAccID=convert(int,@BudAcc)
 		end
@@ -122,5 +113,5 @@ BEGIN CATCH
 
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

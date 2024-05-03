@@ -23,7 +23,7 @@ SET NOCOUNT ON;
 		LEFT JOIN CRM_FollowUpCustomization F with(nolock) ON F.CCCOLID =C.CostCenterColID 
 		WHERE C.CostCenterID = @CostCenterID and C.IsColumnUserDefined=1 and C.IsVisible=1
 		AND (((C.IsColumnUserDefined=1 OR C.IsCostCenterUserDefined=1) AND C.IsColumnInUse=1 AND C.ISCOLUMNDELETED=0) OR C.IsColumnUserDefined=0)      
-		ORDER BY ISNULL(C.SectionID,0),C.SectionSeqNumber--C.CostCenterColID  
+		ORDER BY C.SectionID,C.SectionSeqNumber--C.CostCenterColID  
 
 		SELECT F.CCCOLID AS CostCenterColID,F.NAME AS USERCOLUMNNAME,D.SYSCOLUMNNAME,D.UserColumnType, F.IsVisible
 		FROM ADM_COSTCENTERDEF D with(nolock)
@@ -49,9 +49,9 @@ SET NOCOUNT ON;
 		 
 		if(@CostCenterID<>118) 
 			SELECT NAME,CASE WHEN VALUE='0' THEN 'FALSE' ELSE VALUE END AS VALUE FROM COM_COSTCENTERPREFERENCES C  with(nolock)
-			WHERE COSTCENTERID=86 AND NAME='IsProductReadonly'
+			WHERE COSTCENTERID=86 AND (NAME='IsProductReadonly')
 		else if(@CostCenterID=118)
-			SELECT NAME DBText,Value FROM COM_COSTCENTERPREFERENCES C  with(nolock)
+			SELECT NAME DBText,   VALUE  Value FROM COM_COSTCENTERPREFERENCES C  with(nolock)
 			WHERE COSTCENTERID=88
 		 
 			
@@ -60,9 +60,11 @@ SET NOCOUNT ON;
 		 
 		select * from com_lookup with(nolock) where lookuptype =20
 		
-		SELECT CostCenterColId,resourceid, sectionseqnumber,UserColumnName,SysColumnName, SysTableName,UIWidth,IsVisible,IsMandatory,IsEditable 
-		FROM ADM_COSTCENTERDEF with(nolock) 
-		WHERE CostCenterID=95 and costcentercolid in (26000,25999,25998,26001,26002,26003,26672,26673,26674,26004,26005,26006,26007,26008,26009,26010,26011,26675,26676,26677,26678)
+		SELECT CostCenterColId,resourceid, sectionseqnumber,UserColumnName,SysColumnName, SysTableName,UIWidth,IsVisible,IsMandatory,IsEditable FROM ADM_COSTCENTERDEF
+		with(nolock) WHERE
+		CostCenterID=95 and costcentercolid in (26000,25999,25998,26001,26002,26003,26672,26673,26674,26004,26005,26006,26007,26008,26009,26010,26011,26675,26676,
+			26677,
+			26678)
 		order by sectionseqnumber,SysTableName
 		
 		if(@CostCenterID=118)
@@ -78,7 +80,6 @@ SET NOCOUNT ON;
 			ELSE
 				SELECT 1 WHERE 1<>1
  		end
-		
 		IF (@CostCenterID=118 OR @CostCenterID=123 OR @CostCenterID=124 OR @CostCenterID=121 OR @CostCenterID=125
 		OR @CostCenterID=126 OR @CostCenterID=127 OR @CostCenterID=120 OR @CostCenterID=119) --FOR CAMPAIGN TABS ONLY
 		BEGIN
@@ -97,24 +98,22 @@ SET NOCOUNT ON;
 			LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID     
 			WHERE D.CostCenterID=@CostCenterID  AND IsColumnInUse=1  order by d.sectionseqnumber       
 		END
-		
 		IF @CostCenterID=114
 		BEGIN
 			DECLARE @HasAccess BIT,@DocViewID bigint                            
 			DECLARE @code nvarchar(200),@no bigint,@GridviewID bigint                   
 			if exists(select DocumentViewID from ADM_DocViewUserRoleMap with(nolock) where CostCenterID=@CostCenterID and UserID=@UserID)                      
 			begin                      
-				set @DocViewID=(select  top 1 DocumentViewID from ADM_DocViewUserRoleMap with(nolock) where CostCenterID=@CostCenterID and  UserID=@UserID)                      
+			set @DocViewID=(select  top 1 DocumentViewID from ADM_DocViewUserRoleMap with(nolock) where CostCenterID=@CostCenterID and  UserID=@UserID)                      
 			end                      
 			else if exists(select DocumentViewID from ADM_DocViewUserRoleMap with(nolock) where CostCenterID=@CostCenterID and RoleID=@RoleID)
 			begin                      
-				set @DocViewID=(select  top 1 DocumentViewID from ADM_DocViewUserRoleMap with(nolock) where CostCenterID=@CostCenterID and  RoleID=@RoleID)
+			set @DocViewID=(select  top 1 DocumentViewID from ADM_DocViewUserRoleMap with(nolock) where CostCenterID=@CostCenterID and  RoleID=@RoleID)
 			end                      
 			else if exists(select DocumentViewID from ADM_DocViewUserRoleMap with(nolock) where CostCenterID=@CostCenterID and GroupID in (select GID from COM_Groups with(nolock) where UserID=@UserID or RoleID=@RoleID))
 			begin                      
-				set @DocViewID=(select  top 1 DocumentViewID from ADM_DocViewUserRoleMap with(nolock) where CostCenterID=@CostCenterID and GroupID in (select GID from COM_Groups with(nolock) where UserID=@UserID or RoleID=@RoleID))
+			set @DocViewID=(select  top 1 DocumentViewID from ADM_DocViewUserRoleMap with(nolock) where CostCenterID=@CostCenterID and GroupID in (select GID from COM_Groups with(nolock) where UserID=@UserID or RoleID=@RoleID))
 			end
-			
 			if(@DocViewID is not null and @DocViewID>0)                      
 			begin                      
 				SELECT [DocumentViewDefID],c.SysColumnName                      
@@ -122,8 +121,8 @@ SET NOCOUNT ON;
 				 ,d.[IsEditable],[IsReadonly]  ,[NumFieldEditOptionID]                      
 				 ,d.[IsVisible],[TabOptionID] ,[CompoundRuleID]  ,[FailureMessage]  ,[ActionOptionID]                      
 				 ,[Mode]   ,[Expression],Tabid,d.IsMandatory
-				FROM [ADM_DocumentViewDef] d  WITH(NOLOCK)                  
-				left join ADM_CostCenterDef c WITH(NOLOCK)  on c.CostCenterColID=d.CostCenterColID where DocumentViewID=@DocViewID                      
+				FROM [ADM_DocumentViewDef] d                    
+				left join ADM_CostCenterDef c on c.CostCenterColID=d.CostCenterColID where DocumentViewID=@DocViewID                      
 			end                      
 			else                      
 			begin                      
@@ -132,8 +131,8 @@ SET NOCOUNT ON;
 				 ,d.[IsEditable]  ,[IsReadonly] ,[NumFieldEditOptionID]   ,d.[IsVisible]                      
 				 ,[TabOptionID]   ,[CompoundRuleID]      ,[FailureMessage]  ,[ActionOptionID]   ,[Mode]                      
 				 ,[Expression] ,Tabid,d.IsMandatory                     
-				FROM [ADM_DocumentViewDef] d WITH(NOLOCK)                      
-				left join ADM_CostCenterDef c WITH(NOLOCK) on c.CostCenterColID=d.CostCenterColID where 1=2 --not to return any row just structure                      
+				FROM [ADM_DocumentViewDef] d                      
+				left join ADM_CostCenterDef c on c.CostCenterColID=d.CostCenterColID where 1=2 --not to return any row just structure                      
 			end         
 		 
 			SELECT  C.CostCenterColID,R.ResourceData,R.RESOURCEDATA UserColumnName,C.ResourceID,C.SysColumnName,C.UserColumnType,C.ColumnDataType,
@@ -144,12 +143,11 @@ SET NOCOUNT ON;
 			,c.dependancy,c.dependanton
 			,(select isnull(IsColumnInUse,0) FROM ADM_CostCenterDef with(nolock) where costcenterid=C.ColumnCostCenterID and  syscolumnname='ccnid'+convert(nvarchar,(c.dependanton-50000))) as filterinuse
 			FROM ADM_CostCenterDef C WITH(NOLOCK)      
-			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID   
+			LEFT JOIN COM_LanguageResources R ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID   
 			WHERE C.CostCenterID = 114 and C.IsColumnUserDefined=0  
 			  AND C.IsColumnInUse=1 AND C.ISCOLUMNDELETED=0    
 			ORDER BY C.SectionID,C.SectionSeqNumber
 		END
-		
 SET NOCOUNT OFF;
 RETURN 1
 END TRY
@@ -166,4 +164,6 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
+
 GO

@@ -7,8 +7,8 @@ CREATE PROCEDURE [dbo].[spPAY_GetEmpPayrollDetailsMultiple]
 	@PayrollMonth [nvarchar](100),
 	@PayrollStart [nvarchar](100),
 	@PayrollEnd [nvarchar](100),
-	@UserID [int],
-	@RoleID [int],
+	@UserID [bigint],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -48,7 +48,7 @@ LEFT JOIN COM_Lookup G WITH(NOLOCK) on G.NodeID=a.Gender
 LEFT JOIN COM_Lookup MS WITH(NOLOCK) on MS.NodeID=a.MaritalStatus
 WHERE a.NodeID IN('+@EmpIDs+')'
 print @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --1-- PAYROLL STRUCTURE INFORMATION
 
@@ -83,7 +83,7 @@ BEGIN
 				   ORDER BY GradeID,Type,SNo  '
 				  
 				  print @SQL
-	EXEC sp_executesql @SQL
+	EXEC(@SQL)
 END
 ELSE 
 BEGIN
@@ -96,7 +96,7 @@ BEGIN
 	--WHERE GradeID=1 AND CONVERT(DATETIME,PayrollDate)=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''')
 	--ORDER BY Type,SNo'
 	print (@SQL)
-	EXEC sp_executesql @SQL
+	EXEC(@SQL)
 END
 
 
@@ -113,7 +113,7 @@ WHERE a.EmployeeID IN('+@EmpIDs+')
 
 DROP TABLE #t1LAP '
 print (@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --3-- PROFESSIONAL TAX (PT) SLABS INFORMATION
 
@@ -149,7 +149,7 @@ BEGIN
 	END
 	'
 	PRINT @SQL
-	EXEC sp_executesql @SQL
+	EXEC(@SQL)
 END
 ELSE
 BEGIN
@@ -227,7 +227,7 @@ END
 SET @SQL=@SQL+  'ORDER BY     CONVERT(DATETIME,a.DUEDATE) DESC'
 
 PRINT @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --5-- LIST OF HOLIDAYS INFORMATION
 ----------
@@ -291,7 +291,7 @@ BEGIN
 	SET @SQL=@SQL+ @WhereCond
 END
 PRINT @SQL
-EXEC sp_executesql @SQL
+EXEC (@SQL)
 ----------
 /*
 DECLARE @colName nvarchar(500),@colId int ,@Qry nvarchar(max)
@@ -329,7 +329,7 @@ BEGIN
 END
 print 'hd'
 PRINT @SQL
-EXEC sp_executesql @strEQry
+EXEC (@SQL)
 */
 
 --6-- ALREADY PAYROLL PROCESSED DATA
@@ -342,7 +342,7 @@ JOIN COM_Status e WITH(NOLOCK) ON e.StatusID=a.StatusID and e.CostCenterID=400
 WHERE a.CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+' 
 AND b.dcCCNID51 IN('+@EmpIDs+') AND CONVERT(DATETIME,a.DueDate)=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''') '
 
-EXEC sp_executesql @SQL
+EXEC (@SQL)
 
 --7-- GETTING WORKFLOWS  
 SELECT distinct [WorkFlowDefID],[CostCenterID],[Action],[Expression],a.WorkFlowID,a.LevelID,IsLineWise,IsExpressionLineWise  
@@ -355,7 +355,7 @@ and (b.UserID =@UserID or b.RoleID=@RoleID or G.UserID=@UserID or G.RoleID=@Role
 --8-- ASSIGNED LEAVES DATA
 DECLARE @ALStartMonthYear DATETIME,@ALEndMonthYear DATETIME
 EXEC [spPAY_EXTGetLeaveyearDates] @PayrollMonth,@ALStartMonthYear OUTPUT,@ALEndMonthYear OUTPUT
-CREATE TABLE #TABTOPUP (EMPSEQNO INT,LeaveType VARCHAR(100),Total FLOAT,ActualDays FLOAT,NoOfMonths INT,FromDate DATETIME,ToDate DATETIME,RefNodeID INT,CommonNarration NVARCHAR(MAX))
+CREATE TABLE #TABTOPUP (EMPSEQNO INT,LeaveType VARCHAR(100),Total FLOAT,ActualDays FLOAT,NoOfMonths INT,FromDate DATETIME,ToDate DATETIME,RefNodeID BIGINT,CommonNarration NVARCHAR(MAX))
 CREATE TABLE #TABAL (EMPSEQNO INT,LeaveType VARCHAR(100),Total FLOAT,Deducted FLOAT,Balance FLOAT)
 ---CURRENT YEAR ASSGINED LEAVES
 SET @SQL='INSERT INTO #TABAL
@@ -369,7 +369,7 @@ WHERE a.StatusID=369 AND A.CostCenterID =40081 AND b.dcCCNID51 IN('+@EmpIDs+') A
 AND CONVERT(DATETIME,TD.dcAlpha3) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@ALStartMonthYear)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@ALEndMonthYear)+''') 
 group by B.dcCCNID51,D.Name'
 --PRINT (@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 --TOPUP LEAVES
 SET @SQL=''
 SET @SQL='INSERT INTO #TABTOPUP
@@ -383,7 +383,7 @@ JOIN COM_CC50052 D WITH(NOLOCK) ON D.NodeID=B.dcCCNID52
 WHERE a.StatusID=369 AND A.CostCenterID =40060 AND b.dcCCNID51 IN('+@EmpIDs+') AND ISDATE(ISNULL(TD.dcAlpha3,''''))=1 AND ISDATE(ISNULL(TD.dcAlpha4,''''))=1 
 AND CONVERT(DATETIME,TD.dcAlpha3) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@ALStartMonthYear)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@ALEndMonthYear)+''') '
 PRINT (@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 UPDATE #TABTOPUP SET TOTAL=isnull(ActualDays,0)/isnull(NoOfMonths,0) WHERE isnull(ActualDays,0)>0 AND ISNULL(RefNodeID,0)=0 AND CommonNarration NOT IN('#Opening#','#CarryForward#')
 
 INSERT INTO #TABAL
@@ -422,7 +422,7 @@ BEGIN
 	SET @SQL=@SQL + ' AND CONVERT(DATETIME,A.DocDate)< CONVERT(DATETIME,'''+CONVERT(NVARCHAR,( CONVERT(NVARCHAR,@DontConsiderDocsDays) +'-'+ CONVERT(NVARCHAR(3),DATENAME(MONTH,@PayrollMonth))+'-'+ CONVERT(NVARCHAR,YEAR(@PayrollMonth)) ))+''') '
 END
 print @SQL
-EXEC sp_executesql @SQL
+EXEC (@SQL)
 
 print 'Loan'
 --10-- APPROVED LOANS DATA
@@ -462,7 +462,7 @@ END
 
 SET @SQL=@SQL + ' Order By b.dcCCNID52 DROP TABLE #ttmp1 '
 print @SQL
-EXEC sp_executesql @SQL
+EXEC (@SQL)
 
 --11-- LOAN REPAYMENT DETAILS, ONLY PAID FROM MONTHLY PAYROLL
 SET @SQL='
@@ -472,7 +472,7 @@ LEFT JOIN COM_DocNumData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
 LEFT JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
 LEFT JOIN COM_CC50052 e WITH(NOLOCK) ON e.NodeID=b.dcCCNID52
 WHERE a.StatusID=369 AND a.CostCenterID=40057 and b.dcCCNID51 IN('+@EmpIDs+') and ISDATE(ISNULL(d.dcAlpha4,''''))=1 and ISDATE(ISNULL(d.dcAlpha5,''''))=1 AND CONVERT(DATETIME,d.dcAlpha5) = CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''') AND d.dcAlpha6=''1'' '
-EXEC sp_executesql @SQL
+EXEC (@SQL)
 
 --12-- GETTING ALL EMPLOYEES GRADES INFO
 
@@ -480,7 +480,7 @@ SET @SQL='	SELECT NodeID as EmpSeqNo,HistoryNodeID as GradeID FROM COM_HistoryDe
 			WHERE NodeID IN('+@EmpIDs+')AND CostCenterID=50051 AND HistoryCCID=50053   
 			AND (CONVERT(DATETIME,FromDate)<=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''') OR CONVERT(DATETIME,FromDate) BETWEEN CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') AND CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')) 
 			AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''') OR ToDate IS NULL) '
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --13-- GETTING ALL EMPLOYEES PT DIMENSION
 
@@ -506,7 +506,7 @@ BEGIN
 	END
 				
 	'
-	EXEC sp_executesql @SQL
+	EXEC(@SQL)
 	
 END
 ELSE
@@ -531,7 +531,7 @@ AND CONVERT(DATETIME,TD.DCALPHA1) BETWEEN CONVERT(DATETIME,'''+CONVERT(NVARCHAR,
 ORDER BY DC.DCCCNID51,CONVERT(DATETIME,TD.DCALPHA1)
 '
 
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --15-- GETTING ALL EMPLOYEES DAYS ATTENDED BASED ON DAILY ATTENDANCE
 
@@ -575,12 +575,12 @@ END
 SELECT * FROM @TABATTENDANCE
 '
 print @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --16-- GETTING RECORDING OF DATA INFORMATION
 
 SET @SQL='
-SELECT a.InvDocDetailsID,a.VoucherNo,CONVERT(DATETIME,a.DocDate) as DocDate,b.dcCCNID51 as EmpSeqNo,b.dcCCNID52,d.dcAlpha1,d.dcAlpha2 as PayrollMonth,d.dcAlpha2 as FromPayrollMonth,d.dcAlpha4 as ToPayrollMonth,CONVERT(INT,d.dcAlpha3) as ComponentID,c.dcNum1 as Amount,a.LineNarration as Remarks
+SELECT a.InvDocDetailsID,a.VoucherNo,CONVERT(DATETIME,a.DocDate) as DocDate,b.dcCCNID51 as EmpSeqNo,b.dcCCNID52,d.dcAlpha1,d.dcAlpha2 as PayrollMonth,d.dcAlpha2 as FromPayrollMonth,d.dcAlpha4 as ToPayrollMonth,CONVERT(BIGINT,d.dcAlpha3) as ComponentID,c.dcNum1 as Amount,a.LineNarration as Remarks
 FROM INV_DocDetails A WITH(NOLOCK)
 JOIN COM_DocCCData B WITH(NOLOCK) ON B.INVDOCDETAILSID=a.INVDOCDETAILSID
 JOIN COM_DocNumData c WITH(NOLOCK) ON c.INVDOCDETAILSID=a.INVDOCDETAILSID
@@ -596,7 +596,7 @@ BEGIN
 	SET @SQL=@SQL + ' AND CONVERT(DATETIME,A.DocDate)< CONVERT(DATETIME,'''+CONVERT(NVARCHAR,( CONVERT(NVARCHAR,@DontConsiderDocsDays) +'-'+ CONVERT(NVARCHAR(3),DATENAME(MONTH,@PayrollMonth))+'-'+ CONVERT(NVARCHAR,YEAR(@PayrollMonth)) ))+''') '
 END
 PRINT @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --17-- GETTING PAYROLL LOCK /UNLOCK INFORMATION
 
@@ -607,7 +607,7 @@ FROM INV_DocDetails A WITH(NOLOCK)
 JOIN COM_DocCCData B WITH(NOLOCK) ON B.INVDOCDETAILSID=a.INVDOCDETAILSID
 JOIN COM_DocTextData d WITH(NOLOCK) ON d.INVDOCDETAILSID=a.INVDOCDETAILSID
 WHERE a.CostCenterID=40077 and a.StatusID=369 AND ISDATE(ISNULL(d.dcAlpha1,''''))=1 AND CONVERT(DATETIME,d.dcAlpha1)=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''') '
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --18-- GETTING VACATION DATA INFORMATION
 
@@ -665,7 +665,7 @@ DROP TABLE #TVAC
 
 '
 PRINT @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 
 --19-- GETTING ARREARS DATA 
@@ -673,14 +673,14 @@ EXEC sp_executesql @SQL
 SET @SQL='
 SELECT * FROM PAY_EmpMonthlyArrears WITH(NOLOCK) 
 WHERE EmpSeqNo IN('+@EmpIDs+') AND PayrollMonth='''+CONVERT(NVARCHAR,@PayrollMonth)+''' '
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --20-- GETTING ADJUSTMENTS DATA 
 
 SET @SQL='
 SELECT * FROM PAY_EmpMonthlyAdjustments WITH(NOLOCK) 
 WHERE EmpSeqNo IN('+@EmpIDs+') AND PayrollMonth='''+CONVERT(NVARCHAR,@PayrollMonth)+''' '
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --21-- GETTING LOANS CREATED FROM MONTHLY PAYROLL WHEN NETSALARY < 0 
 
@@ -690,14 +690,14 @@ FROM INV_DocDetails a WITH(NOLOCK)
 LEFT JOIN COM_DocCCData b WITH(NOLOCK) ON B.InvDocDetailsID=a.InvDocDetailsID
 LEFT JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
 WHERE a.StatusID=369 AND a.CostCenterID=40056 and b.dcCCNID51 IN('+@EmpIDs+') and ISDATE(ISNULL(d.dcAlpha7,''''))=1 AND CONVERT(DATETIME,d.dcAlpha7) = CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''') '
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --22-- GETTING ADJUSTMENTS DATA 
 
 SET @SQL='
 SELECT * FROM PAY_EmpMonthlyDues WITH(NOLOCK) 
 WHERE EmpSeqNo IN('+@EmpIDs+') AND PayrollMonth='''+CONVERT(NVARCHAR,@PayrollMonth)+''' '
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --23-- GETTING DEPENDENT INFORMATION
 
@@ -707,7 +707,7 @@ FROM PAY_EmpDetail a WITH(NOLOCK)
 LEFT JOIN COM_Lookup b WITH(NOLOCK) on b.NodeID=a.Field5
 LEFT JOIN COM_Lookup c WITH(NOLOCK) on c.NodeID=a.Field15
 WHERE DType=255 AND a.EmployeeID IN('+@EmpIDs+')'
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --24-- GETTING USED DIMENSIONS NODEID BASED ON DATE
 
@@ -751,7 +751,7 @@ WHERE a.IsGroup=0
 AND a.NodeID IN('+@EmpIDs+')'
 
 --PRINT @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 
 --25-- GETTING LEAVE ENCASHMENT DETAILS  ---------
@@ -775,7 +775,7 @@ JOIN COM_DocTextData d WITH(NOLOCK) ON d.INVDOCDETAILSID=a.INVDOCDETAILSID
 WHERE a.CostCenterID=40058 AND b.dcCCNID51 IN('+@EmpIDs+') AND a.StatusID=369
 AND CONVERT(DATETIME,a.DocDate) BETWEEN CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@D1)+''') AND CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@D2)+''')  '
 
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --26-- GETTING VACATION MANAGEMENT DETAILS
 
@@ -808,7 +808,7 @@ SET @SQL=@SQL+' AND b.dcCCNID53 IN (
 				'
 END
 --print @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --27-- GETTING LEAVE ENCASH PAYMENT INFORMATION
 
@@ -824,7 +824,7 @@ AND a.CostCenterID=40058 AND b.dcCCNID51 IN('+@EmpIDs+') AND a.StatusID=369
 AND CONVERT(DATETIME,dcAlpha10) = CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''') '
 
 --print @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --28-- GETTING ATTENDANCE DIMENSION WISE DETAIL INFORMATION
 SET @SQL='
@@ -840,7 +840,7 @@ AND a.CostCenterID=40079 AND b.dcCCNID51 IN('+@EmpIDs+') AND a.StatusID=369
 AND CONVERT(DATETIME,dcAlpha1) = CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''') '
 
 --print @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --29-- GETTING HOURS DEFINITION CHARTS
 
@@ -869,11 +869,11 @@ AND ISDATE(d.dcAlpha25)=1 AND CONVERT(DATETIME,d.dcAlpha25)=CONVERT(DATETIME,'''
 GROUP BY t.EmpSeqNo,t.VACDAYS,t.ENCASHDAYS,t.EXCESSDAYS,t.NETTOTAL'
 
 PRINT(@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --31-- GETTING LATES INFORMATION
 
-SET @SQL='SELECT b.dcCCNID51 AS EmpSeqNo,CONVERT(DATETIME,d.dcAlpha33) AS PayrollMonth,
+SET @SQL='SELECT b.dcCCNID51 AS EmpSeqNo,CONVERT(DATETIME,d.dcAlpha16) AS PayrollMonth,
 SUM(CONVERT(FLOAT,ISNULL(dcAlpha19,0))) as TotCheckInLateMins,
 SUM(CONVERT(FLOAT,ISNULL(dcAlpha20,0))) as TotCheckOutEarlyMins,
 SUM(CONVERT(FLOAT,ISNULL(dcAlpha21,0))) as TotBreak1MoreMins,
@@ -883,19 +883,18 @@ SUM(CONVERT(FLOAT,ISNULL(dcAlpha24,0))) as TotBreak4MoreMins,
 SUM(CONVERT(FLOAT,ISNULL(dcAlpha25,0))) as TotBreak5MoreMins,
 SUM(CONVERT(FLOAT,ISNULL(dcAlpha26,0))) as TotLateHrsToDeduct,
 SUM(CONVERT(FLOAT,ISNULL(dcAlpha27,0))) as TotLateLeavesToDeduct,
-SUM(CONVERT(FLOAT,ISNULL(dcAlpha30,0))) as TotWorkingMinsLessBy,
-SUM(CONVERT(FLOAT,ISNULL(dcAlpha32,0))) as TotAbsentMinsLessBy
+SUM(CONVERT(FLOAT,ISNULL(dcAlpha30,0))) as TotWorkingMinsLessBy
 FROM INV_DocDetails a WITH(NOLOCK)
 JOIN COM_DOCNUMDATA N WITH(NOLOCK) ON N.INVDOCDETAILSID=a.INVDOCDETAILSID
 JOIN COM_DocCCData b WITH(NOLOCK) ON b.INVDOCDETAILSID=a.INVDOCDETAILSID
 JOIN COM_DocTextData d WITH(NOLOCK) ON d.INVDOCDETAILSID=a.INVDOCDETAILSID
 WHERE a.CostCenterID=40097 AND a.StatusID=369
 AND b.dcCCNID51 IN('+@EmpIDs+') 
-AND ISDATE(d.dcAlpha33)=1 AND CONVERT(DATETIME,d.dcAlpha33)=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''')
-GROUP BY b.dcCCNID51,CONVERT(DATETIME,d.dcAlpha33) 
+AND ISDATE(d.dcAlpha16)=1 AND CONVERT(DATETIME,d.dcAlpha16)=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''')
+GROUP BY b.dcCCNID51,CONVERT(DATETIME,d.dcAlpha16) 
 '
 --PRINT(@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 
 --32-- GETTING VACATION REJOIN INFO
@@ -907,7 +906,7 @@ WHERE CostCenterID=40072 AND StatusID=369 AND LEN(T.DCALPHA2)<=15  AND ISDATE(IS
 AND CONVERT(DATETIME,T.DCALPHA2)<CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''')
 '
 PRINT(@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --33-- GETTING VACATION LATE REJOIN 
 
@@ -919,7 +918,7 @@ AND CONVERT(DATETIME,T.DCALPHA3)<=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@Payroll
 AND CONVERT(DATETIME,T.DCALPHA1)>CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')
 '
 PRINT(@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --34-- Apprisal Month
 
@@ -936,7 +935,7 @@ WHERE a.EmployeeID IN('+@EmpIDs+')
 
 DROP TABLE #t1LAP '
 print (@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --35-- ALL Apprisals
 
@@ -947,7 +946,7 @@ FROM PAY_EmpPay a WITH(NOLOCK)
 WHERE a.EmployeeID IN('+@EmpIDs+') 
 '
 print (@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --36-- Approved Level Documents
 
@@ -1013,7 +1012,7 @@ BEGIN
 END
 
 print (@SQL)
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 
 --37-- PAYROLL STRUCTURE LATEST
 IF @IsGradeWiseMP=1
@@ -1034,7 +1033,7 @@ BEGIN
 				   ORDER BY GradeID,Type,SNo  '
 				  
 				  print @SQL
-	EXEC sp_executesql @SQL
+	EXEC(@SQL)
 END
 ELSE 
 BEGIN
@@ -1043,28 +1042,8 @@ BEGIN
 	WHERE GradeID=1 AND PayrollDate=(SELECT MAX(PAYROLLDATE) FROM COM_CC50054  WITH(NOLOCK) WHERE 
 					 GradeID =1)	ORDER BY Type,SNo'
 	print (@SQL)
-	EXEC sp_executesql @SQL
+	EXEC(@SQL)
 END
-
---38--Previous Month Payroll Data
-DECLARE @DonotprocesspayrollifPreviousPayrollMonthnotprocessed BIT
-SELECT @DonotprocesspayrollifPreviousPayrollMonthnotprocessed=CONVERT(BIT,Value) FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='DonotprocesspayrollifPreviousPayrollMonthnotprocessed'
-IF @DonotprocesspayrollifPreviousPayrollMonthnotprocessed=1
-BEGIN
-SET @SQL='
-SELECT DISTINCT b.dcCCNID51 as EmpSeqNo,a.VoucherNo as VoucherNo FROM INV_DocDetails a WITH(NOLOCK) 
-JOIN COM_DocCCData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
-WHERE a.CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+' 
-AND b.dcCCNID51 IN('+@EmpIDs+') AND CONVERT(DATETIME,a.DueDate)=DATEADD(M,-1,CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollMonth)+''')) '
-END
-ELSE
-BEGIN
-SET @SQL='
-	SELECT 0 EmpSeqNo,'''' VoucherNo
-	'
-END
-
-EXEC sp_executesql @SQL
 
 --------------------------------------------------------------------------------
 SET NOCOUNT OFF;  

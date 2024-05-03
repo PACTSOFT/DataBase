@@ -327,24 +327,32 @@ group by [Date]
 			SELECT COUNT(a1.NodeID) as Balance 
 			FROM COM_CC50051 a1 WITH(NOLOCK)
 			WHERE a1.IsGroup=0 AND a1.NodeID<>1 AND a1.DOJ IS NOT NULL
-			AND DATEDIFF(day,CONVERT(DATETIME,a1.DOJ),@AsOnDate)>=0 
-			AND DATEDIFF(day,ISNULL(CONVERT(DATETIME,a1.DORelieve),''01-Jan-2200''),@AsOnDate)<=0'
+			AND DATEDIFF(day,CONVERT(DATETIME,a1.DOJ),@AsOnDate)>=0
+			AND DATEDIFF(day,ISNULL(CONVERT(DATETIME,a1.DORelieve),''01-Jan-2200''),@AsOnDate)<=0 '
 	END
-	ELSE IF(@TypeID=37)	---- New Joinees Between the Dates
+	ELSE IF(@TypeID=37)	---- New Joinees in this Month
 	BEGIN
 		SET @SQL=@SQL+' 
+			DECLARE @AsOnDate DATETIME
+			SET @AsOnDate=CONVERT(varchar(11),GETDATE(),106)
+
 			SELECT COUNT(NodeID) as Balance
 			FROM COM_CC50051 a1 WITH(NOLOCK)
 			WHERE a1.IsGroup=0 AND a1.NodeID<>1 AND a1.DOJ IS NOT NULL
-			AND a1.DOJ BETWEEN @Fr AND @To '
+			AND MONTH(CONVERT(DATETIME,a1.DOJ))=MONTH(@AsOnDate)
+			AND YEAR(CONVERT(DATETIME,a1.DOJ))=YEAR(@AsOnDate) '
 	END
-	ELSE IF(@TypeID=38)	---- Relieved Employees Between the Dates
+	ELSE IF(@TypeID=38)	---- Relieved Employees Count in this Month
 	BEGIN
 		SET @SQL=@SQL+' 
+			DECLARE @AsOnDate DATETIME
+			SET @AsOnDate=CONVERT(varchar(11),GETDATE(),106)
+
 			SELECT COUNT(NodeID) as Balance
 			FROM COM_CC50051 a1 WITH(NOLOCK)
 			WHERE a1.IsGroup=0 AND a1.NodeID<>1 AND a1.DORelieve IS NOT NULL
-			AND a1.DORelieve BETWEEN @Fr AND @To '
+			AND MONTH(CONVERT(DATETIME,a1.DORelieve))=MONTH(@AsOnDate)
+			AND YEAR(CONVERT(DATETIME,a1.DORelieve))=YEAR(@AsOnDate) '
 	END
 	ELSE IF(@TypeID=39)	---- In Office Employees Count As on Date
 	BEGIN
@@ -597,7 +605,7 @@ group by [Date]
 
 			SELECT @Total=COUNT(a1.NodeID)
 			FROM COM_CC50051 a1 WITH(NOLOCK)
-			WHERE a1.StatusID=250 AND a1.IsGroup=0 AND a1.NodeID<>1 AND a1.DOJ IS NOT NULL
+			WHERE a1.IsGroup=0 AND a1.NodeID<>1 AND a1.DOJ IS NOT NULL
 			AND DATEDIFF(day,CONVERT(DATETIME,a1.DOJ),@AsOnDate)>=0
 			AND DATEDIFF(day,ISNULL(CONVERT(DATETIME,a1.DORelieve),''01-Jan-2200''),@AsOnDate)<=0 
 
@@ -948,7 +956,7 @@ group by [Date]
 	ELSE IF(@TypeID=57)	---- Salary Range (Actuals) wise Employee Count
 	BEGIN
 		SET @SQL=@SQL+'
-		DECLARE @AsOnDate DATETIME,@i INT,@Fdt INT,@EC INT
+		DECLARE @AsOnDate DATETIME,@i INT,@Fdt BIGINT,@EC INT
 		SET @AsOnDate=CONVERT(varchar(11),GETDATE(),106)
 
 		SELECT a1.NodeID,c1.NetSalary INTO #ANS
@@ -959,7 +967,7 @@ group by [Date]
 		AND DATEDIFF(day,CONVERT(DATETIME,a1.DOJ),@AsOnDate)>=0
 		AND DATEDIFF(day,ISNULL(CONVERT(DATETIME,a1.DORelieve),''01-Jan-2200''),@AsOnDate)<=0
 
-		DECLARE @TS TABLE(FSlot INT,TSlot INT,ECount INT)
+		DECLARE @TS TABLE(FSlot BIGINT,TSlot BIGINT,ECount INT)
 		SET @i=1
 		SET @Fdt=0
 
@@ -984,7 +992,7 @@ group by [Date]
 	ELSE IF(@TypeID=58)	---- Salary Range (Earned) wise Employee Count
 	BEGIN
 		SET @SQL=@SQL+'
-		DECLARE @AsOnDate DATETIME,@i INT,@Fdt INT,@EC INT
+		DECLARE @AsOnDate DATETIME,@i INT,@Fdt BIGINT,@EC INT
 		SET @AsOnDate=CONVERT(varchar(11),GETDATE(),106)
 
 		SELECT a1.NodeID,CONVERT(FLOAT,ct.dcAlpha3) NetSalary INTO #ENS
@@ -1007,7 +1015,7 @@ group by [Date]
 		AND DATEDIFF(day,ISNULL(CONVERT(DATETIME,a1.DORelieve),''01-Jan-2200''),@AsOnDate)<=0
 		AND c1.VoucherType=11 
 
-		DECLARE @TS TABLE(FSlot INT,TSlot INT,ECount INT)
+		DECLARE @TS TABLE(FSlot BIGINT,TSlot BIGINT,ECount INT)
 		SET @i=1
 		SET @Fdt=0
 
@@ -1029,220 +1037,11 @@ group by [Date]
 		FROM @TS
 		ORDER BY FSlot '
 	END
-	ELSE IF(@TypeID=59)	---- Inactive Employee Count
-	BEGIN
-		SET @SQL=@SQL+'
-		select count(*) Balance
-		from COM_CC50051 E with(nolock)
-		where E.StatusID=251 and E.IsGroup=0 and E.NodeID<>1 AND E.DOJ<=@To'
-	END
-	ELSE IF(@TypeID=60)	---- Employee CheckIn-Out
-	BEGIN
-		SET @SQL=@SQL+'
-
-		DECLARE @Cnt INT
-		SET @Cnt=0
-		SELECT @Cnt=a.InvDocDetailsID 
-		FROM INV_DocDetails a WITH(NOLOCK)
-		JOIN COM_DocTextData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
-		JOIN COM_DocCCData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
-		WHERE a.CostCenterID=40089 AND StatusID=369
-		AND c.dcCCNID51=@EMPID
-		AND DATEDIFF(day,CONVERT(DATETIME,dcAlpha1),@To)=0
-		IF(@Cnt>0)
-		BEGIN
-			Select CASE WHEN (dcAlpha2 IS NULL OR dcAlpha2='''') AND (dcAlpha4 IS NULL OR dcAlpha4='''') THEN ''* - *''
-			WHEN (dcAlpha2 IS NULL OR dcAlpha2='''') AND (dcAlpha4 IS NOT NULL AND dcAlpha4<>'''') THEN ''* - ''+SUBSTRING(dcAlpha4,13,5)
-			WHEN (dcAlpha2 IS NOT NULL AND dcAlpha2<>'''') AND (dcAlpha4 IS NULL OR dcAlpha4='''') THEN SUBSTRING(dcAlpha2,13,5)+'' - *''
-			WHEN (dcAlpha2 IS NOT NULL AND dcAlpha2<>'''') AND (dcAlpha4 IS NOT NULL AND dcAlpha4<>'''') THEN SUBSTRING(dcAlpha2,13,5)+'' - ''+SUBSTRING(dcAlpha4,13,5) END as Balance
-			FROM INV_DocDetails a WITH(NOLOCK)
-			JOIN COM_DocTextData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
-			JOIN COM_DocCCData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
-			WHERE a.CostCenterID=40089 AND StatusID=369
-			AND c.dcCCNID51=@EMPID
-			AND DATEDIFF(day,CONVERT(DATETIME,dcAlpha1),@To)=0
-		END
-		ELSE
-		SELECT ''* - *'' as Balance '
-	END
-	ELSE IF(@TypeID=61)	---- Month wise Net Salary
-	BEGIN
-		SET @SQL=@SQL+'
-		SELECT SUBSTRING(CONVERT(VARCHAR(11),CONVERT(DATETIME,a.DueDate), 113), 4, 8) as Name,SUM(CONVERT(FLOAT,b.dcAlpha3)) as Balance
-		FROM INV_DocDetails a WITH(NOLOCK)
-		JOIN COM_DocTextData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
-		JOIN COM_DocCCData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
-		WHERE ISNUMERIC(b.dcAlpha3)=1 AND a.CostCenterID=40054 AND StatusID=369 AND a.VoucherType=11
-		AND a.DueDate BETWEEN @Fr AND @To
-		GROUP BY a.DueDate
-		ORDER BY a.DueDate '
-	END
-	ELSE IF(@TypeID=62)	---- Month wise Employee Count
-	BEGIN
-		SET @SQL=@SQL+'
-		SELECT SUBSTRING(CONVERT(VARCHAR(11),CONVERT(DATETIME,a.DueDate), 113), 4, 8) as Name,COUNT(CONVERT(FLOAT,c.dcCCNID51)) as Balance
-		FROM INV_DocDetails a WITH(NOLOCK)
-		JOIN COM_DocTextData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
-		JOIN COM_DocCCData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
-		WHERE ISNUMERIC(b.dcAlpha3)=1 AND a.CostCenterID=40054 AND StatusID=369 AND a.VoucherType=11
-		AND a.DueDate BETWEEN @Fr AND @To
-		GROUP BY a.DueDate
-		ORDER BY a.DueDate '
-	END
-	ELSE IF(@TypeID=63)	---- Year wise Service Distribution
-	BEGIN
-		SET @SQL=@SQL+'
-		DECLARE @i INT,@Fdt INT,@EC INT
-		Select FLOOR(DATEDIFF(d,CONVERT(DATETIME,DOJ),GETDATE())/365.25) as Exp,COUNT(a.NodeID) as NodeID INTO #YWD
-		From COM_CC50051 a WITH(NOLOCK)
-		WHERE a.StatusID=250 and a.IsGroup=0 and a.DOJ<=@To AND a.NodeID<>1
-		AND (a.DORelieve is null or a.DORelieve>@To)
-		GROUP BY FLOOR(DATEDIFF(d,CONVERT(DATETIME,DOJ),GETDATE())/365.25)
-		ORDER BY Exp
-
-		DECLARE @TS TABLE(FSlot INT,TSlot INT,ECount INT)
-		SET @i=0
-		SET @Fdt=0
-
-		WHILE(@i<=39)
-		BEGIN
-			SET @EC=0
-			SET @Fdt+=0
-			SELECT @EC=SUM(NodeID) FROM #YWD WHERE Exp BETWEEN @FDt AND (@FDt+2)
-			INSERT INTO @TS
-			SELECT @FDt,@FDt+2,@EC
-			SET @Fdt+=2
-		SET @i=@i+1
-		END
-
-		DELETE FROM @TS WHERE ECount=0
-		DROP TABLE #YWD
-
-		SELECT CAST(FSlot as varchar) +'' - ''+CAST(TSlot as varchar) as Name,ISNULL(ECount,0) as Balance
-		FROM @TS
-		ORDER BY FSlot '
-
-		END
-	ELSE IF(@TypeID=64)	---- Age wise Service Distribution
-	BEGIN
-		SET @SQL=@SQL+'
-		DECLARE @i INT,@Fdt INT,@EC INT
-		Select FLOOR(DATEDIFF(d,CONVERT(DATETIME,DOB),GETDATE())/365.25) as Age,COUNT(a.NodeID) as NodeID INTO #AWD
-		From COM_CC50051 a WITH(NOLOCK)
-		WHERE a.StatusID=250 and a.IsGroup=0 and a.DOJ<=@To AND a.NodeID<>1
-		AND (a.DORelieve is null or a.DORelieve>@To)
-		AND FLOOR(DATEDIFF(d,CONVERT(DATETIME,DOB),GETDATE())/365.25)>14
-		GROUP BY FLOOR(DATEDIFF(d,CONVERT(DATETIME,DOB),GETDATE())/365.25)
-		ORDER BY Age
-
-		DECLARE @TS TABLE(FSlot INT,TSlot INT,ECount INT)
-		SET @i=0
-		SET @Fdt=15
-
-		WHILE(@i<=12)
-		BEGIN
-			SET @EC=0
-			SET @Fdt+=0
-			SELECT @EC=SUM(NodeID) FROM #AWD WHERE Age BETWEEN @FDt AND (@FDt+5)
-			INSERT INTO @TS
-			SELECT @FDt,@FDt+5,@EC
-			SET @Fdt+=5
-		SET @i=@i+1
-		END
-
-		DELETE FROM @TS WHERE ECount=0
-		DROP TABLE #AWD
-
-		SELECT CAST(FSlot as varchar) +'' - ''+CAST(TSlot as varchar) as Name,ISNULL(ECount,0) as Balance
-		FROM @TS
-		ORDER BY FSlot '
-
-	END
-	ELSE IF(@TypeID=65)	---- Employee Last Salary Processed
-	BEGIN
-		SET @SQL=@SQL+'
-		SELECT TOP 1 REPLACE(SUBSTRING(CONVERT(VARCHAR(11), CONVERT(DATETIME,a.DueDate), 113), 4, 8),'' '',''-'') as Balance
-		FROM INV_DocDetails a WITH(NOLOCK)
-		JOIN COM_DocCCData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
-		WHERE a.CostCenterID=40054 AND StatusID=369 AND a.VoucherType=11
-		AND c.dcCCNID51=@EMPID
-		ORDER BY CONVERT(DATETIME,a.DueDate) DESC
-		'
-	END
-	ELSE IF(@TypeID=67)	---- Employee Leaves Statistics
-	BEGIN
-		DECLARE @LT NVARCHAR(100)
-		SELECT @LT=Value from ADM_GlobalPreferences WITH(NOLOCK) WHERE Name like 'ConsiderLOPBasedOn'
-		SET @SQL=@SQL+'
-		SELECT ISNULL(SUM(ISNULL(AssignedLeaves,0)),0) Assigned,ISNULL(SUM(ISNULL(DeductedLeaves,0)),0) Deducted,ISNULL(SUM(ISNULL(BalanceLeaves,0)),0) as Balance
-		FROM PAY_EmployeeLeaveDetails WITH(NOLOCK)
-		WHERE YEAR(LeaveYear)=YEAR(GETDATE())
-		AND EmployeeID=@EMPID '
-		IF(@LT IS NOT NULL AND LEN(@LT)>0)
-		BEGIN
-		SET @SQL=@SQL+' AND LeaveTypeID NOT IN('+@LT+')'
-		END
-	END
-	ELSE IF(@TypeID=68)	---- Employee Month wise Leaves Taken
-	BEGIN
-		SET @SQL=@SQL+'
-		SELECT REPLACE(SUBSTRING(CONVERT(VARCHAR(11), CONVERT(DATETIME,a.DueDate), 113), 4, 8),'' '',''-'') as Name,SUM(ISNULL(CONVERT(FLOAT,d.dcAlpha6),0)) as Balance
-		FROM INV_DocDetails a WITH(NOLOCK)
-		JOIN COM_DocCCData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
-		JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
-		WHERE a.CostCenterID=40054 AND StatusID=369 AND a.VoucherType=11
-		AND c.dcCCNID51=@EMPID
-		AND a.DueDate BETWEEN @Fr AND @To
-		GROUP BY a.DueDate
-		ORDER BY CONVERT(DATETIME,a.DueDate) '
-	END
-	ELSE IF(@TypeID=69)	---- Employee Last Increment done
-	BEGIN
-		SET @SQL=@SQL+'
-		SELECT TOP 1 REPLACE(SUBSTRING(CONVERT(VARCHAR(11), CONVERT(DATETIME,a.EffectFrom), 113), 4, 8),'' '',''-'') as Balance
-		FROM PAY_EmpPay a WITH(NOLOCK)
-		WHERE EmployeeID=@EMPID 
-		ORDER BY a.EffectFrom DESC '
-	END
-	ELSE IF(@TypeID=70)	---- Employee Month wise Net Salary
-	BEGIN
-		SET @SQL=@SQL+'
-		SELECT SUBSTRING(CONVERT(VARCHAR(11),CONVERT(DATETIME,a.DueDate), 113), 4, 8) as Name,SUM(CONVERT(FLOAT,b.dcAlpha3)) as Balance
-		FROM INV_DocDetails a WITH(NOLOCK)
-		JOIN COM_DocTextData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
-		JOIN COM_DocCCData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
-		WHERE ISNUMERIC(b.dcAlpha3)=1 AND a.CostCenterID=40054 AND StatusID=369 AND a.VoucherType=11
-		AND a.DueDate BETWEEN @Fr AND @To
-		AND c.dcCCNID51=@EMPID
-		GROUP BY a.DueDate
-		ORDER BY a.DueDate '
-	END
-	ELSE IF(@TypeID=71)	---- Employee Loan Summary
-	BEGIN
-		SET @SQL=@SQL+'
-		SELECT CONVERT(NVARCHAR,SUM(PaidAmount)) +''/''+CONVERT(NVARCHAR,SUM(M.ApprovedAmount)) as Balance 
-		FROM (
-		SELECT distinct CONVERT(FLOAT,dcAlpha2) ApprovedAmount,Voucherno,ISNULL(PaidAmount,0) PaidAmount
-		FROM INV_DocDetails a WITH(NOLOCK)
-		LEFT JOIN COM_DocCCData b WITH(NOLOCK) ON B.InvDocDetailsID=a.InvDocDetailsID
-		LEFT JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
-		LEFT JOIN (SELECT B.dcCCNID51,SUM(n.dcCalcNum3) PaidAmount,A.RefNo
-		FROM INV_DocDetails a WITH(NOLOCK)
-		LEFT JOIN COM_DocCCData b WITH(NOLOCK) ON B.InvDocDetailsID=a.InvDocDetailsID
-		LEFT JOIN COM_DocNumData n WITH(NOLOCK) ON n.InvDocDetailsID=a.InvDocDetailsID
-		WHERE a.CostCenterID=40057  AND a.StatusID=369
-		GROUP BY B.dcCCNID51,A.RefNo) AS O ON O.dcCCNID51=b.dcCCNID51 AND O.RefNo=A.VoucherNo
-		WHERE a.CostCenterID=40056  AND a.StatusID=369 
-		AND b.dcCCNID51=@EMPID
-		) AS M
-		'
-	END
-
 
 
 
 	PRINT(@SQL)
-	EXEC (@SQL)
+	EXEC(@SQL)
 
 SET NOCOUNT OFF;  
 RETURN 1

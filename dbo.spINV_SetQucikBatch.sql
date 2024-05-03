@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spINV_SetQucikBatch]
-	@BatchID [int],
+	@BatchID [bigint],
 	@IsBatchSeqNoExists [bit],
 	@BatchNumber [nvarchar](200),
 	@ManufactureDate [datetime] = NULL,
@@ -11,20 +11,20 @@ CREATE PROCEDURE [dbo].[spINV_SetQucikBatch]
 	@MRPRate [float],
 	@RetailRate [float],
 	@StockistRate [float],
-	@ProductID [int] = NULL,
+	@ProductID [bigint] = NULL,
 	@RetestDate [datetime] = NULL,
-	@SelectedNodeID [int],
+	@SelectedNodeID [bigint],
 	@IsGroup [bit],
 	@StaticFieldsQuery [nvarchar](max) = null,
 	@CustomFieldsQuery [nvarchar](max) = NULL,
 	@CustomCostCenterFieldsQuery [nvarchar](max) = NULL,
 	@BatchCode [nvarchar](200) = null,
 	@CodePrefix [nvarchar](200) = null,
-	@CodeNumber [int] = 0,
+	@CodeNumber [bigint] = 0,
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@RoleID [int] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -40,11 +40,11 @@ SET NOCOUNT ON;
 	if(@ExpiryDate='1/JAN/1900')
 		set @ExpiryDate=NULL  
 		 
-	DECLARE @Dt FLOAT,@XML xml,@HasAccess bit ,@Dimesion INT     
+	DECLARE @Dt FLOAT,@XML xml,@HasAccess bit ,@Dimesion bigint     
 	DECLARE @TempGuid NVARCHAR(50)     
-	DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth INT,@ParentID INT      
+	DECLARE @lft BIGINT,@rgt BIGINT,@Selectedlft BIGINT,@Selectedrgt BIGINT,@Depth INT,@ParentID BIGINT      
 	DECLARE @SelectedIsGroup BIT, @ParentCode NVARCHAR(MAX),@UpdateSql NVARCHAR(MAX)    
-	declare @NID INT, @CCStatusID INT,  @PrefValue nvarchar(50), @Gid nvarchar(50) , @Table nvarchar(100)
+	declare @NID bigint, @CCStatusID bigint,  @PrefValue nvarchar(50), @Gid nvarchar(50) , @Table nvarchar(100)
 
 	--User acces check    
 	IF @BatchID=0    
@@ -62,7 +62,7 @@ SET NOCOUNT ON;
 	
 	
 	    
-    DECLARE @AllowDuplicateBatches BIT, @AllowDupBatchesforDiffProducts bit,@IsBatchCodeAutoGen bit ,@BatchNumSameAsCode bit 
+    DECLARE @AllowDuplicateBatches BIT, @AllowDupBatchesforDiffProducts bit,@IsBatchCodeAutoGen bit 
 	select @AllowDuplicateBatches=CONVERT(bit,value) from COM_CostCenterPreferences WITH(nolock) 
 	where CostCenterID=16 and Name='AllowDuplicateBatches'
  	select @AllowDupBatchesforDiffProducts=CONVERT(bit,value) from COM_CostCenterPreferences WITH(nolock) 
@@ -72,14 +72,11 @@ SET NOCOUNT ON;
 	select @PrefValue=Value from COM_CostCenterPreferences WITH(nolock) 
 	where CostCenterID=16 and Name='BatchDimension'
 	
-	select @BatchNumSameAsCode=CONVERT(bit,value) from COM_CostCenterPreferences with(nolock)
- 	where CostCenterID=16 and Name='BatchNumSameAsCode'
-
 	if(@PrefValue is not null and @PrefValue<>'')  
 	begin     
 		set @Dimesion=0  
 		begin try  
-		select @Dimesion=convert(INT,@PrefValue)  
+		select @Dimesion=convert(BIGINT,@PrefValue)  
 		end try  
 		begin catch  
 		set @Dimesion=0   
@@ -91,7 +88,7 @@ SET NOCOUNT ON;
 		if(@BatchID>0)
 		BEGIN
 			select @NID=RefDimensionNodeID from COM_DocBridge with(nolock) where NodeID=@BatchID
-			set @UpdateSql='select @Gid=GUID from '+convert(nvarchar,@Table)+' with(nolock) where NodeID='''+convert(nvarchar,@NID)+''''
+			set @UpdateSql='select @Gid=GUID from '+convert(nvarchar,@Table)+' where NodeID='''+convert(nvarchar,@NID)+''''
 			exec sp_executesql @UpdateSql,N'@Gid nvarchar(50) output',@Gid OUTPUT 
 		END
 	END 
@@ -117,7 +114,7 @@ SET NOCOUNT ON;
 		IF @IsBatchCodeAutoGen IS NOT NULL AND @IsBatchCodeAutoGen=1 AND @BatchID=0 and @CodePrefix=''  
 		BEGIN 
 			--CALL AUTOCODEGEN 
-			create table #temp1(prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+			create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
 			if(@SelectedNodeID is null)
 			insert into #temp1
 			EXEC [spCOM_GetCodeData] 16,1,''  
@@ -125,14 +122,9 @@ SET NOCOUNT ON;
 			insert into #temp1
 			EXEC [spCOM_GetCodeData] 16,@SelectedNodeID,''  
 			--select * from #temp1
-			select @BatchCode=code,@CodePrefix= prefix, @CodeNumber=number from #temp1 with(nolock)
+			select @BatchCode=code,@CodePrefix= prefix, @CodeNumber=number from #temp1
 			--select @BatchCode,@ParentID
 		END	
-	END
-
-	if((@BatchNumSameAsCode is null or @BatchNumSameAsCode='') AND @BatchNumSameAsCode=1)  
-	BEGIN
-		SET @BatchNumber=@BatchCode
 	END
 	
 	--To SET Left,Right And Depth of Record      
@@ -171,7 +163,7 @@ SET NOCOUNT ON;
 		SET @IsGroup=1      
 	END      
    
-	IF (@BatchID=0)--BatchID will be 0 in ALTER procedureess--      
+	IF (@BatchID=0)--BatchID will be 0 in Create Process--      
 	BEGIN--CREATE --      
 		INSERT intO [INV_Batches]([BatchNumber]  ,[MfgDate],[ExpiryDate],[StatusID],[MRPRate],[RetailRate],[StockistRate],[ProductID]
 		,[Depth],[ParentID],[lft],[rgt],[IsGroup],[GUID],[CreatedBy],[CreatedDate],CompanyGUID, RetestDate, BatchCode, CodePrefix, CodeNumber)      
@@ -289,7 +281,7 @@ SET NOCOUNT ON;
 		@CustomCostCenterFieldsQuery='',@ContactsXML=null,@NotesXML=NULL,
 		@CostCenterID = @Dimesion,@CompanyGUID=@CompanyGUID,@GUID=@Gid,@UserName='admin',@RoleID=1,@UserID=1 , @CheckLink = 0 
 		
-		set @UpdateSql='if exists(select nodeid from com_cc'+convert(nvarchar,@Dimesion)+'  with(nolock) where nodeid='+CONVERT(NVARCHAR,@NID)+')
+		set @UpdateSql='if exists(select nodeid from com_cc'+convert(nvarchar,@Dimesion)+' where nodeid='+CONVERT(NVARCHAR,@NID)+')
 		 update COM_CCCCDATA  
 		SET CCNID'+convert(nvarchar,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@NID)+'  WHERE CostCenterID=16 and NODEID='+convert(NVARCHAR,@BatchID)
 		--print @UpdateSql
@@ -341,5 +333,17 @@ BEGIN CATCH
 	ROLLBACK TRANSACTION    
 	SET NOCOUNT OFF      
 	RETURN -999       
-END CATCH
+END CATCH      
+      
+      
+      
+    
+    
+    
+    
+    
+    
+    
+    
+
 GO

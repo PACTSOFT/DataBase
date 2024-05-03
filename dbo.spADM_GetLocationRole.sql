@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetLocationRole]
-	@CostCenterId [int],
+	@CostCenterId [bigint],
 	@LangID [int] = 1,
-	@Where [nvarchar](max) = ''
+	@Where [nvarchar](200) = ''
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION        
@@ -21,24 +21,6 @@ SET NOCOUNT ON;
 		if(@Where<>'')
 			set @SQL=@SQL+@Where
 	END
-	ELSE IF(@CostCenterId = 300)
-	BEGIN
-		SELECT @TABLENAME=TABLENAME FROM ADM_FEATURES with(nolock) WHERE FEATUREID=@CostCenterId     
-		SET @SQL=' SELECT 0 AS NodeID, ''Documents'' as Name , 1 IsGroup , 0 Depth , 1 AS ParentID , 0 AS LFT, 0 AS RGT 
-		UNION  SELECT CostCenterID as NodeID , DocumentName as Name , 0 IsGroup , 1 Depth , 0 AS ParentID ,1 AS LFT, 1 AS RGT   FROM   '+@TABLENAME +' with(nolock)'
-		if(@Where<>'')
-			set @SQL=@SQL+@Where
-	END
-	ELSE IF(@CostCenterId = 8)
-	BEGIN
-		SELECT @TABLENAME=TABLENAME FROM ADM_FEATURES with(nolock) WHERE FEATUREID=@CostCenterId     
-		SET @SQL=' SELECT 0 AS NodeID, ''Dimensions'' as Name , 1 IsGroup , 0 Depth , 1 AS ParentID , 0 AS LFT, 0 AS RGT 
-		UNION  SELECT FeatureID as NodeID , Name , 0 IsGroup , 1 Depth , 0 AS ParentID ,1 AS LFT, 1 AS RGT   FROM   ADM_Features with(nolock) where (FeatureID IN (2,3,92,93,94,95,103,104,150,129) or FeatureID>50000)'
-		if(@Where<>'')
-			set @SQL=@SQL+@Where
-			
-		print @SQL
-	END
 	ELSE
 	BEGIN
 		SELECT @TABLENAME=TABLENAME FROM ADM_FEATURES with(nolock) WHERE FEATUREID=@CostCenterId     
@@ -47,7 +29,7 @@ SET NOCOUNT ON;
 			set @SQL=@SQL+@Where
 		SET @SQL=@SQL+'  ORDER BY LFT   '   
 	END
-	PRINT @SQL
+	
 	EXEC(@SQL)  
         
  --IF @CostCenterId = 50002  
@@ -86,5 +68,6 @@ BEGIN CATCH
  ROLLBACK TRANSACTION      
  SET NOCOUNT OFF        
  RETURN -999         
-END CATCH
+END CATCH     
+
 GO

@@ -4,22 +4,22 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDoc_UpdateBudget]
 	@CostCenterID [int],
-	@DocID [int],
+	@DocID [bigint],
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@isDel [bit] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
-declare @Dt float,@SQL nvarchar(max),@BudgetID INT,@Query nvarchar(max),@AmtInDecimals int,@where  nvarchar(max),@cols nvarchar(max),@stat int
+declare @Dt float,@SQL nvarchar(max),@BudgetID bigint,@Query nvarchar(max),@AmtInDecimals int,@where  nvarchar(max),@cols nvarchar(max),@stat int
 
 	SET @Dt=CONVERT(FLOAT,GETDATE())
 
 	declare @BudgetName nvarchar(100),@BudgetYear float,@BudgetTypeID int,@BudgetTypeName nvarchar(20),@i int,@cnt int,@Dims nvarchar(100),@CFField nvarchar(20)
-	declare @txtShiftDate nvarchar(20),@BudgetAllocID INT,@docseq int,@TransferDim nvarchar(max),@XML xml,@INVID INT,@vtype int,@rowcnt int
+	declare @txtShiftDate nvarchar(20),@BudgetAllocID bigint,@docseq int,@TransferDim nvarchar(max),@XML xml,@INVID bigint,@vtype int,@rowcnt int
 	select @TransferDim=PrefValue from COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and PrefName='BudgetMapFields'
 	set @XML=@TransferDim
 		
-	select @BudgetTypeID=x.value('@BudgetType','INT'),@CFField=x.value('@CF','nvarchar(20)'),@Dims=x.value('@Dims','nvarchar(100)') from @XML.nodes('/XML') as data(x)
+	select @BudgetTypeID=x.value('@BudgetType','bigint'),@CFField=x.value('@CF','nvarchar(20)'),@Dims=x.value('@Dims','nvarchar(100)') from @XML.nodes('/XML') as data(x)
 	if @BudgetTypeID='0'
 		set @BudgetTypeName='Annual'
 	else if @BudgetTypeID='1'
@@ -38,10 +38,10 @@ declare @Dt float,@SQL nvarchar(max),@BudgetID INT,@Query nvarchar(max),@AmtInDe
 	
 	set @cols=''
 	select @cols=@cols+','+name from sys.columns
-	where object_id=object_id('COM_BudgetAlloc_history')
+	where object_id=object_id('COM_BudgetAlloc')
 	and name like  'CCNID%'
 	
-	declare @tab table(id int identity(1,1),InvID INT,Vtype int,seq int,STAT int)
+	declare @tab table(id int identity(1,1),InvID bigint,Vtype int,seq int,STAT int)
 	
 	if(@isDel=1)
 	BEGIN
@@ -70,7 +70,7 @@ declare @Dt float,@SQL nvarchar(max),@BudgetID INT,@Query nvarchar(max),@AmtInDe
 		set @SQL='select @BudgetID=isnull('+@CFField+',0) from   Com_DocTextData b with(nolock)
 		where Invdocdetailsid='+convert(nvarchar,@INVID)
 		
-		EXEC sp_executesql @SQL, N'@BudgetID INT OUTPUT', @BudgetID OUTPUT   
+		EXEC sp_executesql @SQL, N'@BudgetID BIGINT OUTPUT', @BudgetID OUTPUT   
 			
 		if @BudgetID is null and @BudgetID=0--NEW
 		begin			
@@ -92,7 +92,7 @@ declare @Dt float,@SQL nvarchar(max),@BudgetID INT,@Query nvarchar(max),@AmtInDe
 		inner join COM_DocCCData DCC with(nolock) on D.InvDocDetailsID=DCC.InvDocDetailsID
 		where BudgetDefID='+convert(nvarchar(max),@BudgetID)+@where
 		
-		EXEC sp_executesql @SQL, N'@rowcnt INT OUTPUT,@BudgetAllocID INT OUTPUT', @rowcnt OUTPUT,@BudgetAllocID OUTPUT
+		EXEC sp_executesql @SQL, N'@rowcnt INT OUTPUT,@BudgetAllocID BIGINT OUTPUT', @rowcnt OUTPUT,@BudgetAllocID OUTPUT
 		
 		if @rowcnt<>1--NEW
 		begin

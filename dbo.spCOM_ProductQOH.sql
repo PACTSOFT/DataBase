@@ -3,10 +3,10 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_ProductQOH]
-	@ProductID [int],
+	@ProductID [bigint],
 	@DocDate [datetime],
 	@Products [nvarchar](max),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -22,29 +22,29 @@ SET NOCOUNT ON;
 	   set @isloc=0
 	   set @isdiv=0;
 	   set @table=''
-	select @PrefValue= Value from ADM_GlobalPreferences WITH(NOLOCK) where Name='EnableLocationWise'      
+	select @PrefValue= Value from ADM_GlobalPreferences where Name='EnableLocationWise'      
           
     if(@PrefValue='True')      
     begin      
 		set @PrefValue=''    
-		select @PrefValue= Value from ADM_GlobalPreferences WITH(NOLOCK) where Name='Location Stock'      
+		select @PrefValue= Value from ADM_GlobalPreferences where Name='Location Stock'      
 		if(@PrefValue='True')    
 		begin    
 			set @isloc=1
-			select @table =Name from adm_features WITH(NOLOCK) where featureid=50002
+			select @table =Name from adm_features where featureid=50002
 			
 			set @Columns='l.name ['+@table+'],dcccnid2'
 			set @Group='l.name,dcccnid2'
-			set @join=@join+'	join Com_location l WITH(NOLOCK) on DCC.dcccnid2=l.NOdeid '
+			set @join=@join+'	join Com_location l on DCC.dcccnid2=l.NOdeid '
 		end  
     end 
     
     set @PrefValue=''
-    select @PrefValue= Value from ADM_GlobalPreferences WITH(NOLOCK) where Name='EnableDivisionWise'                
+    select @PrefValue= Value from ADM_GlobalPreferences where Name='EnableDivisionWise'                
     if(@PrefValue='True')      
     begin      
 		set @PrefValue=''    
-		select @PrefValue= Value from ADM_GlobalPreferences WITH(NOLOCK) where Name='Division Stock'      
+		select @PrefValue= Value from ADM_GlobalPreferences where Name='Division Stock'      
 		if(@PrefValue='True')    
 		begin    
 			if(@Columns<>'')
@@ -52,19 +52,19 @@ SET NOCOUNT ON;
 				set @Columns=@Columns+','
 				set @Group=@Group+','
 			end
-			 select @table =Name from adm_features WITH(NOLOCK) where featureid=50001
+			 select @table =Name from adm_features where featureid=50001
 			set @isdiv=1
 			set @Group=@Group+'dv.name,dcccnid1'
 			set @Columns=@Columns+'dv.name ['+@table+'],dcccnid1'
-			set @join=@join+' join COM_Division dv WITH(NOLOCK) on DCC.dcccnid1=dv.NOdeid '
+			set @join=@join+'	join COM_Division dv on DCC.dcccnid1=dv.NOdeid '
 		end  
     end
             
         
     set @PrefValue=''    
-    select @PrefValue= isnull(Value,'') from ADM_GlobalPreferences WITH(NOLOCK) where Name='Maintain Dimensionwise stock'      
+    select @PrefValue= isnull(Value,'') from ADM_GlobalPreferences where Name='Maintain Dimensionwise stock'      
         
-    if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)      
+    if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)      
     begin      
 			if(@Columns<>'')
 			begin
@@ -72,38 +72,34 @@ SET NOCOUNT ON;
 				set @Group=@Group+','
 			end
 			
-			select @table =Name from adm_features WITH(NOLOCK) where featureid=convert(INT,@PrefValue)
+			select @table =Name from adm_features where featureid=convert(bigint,@PrefValue)
 
-			set @Columns=@Columns+'c.name ['+@table+'],dcccnid'+convert(nvarchar,(convert(INT,@PrefValue)-50000))			
-			set @Group=@Group+'c.name,dcccnid'+convert(nvarchar,(convert(INT,@PrefValue)-50000))			
+			set @Columns=@Columns+'c.name ['+@table+'],dcccnid'+convert(nvarchar,(convert(bigint,@PrefValue)-50000))			
+			set @Group=@Group+'c.name,dcccnid'+convert(nvarchar,(convert(bigint,@PrefValue)-50000))			
 
-			select @table =tablename from adm_features WITH(NOLOCK) where featureid=convert(INT,@PrefValue)
-			set @join=@join+' join '+@table+' c WITH(NOLOCK) on DCC.dcccnid'+convert(nvarchar,(convert(INT,@PrefValue)-50000))+'=c.NOdeid '
+			select @table =tablename from adm_features where featureid=convert(bigint,@PrefValue)
+			set @join=@join+'	join '+@table+' c on DCC.dcccnid'+convert(nvarchar,(convert(bigint,@PrefValue)-50000))+'=c.NOdeid '
 
     end  
-	
 	if(@Columns<>'')
 	begin	
-		set @sql='SELECT '+@Columns+',ISNULL(SUM(D.UOMConvertedQty*CASE WHEN D.VoucherType=1 AND D.StatusID in(371,441) THEN 0 ELSE  D.VoucherType end),0) QOH,D.ProductID 
-		FROM INV_DocDetails D WITH(NOLOCK)				
-		INNER JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID'+@join+
+		set @sql='SELECT '+@Columns+',isnull(sum(UOMConvertedQty*VoucherType),0) QOH,D.ProductID FROM INV_DocDetails D WITH(NOLOCK)      
+		INNER JOIN COM_DocCCData DCC ON DCC.InvDocDetailsID=D.InvDocDetailsID'+@join+
 		'WHERE '
 		 if(@Products is not null and @Products<>'')
 			set @sql=@sql+'D.ProductID in('+@Products+')'
 		 else
 			set @sql=@sql+'D.ProductID='+convert(nvarchar,@ProductID)
 		
-		 set @sql=@sql+' AND D.IsQtyIgnored=0 AND D.StatusID IN (371,441,369) 
-		 AND D.DocDate<='+convert(nvarchar,convert(float,@DocDate))+' and (D.VoucherType=-1 or D.VoucherType=1)
-		 group by D.ProductID,'+@Group
+		 set @sql=@sql+' AND IsQtyIgnored=0 AND D.DocDate<='+convert(nvarchar,convert(float,@DocDate))+' and (VoucherType=-1 or VoucherType=1)
+		group by D.ProductID,'+@Group
 	end
 	else
 	begin
-		set @sql='SELECT ISNULL(SUM(D.UOMConvertedQty*CASE WHEN D.VoucherType=1 AND D.StatusID in(371,441) THEN 0 ELSE  D.VoucherType end),0) QOH,D.ProductID  
-		FROM INV_DocDetails D WITH(NOLOCK)      
-		WHERE D.ProductID='+convert(nvarchar,@ProductID)+' AND D.IsQtyIgnored=0 AND D.StatusID IN (371,441,369) 
-		AND D.DocDate<='+convert(nvarchar,convert(float,@DocDate))+' and (D.VoucherType=-1 or D.VoucherType=1) 
-		group by D.ProductID' 
+		set @sql='SELECT isnull(sum(UOMConvertedQty*VoucherType),0) QOH,D.ProductID FROM INV_DocDetails D WITH(NOLOCK)      
+		INNER JOIN COM_DocCCData DCC ON DCC.InvDocDetailsID=D.InvDocDetailsID'+
+		' WHERE D.ProductID='+convert(nvarchar,@ProductID)+' AND IsQtyIgnored=0 AND D.DocDate<='+convert(nvarchar,convert(float,@DocDate))+' and (VoucherType=-1 or VoucherType=1) 
+		 group by D.ProductID' 
 	end
 	print @sql
     exec(@sql)
@@ -139,5 +135,13 @@ BEGIN CATCH
 ROLLBACK TRANSACTION      
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH
+END CATCH      
+
+
+
+
+
+
+
+
 GO

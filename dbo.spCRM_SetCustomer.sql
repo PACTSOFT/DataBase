@@ -14,9 +14,6 @@ CREATE PROCEDURE [dbo].[spCRM_SetCustomer]
 	@IsGroup [bit] = null,
 	@CreditDays [int] = 0,
 	@CreditLimit [float] = 0,
-	@User [varchar](100),
-	@Password [varchar](100),
-	@OnlineCustType [varchar](100),
 	@CompanyGUID [varchar](50),
 	@GUID [varchar](50),
 	@Description [nvarchar](500) = null,
@@ -58,6 +55,16 @@ SET NOCOUNT ON;
 		declare @feq int
 	set @CostCenterID=83
 
+
+--	 CREATE TABLE #tblActivities
+--			(rowno int ,ActivityID	bigint,ActivityTypeID	int,ScheduleID	int,CostCenterID	int,NodeID	int,
+--Status	int,Subject	nvarchar(MAX),Priority	int,PctComplete	float,Location	nvarchar(max),IsAllDayActivity	bit,
+--ActualCloseDate	float,ActualCloseTime	varchar(20),CustomerID	nvarchar(max),Remarks	nvarchar(MAX),AssignUserID	bigint,
+--AssignRoleID	bigint,AssignGroupID	bigint,Name	nvarchar(200),StatusID	int,
+--FreqType	int,FreqInterval	int,FreqSubdayType	int,FreqSubdayInterval	int,FreqRelativeInterval	int,
+--FreqRecurrenceFactor	int,StartDate	nvarchar(20),EndDate	nvarchar(20),StartTime	nvarchar(20),
+--EndTime	nvarchar(20),Message	nvarchar(MAX),isRecur bit)
+
 		--User acces check FOR Customer 
 		IF @CustomerID=0
 		BEGIN
@@ -85,33 +92,15 @@ SET NOCOUNT ON;
 		END
 
 		--User acces check FOR Attachments
-		IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')    
-		BEGIN    
-			SET @XML=@AttachmentsXML
-			SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,83,12)    
+		IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')
+		BEGIN
+			SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,83,12)
 
-			IF exists (SELECT X.value('@FilePath','NVARCHAR(500)') FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
-			WHERE X.value('@Action','NVARCHAR(10)')='NEW') and @HasAccess=0     
-			BEGIN    
-				RAISERROR('-105',16,1)    
-			END 
-			
-			SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,83,14)    
-
-			IF exists (SELECT X.value('@FilePath','NVARCHAR(500)') FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
-			WHERE X.value('@Action','NVARCHAR(10)')='MODIFY') and @HasAccess=0     
-			BEGIN    
-				RAISERROR('-105',16,1)    
-			END 
-			
-			SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,83,15)    
-
-			IF exists (SELECT X.value('@FilePath','NVARCHAR(500)') FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
-			WHERE X.value('@Action','NVARCHAR(10)')='DELETE') and @HasAccess=0     
-			BEGIN    
-				RAISERROR('-105',16,1)    
-			END 
-		END  
+			IF @HasAccess=0
+			BEGIN
+				RAISERROR('-105',16,1)
+			END
+		END
 
 		--User acces check FOR Contacts
 		IF (@ContactsXML IS NOT NULL AND @ContactsXML <> '')
@@ -152,12 +141,12 @@ SET NOCOUNT ON;
 				IF @CustomerID=0  
 				BEGIN  
 				 IF EXISTS (SELECT CustomerID FROM CRM_Customer WITH(nolock) WHERE replace(CustomerName,' ','')=replace(@CustomerName,' ',''))  
-				  RAISERROR('-345',16,1)  
+				  RAISERROR('-108',16,1)  
 				END  
 				ELSE  
 				BEGIN  
 				 IF EXISTS (SELECT CustomerID FROM CRM_Customer WITH(nolock) WHERE replace(CustomerName,' ','')=replace(@CustomerName,' ','') AND CustomerID <> @CustomerID)  
-				  RAISERROR('-345',16,1)       
+				  RAISERROR('-108',16,1)       
 				END  
 			END  
 			ELSE  
@@ -260,7 +249,7 @@ SET NOCOUNT ON;
 							[GUID],
 							[Description],
 							[CreatedBy],
-							[CreatedDate],UserName,Password,OnlineCustType)
+							[CreatedDate])
 							VALUES
 							(@CodePrefix,@CodeNumber,@CustomerCode,
 							@CustomerName,
@@ -279,7 +268,7 @@ SET NOCOUNT ON;
 							newid(),
 							@Description,
 							@UserName,
-							@Dt,@User,@Password,@OnlineCustType)
+							@Dt)
 					
 				--To get inserted record primary key
 				SET @CustomerID=SCOPE_IDENTITY()
@@ -358,8 +347,6 @@ SET NOCOUNT ON;
 					  ,[Description] = @Description   
 					  ,[ModifiedBy] = @UserName
 					  ,[ModifiedDate] = @Dt
-					  ,UserName=@User,Password=@Password
-					  ,OnlineCustType=@OnlineCustType
 				 WHERE CustomerID=@CustomerID      
 			END
 	
@@ -385,8 +372,7 @@ END
 		set @UpdateSql='update [CRM_CustomerExtended]
 		SET '+@CustomFieldsQuery+'[ModifiedBy] ='''+ @UserName
 		  +''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE CustomerID ='+convert(nvarchar,@CustomerID)
-	print @CustomFieldsQuery
-	print @UpdateSql
+	
 		exec(@UpdateSql)
 	
 		
@@ -447,9 +433,52 @@ END
 		END
 
 		--Inserts Multiple Attachments
-		IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')  
-			exec [spCOM_SetAttachments] @CustomerID,83,@AttachmentsXML,@UserName,@Dt   
-				 
+		IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')
+		BEGIN
+			SET @XML=@AttachmentsXML
+
+			INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,
+			FileExtension,FileDescription,IsProductImage,IsDefaultImage,FeatureID,CostCenterID,FeaturePK,
+			GUID,CreatedBy,CreatedDate)
+			SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(50)'),
+			X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),X.value('@IsDefaultImage','bit'),83,83,@CustomerID,
+			X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt
+			FROM @XML.nodes('/AttachmentsXML/Row') as Data(X) 	
+			WHERE X.value('@Action','NVARCHAR(10)')='NEW'
+
+			--If Action is MODIFY then update Attachments
+			UPDATE COM_Files
+			SET FilePath=X.value('@FilePath','NVARCHAR(500)'),
+				ActualFileName=X.value('@ActualFileName','NVARCHAR(50)'),
+				RelativeFileName=X.value('@RelativeFileName','NVARCHAR(50)'),
+				FileExtension=X.value('@FileExtension','NVARCHAR(50)'),
+				FileDescription=X.value('@FileDescription','NVARCHAR(500)'),
+				IsProductImage=X.value('@IsProductImage','bit'),
+				IsDefaultImage=X.value('@IsDefaultImage','bit'),						
+				GUID=X.value('@GUID','NVARCHAR(50)'),
+				ModifiedBy=@UserName,
+				ModifiedDate=@Dt
+			FROM COM_Files C 
+			INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X) 	
+			ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID
+			WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'
+
+			--If Action is DELETE then delete Attachments
+			DELETE FROM COM_Files
+			WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')
+				FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)
+				WHERE X.value('@Action','NVARCHAR(10)')='DELETE')
+
+
+
+				--activites
+
+
+
+
+					 
+					 
+END
 IF @ActivityXml <>'' AND @ActivityXml IS NOT NULL
 BEGIN 
 
@@ -497,4 +526,6 @@ BEGIN CATCH
 	SET NOCOUNT OFF  
 	RETURN -999   
 END CATCH
+
+
 GO

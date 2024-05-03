@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetAttachments]
-	@NodeID [int],
-	@CostCenterID [int],
+	@NodeID [bigint],
+	@CostCenterID [bigint],
 	@AttachmentsXML [nvarchar](max),
 	@UserName [nvarchar](50),
 	@Dt [float]
@@ -18,14 +18,14 @@ BEGIN
 		SET @XML=@AttachmentsXML
 
 		INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,[GUID],CreatedBy,CreatedDate , IsDefaultImage,LocationID ,DivisionID,ColName,ValidTill,HasThumb
-		,IssueDate,Type,RefNum,Remarks,DocNo,status,AllowInPrint,IsSign)
+		,IssueDate,Type,RefNum,Remarks,DocNo,status)
 		SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(500)'),
 		X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),@CostCenterID,@CostCenterID,@NodeID, 
-		X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt,X.value('@IsDefaultImage','smallint'),X.value('@LocationID','INT') ,X.value('@DivisionID','INT'),X.value('@ColName','nvarchar(50)') 		
+		X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt,X.value('@IsDefaultImage','smallint'),X.value('@LocationID','bigint') ,X.value('@DivisionID','bigint'),X.value('@ColName','nvarchar(50)') 		
 		,convert(float,X.value('@Validtill','Datetime')),isnull(X.value('@HasThumb','bit'),0)
-		,convert(float,X.value('@IssueDate','Datetime')),X.value('@Type','INT')
+		,convert(float,X.value('@IssueDate','Datetime')),X.value('@Type','bigint')
 		,X.value('@RefNo','NVARCHAR(max)'),X.value('@Remarks','NVARCHAR(max)')
-		,X.value('@DocNo','NVARCHAR(max)'),X.value('@stat','int'),isnull(X.value('@AllowInPrint','bit'),0),isnull(X.value('@IsSign','bit'),0)
+		,X.value('@DocNo','NVARCHAR(max)'),X.value('@stat','int')
 		FROM @XML.nodes('/AttachmentsXML/Row') as Data(X) 	
 		WHERE X.value('@Action','NVARCHAR(10)')='NEW'
 
@@ -39,45 +39,40 @@ BEGIN
 			IsProductImage=X.value('@IsProductImage','bit'),
 			IsDefaultImage=X.value('@IsDefaultImage','smallint'),
 			[GUID]=X.value('@GUID','NVARCHAR(50)'),
-			LocationID=X.value('@LocationID','INT') ,
-			DivisionID=X.value('@DivisionID','INT') ,
+			LocationID=X.value('@LocationID','bigint') ,
+			DivisionID=X.value('@DivisionID','bigint') ,
 			ModifiedBy=@UserName,
 			ModifiedDate=@Dt
-			
 			,ValidTill=convert(float,X.value('@Validtill','Datetime'))
 			,HasThumb=isnull(X.value('@HasThumb','bit'),0)
-			,IssueDate=convert(float,X.value('@IssueDate','Datetime')),Type=X.value('@Type','INT')
+			,IssueDate=convert(float,X.value('@IssueDate','Datetime')),Type=X.value('@Type','bigint')
 			,RefNum=X.value('@RefNo','NVARCHAR(max)'),Remarks=X.value('@Remarks','NVARCHAR(max)')
 			,DocNo=X.value('@DocNo','NVARCHAR(max)')
 			,status=X.value('@stat','int')
-			,AllowInPrint=isnull(X.value('@AllowInPrint','bit'),0)
-			,IsSign=ISNULL(X.value('@IsSign','bit'),0)
 		FROM COM_Files C with(nolock)
 		INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X) 	
-		ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID
+		ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'
 		
 		UPDATE COM_Files
-		SET LocationID=X.value('@LocationID','INT') ,
-			DivisionID=X.value('@DivisionID','INT') 
-			--ModifiedBy=@UserName,
-			--ModifiedDate=@Dt
+		SET LocationID=X.value('@LocationID','bigint') ,
+			DivisionID=X.value('@DivisionID','bigint') ,
+			ModifiedBy=@UserName,
+			ModifiedDate=@Dt
 			,ValidTill=convert(float,X.value('@Validtill','Datetime'))			
-			,IssueDate=convert(float,X.value('@IssueDate','Datetime')),Type=X.value('@Type','INT')
+			,IssueDate=convert(float,X.value('@IssueDate','Datetime')),Type=X.value('@Type','bigint')
 			,RefNum=X.value('@RefNo','NVARCHAR(max)'),Remarks=X.value('@Remarks','NVARCHAR(max)')
 			,DocNo=X.value('@DocNo','NVARCHAR(max)')
 			,status=X.value('@stat','int')
-			,AllowInPrint=isnull(X.value('@AllowInPrint','bit'),0)
-			,IsSign=isnull(X.value('@IsSign','bit'),0)
 		FROM COM_Files C with(nolock)
 		INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X) 	
-		ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID
+		ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFYText'
 		
 
 		--If Action is DELETE then delete Attachments
 		DELETE FROM COM_Files
-		WHERE FileID IN(SELECT X.value('@AttachmentID','INT')
+		WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')
 		FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')	
 		

@@ -15,7 +15,7 @@ SET NOCOUNT ON;
       
 	--Declaration Section    
 	DECLARE @DATA XML,@COUNT INT,@I INT,@KEY NVARCHAR(500),@VALUE NVARCHAR(MAX),@Section NVARCHAR(50)    
-	declare @ColID INT, @Rid INT, @CCID INT,@TabID int,@SQL nvarchar(MAX),@TblName nvarchar(50),@PMDim INT
+	declare @ColID bigint, @Rid bigint, @CCID bigint,@TabID int,@SQL nvarchar(MAX),@TblName nvarchar(50),@PMDim INT
 	DECLARE @TEMP TABLE (ID INT IDENTITY(1,1),[KEY] NVARCHAR(500),[VALUE] NVARCHAR(MAX),Section NVARCHAR(50))    
     
   --UPDATE PAY_BioMetricConfig         
@@ -83,5 +83,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION    
  SET NOCOUNT OFF      
  RETURN -999       
-END CATCH
+END CATCH 
 GO

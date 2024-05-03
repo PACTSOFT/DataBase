@@ -3,13 +3,13 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_PostBillWiseDetails]
-	@AccountID [int] = 0,
+	@AccountID [bigint] = 0,
 	@IsCredit [bit],
 	@VoucherNo [nvarchar](500),
 	@DocSeqNo [int],
 	@Docdate [datetime],
-	@CostCenterID [int],
-	@DocDetailsID [int],
+	@CostCenterID [bigint],
+	@DocDetailsID [bigint],
 	@BillWiseXml [nvarchar](max),
 	@FromDocNo [nvarchar](max),
 	@CompanyGUID [nvarchar](50),
@@ -22,13 +22,13 @@ BEGIN TRANSACTION
 SET NOCOUNT ON
 BEGIN TRY 
    
-		DECLARE @docType int,@IsInv bit,@i int ,@CNT int,@dt float,@DueDate float,@crAcc INT,@drAcc INT
+		DECLARE @docType int,@IsInv bit,@i int ,@CNT int,@dt float,@DueDate float,@crAcc bigint,@drAcc BIGINT
 		DECLARE @amt float,@billamt float,@StatusID int,@EXTRAXML xml,@CC nvarchar(max),@sql nvarchar(max),@CCCols nvarchar(max)
 		
 		set @CCCols=''
 		select @CCCols =@CCCols +','+a.name from sys.columns a
 		join sys.tables b on a.object_id=b.object_id
-		where b.name='COM_DocCCData'  and a.name like '%ccnid%'
+		where b.name='COM_DocCCData'  and a.name not in('AccDocDetailsID','INVDocDetailsID','DocCCDataID')
 
 		--SP Required Parameters Check
 		IF @AccountID=0
@@ -51,14 +51,14 @@ BEGIN TRY
 			alter table [COM_Billwise] add FromDocNo nvarchar(200)
 		END
 		
-		select @docType=DocumentType,@IsInv=IsInventory from ADM_DocumentTypes WITH(NOLOCK)
+		select @docType=DocumentType,@IsInv=IsInventory from ADM_DocumentTypes
 		where CostCenterID=@CostCenterID
 		
 		if(@IsInv=1)
 		BEGIN
 		
 		
-			select @amt=isnull(SUM(AdjAmount),0) FROM [COM_Billwise] WITH(NOLOCK)     
+			select @amt=isnull(SUM(AdjAmount),0) FROM [COM_Billwise]     
 			WHERE [DocNo]=@VoucherNo AND DocSeqNo=@DOCSEQNO and AccountID=@AccountID
 			
 			if(@amt is null or @amt=0)
@@ -78,7 +78,7 @@ BEGIN TRY
 				RAISERROR('-504',16,1)
 			END
 					
-			select @DueDate=DueDate,@StatusID=StatusID,@drAcc=InvDocDetailsID from INV_DocDetails WITH(NOLOCK)
+			select @DueDate=DueDate,@StatusID=StatusID,@drAcc=InvDocDetailsID from INV_DocDetails
 			where VoucherNo=@VoucherNo
 			
 			DELETE FROM [COM_Billwise]     
@@ -110,7 +110,7 @@ BEGIN TRY
        , CONVERT(FLOAT,@DocDate)    
        , CONVERT(FLOAT,@DueDate)    
        , 1,@StatusID, X.value('@RefStatusID','int')        
-       , X.value('@AccountID','INT')        
+       , X.value('@AccountID','bigint')        
 		, replace(X.value('@AdjAmount','nvarchar(50)'),',','')
        , X.value('@AdjCurrID','int')    
        , X.value('@AdjExchRT','float')    , replace(X.value('@AmountFC','nvarchar(50)'),',','')
@@ -120,8 +120,8 @@ BEGIN TRY
        , X.value('@RefDocSeqNo','int')    
        , CONVERT(FLOAT,X.value('@RefDocDate','DATETIME'))    
        , CONVERT(FLOAT,X.value('@RefDocDueDate','DATETIME'))    
-       , X.value('@RefBillWiseID','INT')    
-       , X.value('@DiscAccountID','INT')    
+       , X.value('@RefBillWiseID','bigint')    
+       , X.value('@DiscAccountID','bigint')    
        , X.value('@DiscAmount','float')    
        , X.value('@DiscCurrID','int')    
        , X.value('@DiscExchRT','float')    
@@ -142,7 +142,7 @@ BEGIN TRY
 	END
 	ELSE
 	BEGIN
-		select @DueDate=DueDate,@StatusID=StatusID,@crAcc=CreditAccount,@drAcc=DebitAccount,@DOCSEQNO=DOCSEQNO from ACC_DocDetails WITH(NOLOCK)
+		select @DueDate=DueDate,@StatusID=StatusID,@crAcc=CreditAccount,@drAcc=DebitAccount,@DOCSEQNO=DOCSEQNO from ACC_DocDetails
 		where AccDocDetailsID=@DocDetailsID
 		
 		if(@IsCredit=1 and @crAcc<>@AccountID)
@@ -155,7 +155,7 @@ BEGIN TRY
 			RAISERROR('-503',16,1)
 		END
 			
-		select @amt=isnull(SUM(AdjAmount),0) FROM [COM_Billwise] WITH(NOLOCK)     
+		select @amt=isnull(SUM(AdjAmount),0) FROM [COM_Billwise]     
 		WHERE [DocNo]=@VoucherNo AND DocSeqNo=@DOCSEQNO		
 		
 		SELECT   @billamt=sum(CONVERT(float,replace(X.value('@AdjAmount','nvarchar(50)'),',','')))
@@ -195,11 +195,11 @@ BEGIN TRY
        ,[Narration]    
        ,[IsDocPDC]    
        '+@CCCols+')    
-     SELECT '''+convert(nvarchar(max),@VoucherNo)+'''
+     SELECT '+convert(nvarchar(max),@VoucherNo)+'
        , '+convert(nvarchar(max),CONVERT(FLOAT,@DocDate))+'    
-       , '+isnull(convert(nvarchar(max),CONVERT(FLOAT,@DueDate)),'NULL')+'       
+       , '+convert(nvarchar(max),CONVERT(FLOAT,@DueDate))+'        
        , '+convert(nvarchar(max),@DOCSEQNO)+','+convert(nvarchar(max),@StatusID)+', X.value(''@RefStatusID'',''int'')        
-       , X.value(''@AccountID'',''INT'')        
+       , X.value(''@AccountID'',''bigint'')        
 		, replace(X.value(''@AdjAmount'',''nvarchar(50)''),'','','''')
        , X.value(''@AdjCurrID'',''int'')    
        , X.value(''@AdjExchRT'',''float'')    , replace(X.value(''@AmountFC'',''nvarchar(50)''),'','','''')
@@ -209,8 +209,8 @@ BEGIN TRY
        , X.value(''@RefDocSeqNo'',''int'')    
        , CONVERT(FLOAT,X.value(''@RefDocDate'',''DATETIME''))    
        , CONVERT(FLOAT,X.value(''@RefDocDueDate'',''DATETIME''))    
-       , X.value(''@RefBillWiseID'',''INT'')    
-       , X.value(''@DiscAccountID'',''INT'')    
+       , X.value(''@RefBillWiseID'',''bigint'')    
+       , X.value(''@DiscAccountID'',''bigint'')    
        , X.value(''@DiscAmount'',''float'')    
        , X.value(''@DiscCurrID'',''int'')    
        , X.value(''@DiscExchRT'',''float'')    

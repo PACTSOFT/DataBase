@@ -14,7 +14,7 @@ BEGIN TRY
 SET NOCOUNT ON
 
 			--Declaration Section
-			DECLARE @ColumnName varchar(50),@ListViewID int
+			DECLARE @HasAccess bit,@ColumnName varchar(50),@ListViewID int
 			Declare @Table nvarchar(50),@Primarycol varchar(50),@SQL nvarchar(max)
   
 			--Check for manadatory paramters
@@ -22,7 +22,8 @@ SET NOCOUNT ON
 			BEGIN
 				 RAISERROR('-100',16,1)
 			END
-			
+
+
 			--setting Primary Column			
 			if(@CostCenterID=3)
 				SET @Primarycol='ProductID'
@@ -36,6 +37,8 @@ SET NOCOUNT ON
 				SET @Primarycol='ContractTemplID'
 			ELSE IF(@CostCenterID=71)
 				SET @Primarycol='ResourceID'
+			ELSE IF(@CostCenterID=61)
+				SET @Primarycol='VehicleID'
 			ELSE IF(@CostCenterID=65)
 				SET @Primarycol='ContactID'	
 			ELSE IF(@CostCenterID=83)
@@ -70,8 +73,8 @@ SET NOCOUNT ON
 
 
 			--Getting FIRST COLUMN IN LIST
-			SET @ColumnName=(SELECT Top 1 SysColumnName FROM ADM_CostCenterDef A WITH(NOLOCK)
-							JOIN ADM_ListViewColumns B WITH(NOLOCK) ON A.CostCenterColID=B.CostCenterColID 
+			SET @ColumnName=(SELECT Top 1 SysColumnName FROM ADM_CostCenterDef A
+							JOIN ADM_ListViewColumns B ON A.CostCenterColID=B.CostCenterColID 
 							WHERE B.ListViewID= @ListViewID and ColumnType=1
 							ORDER BY B.ColumnOrder)
 
@@ -79,7 +82,7 @@ SET NOCOUNT ON
 			SET @SQL='select '+ @Primarycol+' AS NodeID ,'+@ColumnName+' from '+@Table +'  WITH(NOLOCK) where '+@ColumnName+ ' in ( '''+@Names+''')'
 
 		 	--Execute statement
-			Exec sp_executesql @SQL
+			Exec(@SQL)
 			 
 
  
@@ -99,5 +102,18 @@ BEGIN CATCH
 	END
  SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
+
+
+
+
+
+
+
+
+
+
+
+
+
 GO

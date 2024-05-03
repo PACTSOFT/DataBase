@@ -4,14 +4,14 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetNotifEvent]
 	@ActionType [int],
-	@CostCenterID [int],
-	@NodeID [int],
+	@CostCenterID [bigint],
+	@NodeID [bigint],
 	@CompanyGUID [nvarchar](max),
 	@UserName [nvarchar](50),
 	@UserID [int],
 	@RoleID [int],
-	@SUBCostCenterID [int] = 0,
-	@SUBNodeID [int] = 0
+	@SUBCostCenterID [bigint] = 0,
+	@SUBNodeID [bigint] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN
@@ -19,9 +19,9 @@ BEGIN
 	--Insert Notifications
 	DECLARE @NotifGUID NVARCHAR(50),@Dt FLOAT,@IsEmailBasedOnDim BIT,@IsEmailBasedOnField BIT,@EmailBasedOn NVARCHAR(MAX)
 	,@IsSMSBasedOnDim BIT,@IsSMSBasedOnField BIT,@SMSBasedOn NVARCHAR(MAX),@WID int,@IsInventory bit
-	DECLARE @TblDim AS TABLE(ID INT,NotifType int)
+	DECLARE @TblDim AS TABLE(ID BIGINT,NotifType int)
 	DECLARE @TblField AS TABLE(TXT NVARCHAR(MAX),NotifType int)
-	DECLARE @TblTemplates AS TABLE(ID INT PRIMARY KEY,GUID nvarchar(max),IsApproveButton bit)
+	DECLARE @TblTemplates AS TABLE(ID BIGINT PRIMARY KEY,GUID nvarchar(max),IsApproveButton bit)
 	SET @Dt=CONVERT(FLOAT,GETDATE())
 	SET @NotifGUID=newid()	
 	SET @IsEmailBasedOnDim=0
@@ -29,9 +29,9 @@ BEGIN
 	SET @IsSMSBasedOnDim=0
 	SET @IsSMSBasedOnField=0
 	
-	if @NodeID=0 OR (SELECT COUNT(*) FROM ADM_GlobalPreferences WITH(nolock) WHERE (Name='EnableEmail' or Name='EnableSMS' or Name='EnablePushNotifications') AND Value='Yes')=0
+	if @NodeID=0 OR (SELECT COUNT(*) FROM ADM_GlobalPreferences WITH(nolock) WHERE (Name='EnableEmail' or Name='EnableSMS') AND Value='Yes')=0
 		return
-		
+
 	IF @RoleID=-1
 		SELECT @RoleID=RoleID FROM ADM_UserRoleMap with(nolock) where UserID=@UserID
 	
@@ -149,7 +149,7 @@ BEGIN
 		SELECT distinct N.TemplateID,newid(),IsApproveButton
 		FROM COM_NotifTemplate N WITH(NOLOCK)
 		INNER JOIN COM_NotifTemplateAction NA WITH(NOLOCK) ON NA.TemplateID=N.TemplateID AND NA.ActionID=@ActionType
-		WHERE N.TemplateType=1 AND CostCenterID=@CostCenterID AND StatusID=383
+		WHERE N.TemplateType=1 AND CostCenterID=@CostCenterID --AND StatusID=383
 		AND N.TemplateID IN (SELECT NotificationID FROM COM_NotifTemplateUserMap WITH(NOLOCK)
 			WHERE UserID=@UserID OR RoleID=@RoleID OR GroupID IN (select GID from COM_Groups WITH(nolock) where UserID=@UserID or RoleID=@RoleID))
 		AND (@IsEmailBasedOnDim=0 OR N.IgnoreBasedOn=1 OR N.TemplateID IN (select NotificationID from COM_NotifTemplateUserMap A with(nolock) inner join @TblDim T ON T.ID=A.BasedOnDimension and (T.NotifType=0 or T.NotifType=1)))
@@ -176,8 +176,8 @@ BEGIN
 					select @WID=max(WorkFlowID) from ACC_DocDetails with(nolock) where CostCenterID=@CostCenterID and DocID=@NodeID and WorkFlowID>0 
 
 				if @WID>0
-					insert into COM_EmailApproval(GUID,StatusID,CostCenterID,DocID,WID,CreatedDate,UserID,UserName,RoleID)
-					select GUID,1,@CostCenterID,@NodeID,@WID,@Dt,@UserID,@UserName,@RoleID from @TblTemplates
+					insert into COM_EmailApproval(GUID,StatusID,CostCenterID,DocID,WID,CreatedDate)
+					select GUID,1,@CostCenterID,@NodeID,@WID,@Dt from @TblTemplates
 					where IsApproveButton=1
 						
 				/*if @IsInventory=1
@@ -240,35 +240,5 @@ BEGIN
 			AND (@IsSMSBasedOnField=0 OR N.IgnoreBasedOn=1 OR N.TemplateID IN (select NotificationID from COM_NotifTemplateUserMap A with(nolock) inner join @TblField T ON T.TXT=A.BasedOnField and (T.NotifType=0 or T.NotifType=2)))
 		END
 	END
-
-	--Push Notifications
-	IF (SELECT COUNT(*) FROM ADM_GlobalPreferences WITH(nolock) WHERE Name='EnablePushNotifications' AND Value='Yes')>0
-	BEGIN
-		IF @CompanyGUID='DELETE_EMAIL'
-		BEGIN
-			SELECT N.*
-			FROM COM_NotifTemplate N WITH(NOLOCK)
-			INNER JOIN COM_NotifTemplateAction NA WITH(NOLOCK) ON NA.TemplateID=N.TemplateID AND NA.ActionID=@ActionType
-			WHERE N.TemplateType=3 AND CostCenterID=@CostCenterID AND StatusID=383
-			AND N.TemplateID IN (SELECT NotificationID FROM COM_NotifTemplateUserMap WITH(NOLOCK)
-				WHERE UserID=@UserID OR RoleID=@RoleID OR GroupID IN (select GID from COM_Groups WITH(nolock) where UserID=@UserID or RoleID=@RoleID))
-			AND (@IsSMSBasedOnDim=0 OR N.IgnoreBasedOn=1 OR N.TemplateID IN (select NotificationID from COM_NotifTemplateUserMap A with(nolock) inner join @TblDim T ON T.ID=A.BasedOnDimension and (T.NotifType=0 or T.NotifType=3)))
-			AND (@IsSMSBasedOnField=0 OR N.IgnoreBasedOn=1 OR N.TemplateID IN (select NotificationID from COM_NotifTemplateUserMap A with(nolock) inner join @TblField T ON T.TXT=A.BasedOnField and (T.NotifType=0 or T.NotifType=3)))
-
-		END
-		ELSE
-		BEGIN
-			INSERT INTO COM_SchEvents(CostCenterID,NodeID,TemplateID,StatusID,EventTime,ScheduleID,StartFlag,StartDate,EndDate,CompanyGUID,GUID,CreatedBy,CreatedDate,SUBCostCenterID,SUBNodeID)
-			SELECT @CostCenterID,@NodeID,N.TemplateID,1,@Dt,0,0,@Dt,@Dt,@CompanyGUID,@NotifGUID,@UserName,@Dt,@SUBCostCenterID,@SUBNodeID
-			FROM COM_NotifTemplate N WITH(NOLOCK)
-			INNER JOIN COM_NotifTemplateAction NA WITH(NOLOCK) ON NA.TemplateID=N.TemplateID AND NA.ActionID=@ActionType
-			WHERE N.TemplateType=3 AND CostCenterID=@CostCenterID AND StatusID=383
-			AND N.TemplateID IN (SELECT NotificationID FROM COM_NotifTemplateUserMap WITH(NOLOCK)
-				WHERE UserID=@UserID OR RoleID=@RoleID OR GroupID IN (select GID from COM_Groups WITH(nolock) where UserID=@UserID or RoleID=@RoleID))
-			AND (@IsSMSBasedOnDim=0 OR N.IgnoreBasedOn=1 OR N.TemplateID IN (select NotificationID from COM_NotifTemplateUserMap A with(nolock) inner join @TblDim T ON T.ID=A.BasedOnDimension and (T.NotifType=0 or T.NotifType=3)))
-			AND (@IsSMSBasedOnField=0 OR N.IgnoreBasedOn=1 OR N.TemplateID IN (select NotificationID from COM_NotifTemplateUserMap A with(nolock) inner join @TblField T ON T.TXT=A.BasedOnField and (T.NotifType=0 or T.NotifType=3)))
-		END
-	END
 END
-
 GO

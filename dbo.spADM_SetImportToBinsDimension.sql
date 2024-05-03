@@ -9,7 +9,7 @@ CREATE PROCEDURE [dbo].[spADM_SetImportToBinsDimension]
 	@IsCode [bit] = 0,
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -18,10 +18,10 @@ BEGIN TRY
 SET NOCOUNT ON;
 	--Declaration Section  
 	DECLARE @XML XML,@TSQL NVARCHAR(MAX),@SQL NVARCHAR(MAX),@BinTableName NVARCHAR(20),@TableName NVARCHAR(20),@return_value INT
-	DECLARE @ProductID INT,@BINID INT,@BIN NVARCHAR(300),@I INT,@COUNT INT,@CCID INT,@DimCCID INT,
-	@DimensionName NVARCHAR(300),@DimNodeID INT,@Capacity FLOAT,@IsDefault BIT,@StatusID INT
+	DECLARE @ProductID bigint,@BINID INT,@BIN NVARCHAR(300),@I INT,@COUNT INT,@CCID BIGINT,@DimCCID bigint,
+	@DimensionName NVARCHAR(300),@DimNodeID bigint,@Capacity FLOAT,@IsDefault BIT
 	
-	DECLARE @TABLE TABLE(ID INT IDENTITY(1,1),BIN NVARCHAR(300),Dimension NVARCHAR(300),Capacity FLOAT,IsDefault BIT,StatusID INT)
+	DECLARE @TABLE TABLE(ID INT IDENTITY(1,1),BIN NVARCHAR(300),Dimension NVARCHAR(300),Capacity FLOAT,IsDefault BIT)
 	
 
 	IF (@BinXML IS NOT NULL AND @BinXML <> '')
@@ -48,16 +48,15 @@ SET NOCOUNT ON;
 			
 			SET @XML=@BinXML	 
 			INSERT INTO @TABLE
-			SELECT  X.value('@Bin','NVARCHAR(300)'),X.value('@DimesionWiseBin','NVARCHAR(300)') , X.value('@Capacity','FLOAT') , X.value('@IsDefault','BIT'), X.value('@StatusID','INT')
+			SELECT  X.value('@Bin','NVARCHAR(300)'),X.value('@DimesionWiseBin','NVARCHAR(300)') , X.value('@Capacity','FLOAT') , X.value('@IsDefault','BIT')
 			from @XML.nodes('/XML/Row') as Data(X)
 		 
 			SELECT @COUNT=COUNT(*),@I=1 FROM @TABLE
 
 			WHILE @I<=@COUNT
 			BEGIN
-				SELECT * FROM @TABLE
-				SELECT @BIN=BIN,@DimensionName=Dimension,@Capacity=Capacity,@IsDefault=isnull(IsDefault,0),@StatusID=isnull(StatusID,0)  FROM @TABLE where id=@I 
 				
+				SELECT @BIN=BIN,@DimensionName=Dimension,@Capacity=Capacity,@IsDefault=isnull(IsDefault,0)  FROM @TABLE where id=@I 
 				set @SQL=''	
 				set @TSQL=''
 				SET @TSQL=' @BINID nvarchar(100) OUTPUT'     
@@ -93,9 +92,7 @@ SET NOCOUNT ON;
 							SET @SQL=' select  @DimNodeID=isnull(NodeID,0)  from '+@TableName+' with(nolock) WHERE Name='''+@DimensionName+'''  '
 						ELSE
 							SET @SQL=' select  @DimNodeID=isnull(NodeID,0)  from '+@TableName+' with(nolock) WHERE Code='''+@DimensionName+'''  '
-						--SELECT  @SQL '1',@IsCode '2'
-						SELECT @DimensionName DimensionName
-						PRINT(@SQL)
+						SELECT  @SQL,@IsCode
 						EXEC sp_executesql @SQL, @TSQL, @DimNodeID OUTPUT    
 						IF @DimNodeID=0 OR @DimNodeID IS NULL
 						BEGIN 
@@ -118,13 +115,13 @@ SET NOCOUNT ON;
 				IF @DimNodeID>0 AND @DimCCID>0 and NOT EXISTS(SELECT BinNodeID FROM [INV_ProductBins] with(nolock) WHERE CostcenterID=3 AND NodeID=@ProductID AND
 					BinDimension=@CCID AND BinNodeID=@BINID AND DimCCID=@DimCCID and DimNodeID=@DimNodeID)
 				BEGIN
-					INSERT INTO [INV_ProductBins](CostcenterID,NodeID,Location,Division,BinDimension,BinNodeID,IsDefault,[CreatedBy],[CreatedDate],DIMCCID,DIMNODEID,Capacity,StatusID)  
-					SELECT 3,@ProductID,1,1,@CCID,@BINID,@IsDefault,@UserName,CONVERT(FLOAT,GETDATE()),@DimCCID,@DimNodeID,@Capacity,@StatusID	
+					INSERT INTO [INV_ProductBins](CostcenterID,NodeID,Location,Division,BinDimension,BinNodeID,IsDefault,[CreatedBy],[CreatedDate],DIMCCID,DIMNODEID,Capacity)  
+					SELECT 3,@ProductID,1,1,@CCID,@BINID,@IsDefault,@UserName,CONVERT(FLOAT,GETDATE()),@DimCCID,@DimNodeID,@Capacity	
 				END
 				else IF NOT EXISTS(SELECT BinNodeID FROM [INV_ProductBins] with(nolock) WHERE CostcenterID=3 AND NodeID=@ProductID AND
 					BinDimension=@CCID AND BinNodeID=@BINID)
-					INSERT INTO [INV_ProductBins](CostcenterID,NodeID   ,Location  ,Division,BinDimension,BinNodeID,IsDefault,[CreatedBy],[CreatedDate],Capacity,StatusID)  
-					SELECT 3,@ProductID,1,1,@CCID,@BINID,@IsDefault,@UserName,CONVERT(FLOAT,GETDATE()),@Capacity,@StatusID
+					INSERT INTO [INV_ProductBins](CostcenterID,NodeID   ,Location  ,Division,BinDimension,BinNodeID,IsDefault,[CreatedBy],[CreatedDate],Capacity)  
+					SELECT 3,@ProductID,1,1,@CCID,@BINID,@IsDefault,@UserName,CONVERT(FLOAT,GETDATE()),@Capacity		
 				
 				SET @BINID=0
 				SET @BIN=''	
@@ -157,4 +154,7 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
+
+
 GO

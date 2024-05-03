@@ -3,14 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_SetUser]
-	@SaveUserID [int] = 0,
+	@SaveUserID [bigint] = 0,
 	@RoleId [int],
 	@SaveUserName [nvarchar](50),
 	@Pwd [nvarchar](50),
 	@Status [int],
 	@DefLanguage [int],
-	@IsOffline [bit],
-	@TwoStepVerMode [nvarchar](50) = NULL,
 	@Query [nvarchar](max),
 	@CompanyIndex [int],
 	@CompanyUserXML [nvarchar](max),
@@ -21,12 +19,12 @@ CREATE PROCEDURE [dbo].[spADM_SetUser]
 	@AttachmentsXML [nvarchar](max) = null,
 	@RolesXML [nvarchar](max) = null,
 	@StatusXML [nvarchar](max) = null,
-	@LocationID [int] = 0,
-	@DivisionID [int] = 0,
+	@LocationID [bigint] = 0,
+	@DivisionID [bigint] = 0,
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@LoginRoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -36,9 +34,9 @@ SET NOCOUNT ON
 BEGIN TRY
 
 	--Declaration Section
-	DECLARE @TempGuid NVARCHAR(50),@HasAccess BIT,@ActionType INT,@IsEdit bit,@HistoryStatus NVARCHAR(300),@PrevRoleID INT
+	DECLARE @TempGuid NVARCHAR(50),@HasAccess BIT,@ActionType INT,@IsEdit bit,@HistoryStatus NVARCHAR(300),@PrevRoleID bigint
 	DECLARE @XML XML, @RXML XML ,@Dt float,@PwdModifiedon float
-	DECLARE @2CUserID INT, @2CCOMPANYID INT 
+	DECLARE @2CUserID BIGINT, @2CCOMPANYID BIGINT 
 	DECLARE @UPDUSR  NVARCHAR(MAX) , @UPDUSRSRV NVARCHAR(MAX) 
 	--SP Required Parameters Check
 	IF @CompanyGUID IS NULL OR @CompanyGUID=''
@@ -80,10 +78,10 @@ BEGIN TRY
 			RAISERROR('-403',16,1)
 		END
 	
-		INSERT INTO ADM_Users(UserName,[Password],StatusID,DefaultLanguage,IsOffline,IsPassEncr,[GUID],
-				CreatedBy,CreatedDate,DefaultScreenXML,LocationID,DivisionID,PwdModifiedon,TwoStepVerMode)
-		VALUES(@SaveUserName,@Pwd,@Status,@DefLanguage,@IsOffline,1,NEWID(),
-				@UserName,@Dt,@DefaultScreenXML,@LocationID,@DivisionID,@PwdModifiedon,@TwoStepVerMode)
+		INSERT INTO ADM_Users(UserName,[Password],StatusID,DefaultLanguage,IsPassEncr,[GUID],
+				CreatedBy,CreatedDate,DefaultScreenXML,LocationID,DivisionID,PwdModifiedon)
+		VALUES(@SaveUserName,@Pwd,@Status,@DefLanguage,1,NEWID(),
+				@UserName,@Dt,@DefaultScreenXML,@LocationID,@DivisionID,@PwdModifiedon)
 
 		--To get inserted record primary key
 		SET @SaveUserID=SCOPE_IDENTITY()
@@ -168,7 +166,6 @@ BEGIN TRY
 			ModifiedBy=@UserName,PwdModifiedon=@PwdModifiedon,
 			ModifiedDate=@Dt,DefaultScreenXML=@DefaultScreenXML
 			,LocationID=@LocationID,DivisionID=@DivisionID
-			,IsOffline=@IsOffline,TwoStepVerMode=@TwoStepVerMode
 		WHERE  USERNAME = @USRNM
 		
 		select @PrevRoleID=RoleID from ADM_UserRoleMap with(nolock) where UserID=@SaveUserID
@@ -253,7 +250,7 @@ BEGIN TRY
 		ModifiedDate=@Dt
 		FROM ADM_UserRoleMap C   
 		INNER JOIN @XML.nodes('/XML/Row') as Data(X)    
-		ON convert(INT,X.value('@MapID','INT'))=C.UserRoleMapID  
+		ON convert(bigint,X.value('@MapID','bigint'))=C.UserRoleMapID  
 		WHERE X.value('@Action','NVARCHAR(500)')='EDIT'
 	END
 	
@@ -275,7 +272,7 @@ BEGIN TRY
 		ModifiedDate=@Dt
 		FROM [COM_CostCenterStatusMap] C WITH(NOLOCK)  
 		INNER JOIN @XML.nodes('/XML/Row') as Data(X)    
-		ON convert(INT,X.value('@MapID','INT'))=C.StatusMapID  
+		ON convert(bigint,X.value('@MapID','bigint'))=C.StatusMapID  
 		WHERE X.value('@Action','NVARCHAR(500)')='EDIT'
 	END
 	
@@ -284,7 +281,7 @@ BEGIN TRY
 	select UserID,UserName,Password,StatusID,DefaultLanguage,IsUserDeleted,FirstName,MiddleName,LastName
       ,Address1,Address2,Address3,City,State,Zip,Country,Phone1,Phone2,Fax,Email1,Email2,Website,GUID
       ,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate
-      ,Email1Password,Email2Password,DefaultScreenXML,IsPassEncr,CalendarXML,@HistoryStatus,TwoStepVerMode from ADM_Users with(nolock) WHERE UserID=@SaveUserID
+      ,Email1Password,Email2Password,DefaultScreenXML,IsPassEncr,CalendarXML,@HistoryStatus from ADM_Users with(nolock) WHERE UserID=@SaveUserID
 	
 	--Audit User Role
 	if @PrevRoleID is null or not exists (select RoleID from ADM_UserRoleMap with(nolock) WHERE UserID=@SaveUserID and RoleID=@PrevRoleID)
@@ -306,11 +303,11 @@ COMMIT TRANSACTION
 	IF @IsEdit=1
 	BEGIN
 		--changes made on dec 20 2012 by hafeez,to update password in other assinged companies
-		DECLARE @TABLE TABLE(ID INT IDENTITY(1,1),COMPANY INT)
+		DECLARE @TABLE TABLE(ID INT IDENTITY(1,1),COMPANY BIGINT)
 		INSERT INTO @TABLE
 		SELECT DISTINCT COMPANYID FROM [PACT2C].dbo.ADM_UserCompanyMap with(nolock) WHERE USERID=@2CUserID
 		AND CompanyID<>@CompanyIndex
-		DECLARE @COUNT INT,@I INT,@COMPANY NVARCHAR(200),@COMINDEX INT,@SQL NVARCHAR(MAX)
+		DECLARE @COUNT INT,@I INT,@COMPANY NVARCHAR(200),@COMINDEX BIGINT,@SQL NVARCHAR(MAX)
 		SELECT @COUNT=COUNT(*),@I=1 FROM @TABLE
 		--SELECT * FROM @TABLE
 		WHILE @I<=@COUNT

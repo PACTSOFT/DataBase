@@ -3,14 +3,14 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_SetPoleDisplayDetails]
-	@PoleID [int] = 0,
-	@DocumentID [int],
-	@PortID [int],
+	@PoleID [bigint] = 0,
+	@DocumentID [bigint],
+	@PortID [bigint],
 	@PortName [nvarchar](100),
 	@DisplayName [nvarchar](max),
-	@NoOfLines [int],
-	@CharactersPerLine [int],
-	@CashDrawerPort [int],
+	@NoOfLines [bigint],
+	@CharactersPerLine [bigint],
+	@CashDrawerPort [bigint],
 	@CashDrawerPortName [nvarchar](100),
 	@CashDrawerCommand [nvarchar](100),
 	@IdleMessage [nvarchar](max),
@@ -18,8 +18,8 @@ CREATE PROCEDURE [dbo].[spADM_SetPoleDisplayDetails]
 	@BillPay [nvarchar](max),
 	@OnExitXML [nvarchar](max),
 	@Registers [nvarchar](max),
-	@CashDrawPrintID [int],
-	@UserID [int],
+	@CashDrawPrintID [bigint],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -29,21 +29,13 @@ SET NOCOUNT ON
 
 	declare @DT float,@XML XML
 	
-	
 	Set @DT=convert(float,getdate())
 	if(@PoleID=0)
 	BEGIN
-		if exists(select * from ADM_PoleDisplay WITH(NOLOCK) where DisplayName=@DisplayName)
-		begin
-			RAISERROR('-112',16,1)
-			
-		end
+		 insert into ADM_PoleDisplay(DocumentID,PortID,PortName,DisplayID,DisplayName,NoOfLines,CharactersPerLine,CashDrawerPort,CashDrawerName,CashDrawerCommand,CashDrawPrintID,IdleMessageXML,ProductScanXML,BillPayXML,OnExitXML,GUID,Createdby,CreatedDate,ModifiedBy,ModifiedDate)
+				values(@DocumentID,@PortID,@PortName,0,@DisplayName,@NoOfLines,@CharactersPerLine,@CashDrawerPort,@CashDrawerPortName,@CashDrawerCommand,@CashDrawPrintID,@IdleMessage,@ProductScan,@BillPay,@OnExitXML,newid(),@UserID,@DT,@UserID,@DT)
 		
-		insert into ADM_PoleDisplay(DocumentID,PortID,PortName,DisplayID,DisplayName,NoOfLines,CharactersPerLine,CashDrawerPort,CashDrawerName,CashDrawerCommand,CashDrawPrintID,IdleMessageXML,ProductScanXML,BillPayXML,OnExitXML,GUID,Createdby,CreatedDate,ModifiedBy,ModifiedDate)
-					values(@DocumentID,@PortID,@PortName,0,@DisplayName,@NoOfLines,@CharactersPerLine,@CashDrawerPort,@CashDrawerPortName,@CashDrawerCommand,@CashDrawPrintID,@IdleMessage,@ProductScan,@BillPay,@OnExitXML,newid(),@UserID,@DT,@UserID,@DT)
-		
-		set @PoleID=Scope_Identity()
-		
+	set @PoleID=Scope_Identity()
 	END
 	ELSE
 	BEGIN
@@ -54,16 +46,12 @@ SET NOCOUNT ON
 	END
 	set @XML=@Registers
 	
-	if exists(select * from ADM_PoleDisplayRegisters WITH(NOLOCK) where PoleID=@PoleID)
+	if exists(select * from ADM_PoleDisplayRegisters where PoleID=@PoleID)
 	begin
 		delete from ADM_PoleDisplayRegisters where PoleID=@PoleID
 	end
-
-	if(@PoleID <> 0)
-	BEGIN
-		insert into ADM_PoleDisplayRegisters(PoleID,NodeID,CostCenterID,GUID,Createdby,CreatedDate,ModifiedBy,ModifiedDate)
-				select @PoleID,X.value('@Registers','INT'),X.value('@CostCenterID','INT'),newid(),@UserID,@DT,@UserID,@DT from @XML.nodes('Registers/Rows') as Data(X)
-	END
+	insert into ADM_PoleDisplayRegisters(PoleID,NodeID,CostCenterID,GUID,Createdby,CreatedDate,ModifiedBy,ModifiedDate)
+				select @PoleID,X.value('@Registers','bigint'),X.value('@CostCenterID','bigint'),newid(),@UserID,@DT,@UserID,@DT from @XML.nodes('Registers/Rows') as Data(X)
 	
 	
 COMMIT TRANSACTION  
@@ -85,5 +73,7 @@ SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) WHERE ErrorN
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH
+END CATCH  
+
+
 GO

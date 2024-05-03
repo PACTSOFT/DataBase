@@ -25,9 +25,6 @@ SET NOCOUNT ON;
 		,@CostCenterID,X.value('@SysColumnName','NVARCHAR(32)'),ISNULL(X.value('@IsCalc','BIT'),0),ISNULL(X.value('@Reference','INT'),0),X.value('@DefColumnName','NVARCHAR(MAX)')   
 		FROM @XML.nodes('/XML/Row') as Data(X)  
 		
-		IF @GSTType<>'UBL'
-			SET @GSTType='GST'
-			
 		IF EXISTS (SELECT * FROM INV_GSTMapping WITH(NOLOCK) WHERE CostCenterID=@CostCenterID)
 		BEGIN
 			IF EXISTS (SELECT * FROM INV_GSTMapping WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND Reference=92)
@@ -37,19 +34,19 @@ SET NOCOUNT ON;
 			IF EXISTS (SELECT * FROM INV_GSTMapping WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND Reference=94)
 				UPDATE COM_DocumentPreferences SET PrefValue='True' WHERE CostCenterID=@CostCenterID AND PrefName='ShippingAddress' 
 			 
-			IF NOT EXISTS (SELECT * FROM [ADM_FeatureAction] WITH(NOLOCK) WHERE [FeatureID]=@CostCenterID AND [Name]=@GSTType) 
+			IF NOT EXISTS (SELECT * FROM [ADM_FeatureAction] WITH(NOLOCK) WHERE [FeatureID]=@CostCenterID AND [Name]='GST' ) 
 			BEGIN
-				DECLARE @RID INT,@FeatureActionID INT
+				DECLARE @RID BIGINT,@FeatureActionID BIGINT
 				SELECT @RID=MAX(ResourceID)+1 FROM Com_LanguageResources WITH(NOLOCK)
 
 				INSERT INTO [Com_LanguageResources] ([ResourceID],[ResourceName],[LanguageID],[LanguageName],[ResourceData],[GUID],[Description],[CreatedBy],[CreatedDate],[FEATURE])
-				VALUES(@RID,@GSTType,1,'English',@GSTType,'Documents',NULL,'1',4.000000000000000e+001,'Document')
+				VALUES(@RID,'GST',1,'English','GST','Documents',NULL,'1',4.000000000000000e+001,'Document')
 
 				INSERT INTO [Com_LanguageResources] ([ResourceID],[ResourceName],[LanguageID],[LanguageName],[ResourceData],[GUID],[Description],[CreatedBy],[CreatedDate],[FEATURE])
-				VALUES(@RID,@GSTType,2,'Arabic',@GSTType,'Documents',NULL,'1',4.000000000000000e+001,'Document')
+				VALUES(@RID,'GST',2,'Arabic','GST','Documents',NULL,'1',4.000000000000000e+001,'Document')
 			
 				INSERT INTO [ADM_FeatureAction] ([Name],[ResourceID],[FeatureID],[FeatureActionTypeID],[ApplicationID],[GridShortCut],[Description],[Status],[CreatedDate],[CreatedBy])
-				SELECT @GSTType,@RID,@CostCenterID,511,1,NULL,NULL,1,4003,'ADMIN'
+				SELECT 'GST',@RID,@CostCenterID,511,1,NULL,NULL,1,4003,'ADMIN'
 
 				SET @FeatureActionID=SCOPE_IDENTITY()
 
@@ -59,15 +56,15 @@ SET NOCOUNT ON;
         END
         ELSE 
         BEGIN
-			IF EXISTS (SELECT * FROM [ADM_FeatureAction] WITH(NOLOCK) WHERE [FeatureID]=@CostCenterID AND [Name]=@GSTType )
+			IF EXISTS (SELECT * FROM [ADM_FeatureAction] WITH(NOLOCK) WHERE [FeatureID]=@CostCenterID AND [Name]='GST' )
 			BEGIN
 				DELETE FROM [Com_LanguageResources] 
-				WHERE [ResourceID] IN (SELECT ResourceID FROM [ADM_FeatureAction] WITH(NOLOCK) WHERE [FeatureID]=@CostCenterID AND [Name]=@GSTType )
+				WHERE [ResourceID] IN (SELECT ResourceID FROM [ADM_FeatureAction] WITH(NOLOCK) WHERE [FeatureID]=@CostCenterID AND [Name]='GST' )
 
 				DELETE FROM [ADM_FeatureActionRoleMap] 
-				WHERE [FeatureActionID]=(SELECT FeatureActionID FROM [ADM_FeatureAction] WITH(NOLOCK) WHERE [FeatureID]=@CostCenterID AND [Name]=@GSTType )
+				WHERE [FeatureActionID]=(SELECT FeatureActionID FROM [ADM_FeatureAction] WITH(NOLOCK) WHERE [FeatureID]=@CostCenterID AND [Name]='GST' )
 
-				DELETE FROM [ADM_FeatureAction] WHERE [FeatureID]=@CostCenterID AND [Name]=@GSTType
+				DELETE FROM [ADM_FeatureAction] WHERE [FeatureID]=@CostCenterID AND [Name]='GST'
 			END
         END
 	END

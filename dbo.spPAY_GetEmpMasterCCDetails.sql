@@ -5,9 +5,8 @@ GO
 CREATE PROCEDURE [dbo].[spPAY_GetEmpMasterCCDetails]
 	@AsOnDate [datetime],
 	@Where [nvarchar](max),
-	@Flag [int] = 0,
-	@RoleID [int],
-	@UserID [int],
+	@RoleID [bigint],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -75,31 +74,12 @@ BEGIN
 END
 
 SET @SQL=@SelCols+@From
-IF (ISNULL(@Flag,0)=0)
-BEGIN
-	SET @SQL=@SQL+' WHERE a.IsGroup=0 AND a.StatusID=250 ) AS EMP '
-END
-ELSE IF (ISNULL(@Flag,0)=1)-- Payslip
-BEGIN
-	SET @SQL=@SQL+' WHERE a.IsGroup=0 ) AS EMP '
-END
+SET @SQL=@SQL+' WHERE a.IsGroup=0 AND a.StatusID=250 ) AS EMP '
 
 IF(LEN(@CCNameJOIN)>0)
 	SET @SQL=@SQL+@CCNameJOIN 
 
 SET @SQL=@SQL+' WHERE 1=1  '
-
-IF (ISNULL(@Flag,0)=1)-- Payslip
-BEGIN
-	SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,261,672) --Do not show sub ordinates Payslips
-	IF @HasAccess=1  
-	BEGIN   
-		DECLARE @EmpNodeID INT
-		Select @EmpNodeID=NodeID FROM COM_CC50051 WITH(NOLOCK) WHERE IsGroup=0 AND LoginUserID=(SELECT USERNAME FROM ADM_Users WHERE UserID=@UserID)
-		IF(ISNULL(@EmpNodeID,0)>0)
-			SET @SQL=@SQL+' AND EmpSeqNo IN('+CONVERT(nvarchar,@EmpNodeID)+')'
-	END 
-END
 
 IF(LEN(@Where)>0)
 BEGIN
@@ -108,7 +88,7 @@ END
 
 
 PRINT @SQL
-EXEC sp_executesql @SQL
+EXEC(@SQL)
 	
 	
 SET NOCOUNT OFF;  
@@ -128,4 +108,5 @@ BEGIN CATCH
 SET NOCOUNT OFF    
 RETURN -999     
 END CATCH
+
 GO

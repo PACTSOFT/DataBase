@@ -56,12 +56,13 @@ SET NOCOUNT ON;
 			end   
 		--END 
 	 
-		DELETE FROM COM_CCCCDATA WHERE CostCenterID=89 and NodeID in (select OpportunityID from CRM_Opportunities with(nolock)  WHERE lft >= @lft AND rgt <= @rgt)
+		DELETE FROM COM_CCCCDATA WHERE CostCenterID=89 and NodeID in (select OpportunityID from CRM_Opportunities  WHERE lft >= @lft AND rgt <= @rgt)
 		
-		IF(EXISTS(SELECT VALUE FROM COM_COSTCENTERPREFERENCES with(nolock) WHERE COSTCENTERID=89 AND NAME='LinkDimension'))
+		IF(EXISTS(SELECT VALUE FROM COM_COSTCENTERPREFERENCES WHERE COSTCENTERID=89 AND NAME='OppLinkDimension'))
 		BEGIN
-			DECLARE @DIMID BIGINT=0,@CCID BIGINT
-			SELECT @DIMID=VALUE FROM COM_COSTCENTERPREFERENCES with(nolock) WHERE COSTCENTERID=89 AND NAME='LinkDimension'
+			DECLARE @DIMID BIGINT,@CCID BIGINT
+			SET @DIMID=0
+			SELECT @DIMID=VALUE FROM COM_COSTCENTERPREFERENCES WHERE COSTCENTERID=89 AND NAME='OppLinkDimension'
 			IF(@DIMID>=50000)
 			BEGIN 
 				declare @d int, @cnt int
@@ -83,7 +84,7 @@ SET NOCOUNT ON;
 		
 		--Delete from exteneded table
 		DELETE FROM CRM_OpportunitiesExtended WHERE OpportunityID in
-		(select OpportunityID from CRM_Opportunities with(nolock)  WHERE lft >= @lft AND rgt <= @rgt)
+		(select OpportunityID from CRM_Opportunities  WHERE lft >= @lft AND rgt <= @rgt)
 		 
 		--Delete from main table
 		DELETE FROM CRM_Opportunities WHERE lft >= @lft AND rgt <= @rgt
@@ -91,10 +92,10 @@ SET NOCOUNT ON;
 		SET @RowsDeleted=@@rowcount
 
 		DELETE FROM crm_assignment WHERE CCID=89 AND CCNODEID IN
-		(select OpportunityID from CRM_Opportunities with(nolock)  WHERE lft >= @lft AND rgt <= @rgt)
+		(select OpportunityID from CRM_Opportunities  WHERE lft >= @lft AND rgt <= @rgt)
 		
 		DELETE FROM CRM_ACTIVITIES WHERE CostCenterID=89 AND NodeID IN 
-		(select OpportunityID from CRM_Opportunities with(nolock)  WHERE lft >= @lft AND rgt <= @rgt)
+		(select OpportunityID from CRM_Opportunities  WHERE lft >= @lft AND rgt <= @rgt)
 		 
 		--Delete from CostCenter Mapping
 		DELETE FROM COM_CCCCDATA WHERE CostCenterID=89 and NodeID=@OpportunityID
@@ -135,5 +136,6 @@ BEGIN CATCH
  ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH 
+ 
 GO

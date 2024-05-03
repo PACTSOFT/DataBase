@@ -3,15 +3,15 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_CheckAccCreditDetails]
-	@AccountID [int] = 0,
+	@AccountID [bigint] = 0,
 	@DocDate [datetime],
-	@DocID [int] = 0,
-	@CostCenterID [int] = 0,
+	@DocID [bigint] = 0,
+	@CostCenterID [bigint] = 0,
 	@Amt [float],
-	@LocationID [int] = 0,
-	@DivisionID [int] = 0,
-	@DimensionID [int] = 0,
-	@UserID [int],
+	@LocationID [bigint] = 0,
+	@DivisionID [bigint] = 0,
+	@DimensionID [bigint] = 0,
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -19,8 +19,8 @@ BEGIN TRY
 SET NOCOUNT ON
 	
 	--Declaration Section
-	DECLARE @DebitAmount FLOAT, @CreditAmount FLOAT, @CreditLimt FLOAT, @DebitLimt FLOAT, @Bal FLOAT, @LimitExceeds INT, @IsInv int,@crDays int,@drDays int,@CNT INT,@DimNodeID INT
-	DECLARE @CCWhere nvarchar(max),@includepdc nvarchar(10),@includeunposted nvarchar(10),@AccWhere nvarchar(max),@currID INT,@exrt float,@isCurrWise bit,@FeatureID INT,@dtype int
+	DECLARE @DebitAmount FLOAT, @CreditAmount FLOAT, @CreditLimt FLOAT, @DebitLimt FLOAT, @Bal FLOAT, @LimitExceeds INT, @IsInv int,@crDays int,@drDays int,@CNT BIGINT,@DimNodeID BIGINT
+	DECLARE @CCWhere nvarchar(max),@includepdc nvarchar(10),@includeunposted nvarchar(10),@AccWhere nvarchar(max),@currID BIGINT,@exrt float,@isCurrWise bit,@FeatureID BIGINT,@dtype int
 	SET @LimitExceeds=0
 	SET @DebitAmount=0
 	SET @CreditAmount=0
@@ -57,7 +57,7 @@ SET NOCOUNT ON
 		set @AccWhere=@AccWhere+' and StatusID=369'
 			
 		
-	declare @LocWise bit,@DivWise bit,@SQL nvarchar(max),@DebitSQL nvarchar(max),@CreditSQL nvarchar(max),@DimWise INT
+	declare @LocWise bit,@DivWise bit,@SQL nvarchar(max),@DebitSQL nvarchar(max),@CreditSQL nvarchar(max),@DimWise BIGINT
 	if (select count(value) from adm_globalpreferences WITH(NOLOCK)
 		where name in('EnableLocationWise','LW CreditDebit') and value='true')=2
 		set @LocWise=1
@@ -70,7 +70,7 @@ SET NOCOUNT ON
 	else
 		set @DivWise=0
 		
-	SELECT @DimWise=ISNULL(CONVERT(INT,value),0) from adm_globalpreferences WITH(NOLOCK) where name='DimWiseCreditDebit'
+	SELECT @DimWise=ISNULL(CONVERT(BIGINT,value),0) from adm_globalpreferences WITH(NOLOCK) where name='DimWiseCreditDebit'
 		
 	set @CCWhere=''
 	--Credit Limit for the account
@@ -110,7 +110,7 @@ SET NOCOUNT ON
 	BEGIN
 			set @FeatureID=0
 			select @FeatureID=isnull(value,0) from ADM_GlobalPreferences WITH(NOLOCK) 
-			where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(INT,value)>50000
+			where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>50000
 			
 			if(@FeatureID=50002 and @LocationID>0)
 				select @DimNodeID=@LocationID
@@ -143,8 +143,8 @@ SET NOCOUNT ON
 	if (@Amt<0 and @CreditLimt>0) or (@Amt>0 and @DebitLimt>0)
 	begin
 
-		SET @SQL='DECLARE @AccountID INT,@DocDate FLOAT	
-		declare @tab table(id INT)
+		SET @SQL='DECLARE @AccountID BIGINT,@DocDate FLOAT	
+		declare @tab table(id bigint)
 		insert into @tab
 		select InvDocDetailsID from Inv_DocDetails WITH(NOLOCK) where DOCID='+CONVERT(NVARCHAR,@DocID)+'
 		SET @DocDate='+CONVERT(NVARCHAR,CONVERT(FLOAT,@DocDate)) 
@@ -205,29 +205,29 @@ SET NOCOUNT ON
 	else
 		select 0
 	
-	set @AccWhere=''	
+	set @CCWhere=''	
 	if(@Amt>0)
 	BEGIN
 	 if(@drDays>0)
-		set @AccWhere=' >0 and DOCDueDate is not null and convert(Datetime,DOCDueDate)<'''+CONVERT(nvarchar,@DocDate)+''''
+		set @CCWhere=' >0 and DOCDueDate is not null and convert(Datetime,DOCDueDate)<'''+CONVERT(nvarchar,@DocDate)+''''+@CCWhere
 	ELSE
-		set @AccWhere=' >0 and DOCDueDate is not null and DocDate<>DOCDueDate and convert(Datetime,DOCDueDate)<'''+CONVERT(nvarchar,@DocDate)+''''	
+		set @CCWhere=' >0 and DOCDueDate is not null and DocDate<>DOCDueDate and convert(Datetime,DOCDueDate)<'''+CONVERT(nvarchar,@DocDate)+''''+@CCWhere	
 	END	
 	else if(@Amt<0)
 	BEGIN
 		if(@crDays>0)
-			set @AccWhere=' <0 and DOCDueDate is not null and  convert(Datetime,DOCDueDate)<'''+CONVERT(nvarchar,@DocDate)+''''	
+			set @CCWhere=' <0 and DOCDueDate is not null and  convert(Datetime,DOCDueDate)<'''+CONVERT(nvarchar,@DocDate)+''''+@CCWhere	
 		else
-			set @AccWhere=' <0 and DOCDueDate is not null and  DocDate<>DOCDueDate and convert(Datetime,DOCDueDate)<'''+CONVERT(nvarchar,@DocDate)+''''
+			set @CCWhere=' <0 and DOCDueDate is not null and  DocDate<>DOCDueDate and convert(Datetime,DOCDueDate)<'''+CONVERT(nvarchar,@DocDate)+''''+@CCWhere	
 	END		
 	
-	if(@AccWhere<>'')
+	if(@CCWhere<>'')
 	BEGIN
 		SET @SQL='SELECT DocNo FROM COM_Billwise B  with(nolock)				
- 		WHERE statusid =369 and  AccountID='+CONVERT(NVARCHAR,@AccountID)+' and AdjAmount '+@AccWhere+REPLACE(@CCWhere,'DCC.','B.')+'	
-		Group By AccountID,B.DocSeqNo,B.DocNo,DocDate
-		having (abs (abs(sum(AdjAmount)) -(
-		ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ with(nolock) WHERE  SQ.AccountID= '+CONVERT(NVARCHAR,@AccountID)+' and   SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) 
+		 		WHERE statusid =369 and  AccountID='+CONVERT(NVARCHAR,@AccountID)+' and AdjAmount '+@CCWhere+'			 	
+				Group By AccountID,B.DocSeqNo,B.DocNo,DocDate
+				having (abs (abs(sum(AdjAmount)) -(
+				ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ with(nolock) WHERE  SQ.AccountID= '+CONVERT(NVARCHAR,@AccountID)+' and   SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo),0) 
 				+ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_Billwise SQ with(nolock) WHERE  SQ.AccountID='+CONVERT(NVARCHAR,@AccountID)+' and  SQ.DocNo=B.DocNo AND SQ.DocSeqNo=B.DocSeqNo AND IsNewReference=0),0))))>0.00001'
 	
 		print @SQL
@@ -252,5 +252,5 @@ BEGIN CATCH
  
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
 GO

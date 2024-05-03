@@ -5,7 +5,7 @@ GO
 CREATE PROCEDURE [dbo].[spADM_GetUserRoles]
 	@LocationWhere [nvarchar](max) = null,
 	@DivisionWhere [nvarchar](max) = null,
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -24,7 +24,7 @@ SET NOCOUNT ON;
  --Get Role Information.
  if(@UserID=1) 
  BEGIN 
-	SET @SQL='SELECT * FROM ADM_PRoles R WITH(NOLOCK) WHERE StatusID=434 AND IsRoleDeleted<>1'
+	SET @SQL='SELECT * FROM ADM_PRoles R WITH(NOLOCK) WHERE StatusID=434'
 	if @Where!=''
 		SET @SQL=@SQL+@Where
 	SET @SQL=@SQL+' ORDER BY Name'
@@ -81,5 +81,9 @@ SET NOCOUNT OFF
 RETURN -999       
 END CATCH 
 
-
+----spADM_GetUserRoles 
+-- NULL
+-- ,NULL
+-- ,1
+-- ,1
 GO

@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SearchProductCatalog]
-	@GridViewID [int],
+	@GridViewID [bigint],
 	@WHere [nvarchar](max),
 	@QtyWhere [nvarchar](max),
 	@DocDate [datetime],
@@ -11,20 +11,18 @@ CREATE PROCEDURE [dbo].[spCOM_SearchProductCatalog]
 	@fulltextWhere [nvarchar](max),
 	@Fultextjoin [nvarchar](max),
 	@OtherDimSelect [nvarchar](max),
-	@UomSelect [nvarchar](max),
-	@LocationWhere [nvarchar](max) = NULL,
 	@IsPrev [bit],
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY
 SET NOCOUNT ON;    
 
-	declare @sql nvarchar(max) ,@strColumns nvarchar(max),@STRJOIN nvarchar(max),@I int, @Cnt int,@CostCenterColID INT,@IsContDisplayed bit,@CostCenterTableName nvarchar(100)
-	declare @CCID INT,@ColumnCostCenterID INT,@SysColumnName nvarchar(100),@IsColumnUserDefined bit,@ColumnDataType nvarchar(50),@ColCostCenterPrimary nvarchar(100),@CC int
-	declare @tblList TABLE (ID int identity(1,1),CostCenterColID INT)    
-	declare @productNameExists bit,@productCodeExists bit,@PrefValue nvarchar(100),@featureid INT,@table Nvarchar(100),@STKDIM int,@chkCnT int
+	declare @sql nvarchar(max) ,@strColumns nvarchar(max),@STRJOIN nvarchar(max),@I int, @Cnt int,@CostCenterColID bigint,@IsContDisplayed bit,@CostCenterTableName nvarchar(100)
+	declare @CCID BIGINT,@ColumnCostCenterID bigint,@SysColumnName nvarchar(100),@IsColumnUserDefined bit,@ColumnDataType nvarchar(50),@ColCostCenterPrimary nvarchar(100),@CC int
+	declare @tblList TABLE (ID int identity(1,1),CostCenterColID BIGINT)    
+	declare @productNameExists bit,@productCodeExists bit,@PrefValue nvarchar(100),@featureid bigint,@table Nvarchar(100),@STKDIM int,@chkCnT int
 
 	select @STKDIM=Value from ADM_GlobalPreferences WITH(NOLOCK) where Name='POSItemCodeDimension'
 	and Value is not null and isnumeric(Value)=1
@@ -38,7 +36,7 @@ SET NOCOUNT ON;
 	select costcentercolid from ADM_GridViewColumns  WITH(NOLOCK) 
 	WHERE GRIDVIEWID =@GridViewID
 	and columntype=2 and costcentercolid>0
-	
+	    
 	--Set loop initialization varaibles  
 	SELECT @I=1, @Cnt=count(*) FROM @tblList    
 	SET @CC=0   
@@ -87,10 +85,7 @@ SET NOCOUNT ON;
 			BEGIN  
 				--set @tempgroup=@tempgroup+'CC'+CONVERT(NVARCHAR(10),@CC)+'.UnitName  '
 				set @ColCostCenterPrimary='UOMID'  
-				if(@UomSelect<>'')
-					SET @strColumns=@strColumns+@UomSelect+' else CC'+CONVERT(NVARCHAR(10),@CC)+'.UnitName END as '+@SysColumnName   
-				ELSE	
-					SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.UnitName as '+@SysColumnName   
+				SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.UnitName as '+@SysColumnName   
 			END  
 			ELSE if(@ColumnCostCenterID=12)  
 			BEGIN  
@@ -128,16 +123,8 @@ SET NOCOUNT ON;
 			END  
 			ELSE 
 			BEGIN  
-				IF @SysColumnName LIKE 'ptAlpha%'
-				BEGIN
-					SET @STRJOIN=@STRJOIN+' left  JOIN '+@CostCenterTableName +' CC'+CONVERT(NVARCHAR(10),@CC)  
-					+' WITH(NOLOCK) ON E.'+@SysColumnName+'= CONVERT(NVARCHAR,CC'+CONVERT(NVARCHAR(10),@CC)+'.'+@ColCostCenterPrimary+')'
-				END
-				ELSE IF @ColumnCostCenterID>50000
-				BEGIN
-					SET @STRJOIN=@STRJOIN+' left  JOIN '+@CostCenterTableName +' CC'+CONVERT(NVARCHAR(10),@CC)  
-					+' WITH(NOLOCK) ON C.CCNID'+CONVERT(NVARCHAR,@ColumnCostCenterID-50000)+'= CC'+CONVERT(NVARCHAR(10),@CC)+'.'+@ColCostCenterPrimary
-				END
+				SET @STRJOIN=@STRJOIN+' left  JOIN '+@CostCenterTableName +' CC'+CONVERT(NVARCHAR(10),@CC)  
+				+' WITH(NOLOCK) ON C.CCNID'+CONVERT(NVARCHAR,@ColumnCostCenterID-50000)+'= CC'+CONVERT(NVARCHAR(10),@CC)+'.'+@ColCostCenterPrimary
 			END  
 
 			--INCREMENT COSTCENTER COLUMNS COUNT  
@@ -297,14 +284,6 @@ SET NOCOUNT ON;
 			set @sql= @sql+' join INV_Product PE with(nolock) on PE.ProductID=p.ProductID '
 	END			 
   
-	if(@LocationWhere is not null and @LocationWhere<>'')
-	BEGIN
-		set @STRJOIN=@STRJOIN+' JOIN  COM_CostCenterCostCenterMap CCMl with(nolock) on (p.ProductID =CCMl.ParentNodeID and CCMl.ParentCostCenterID = 3)'
-		if(@WHere <>'')
-			set @WHere= @WHere+' and  '
-		set @WHere=@WHere+'  ((CCMl.CostCenterID=50002 and CCMl.NodeID in('+@LocationWhere+'))  OR p.ParentID =0) '
-	END
-	
 	set @sql=@sql+@STRJOIN 
 
 	if(@WHere <>'')
@@ -398,10 +377,10 @@ SET NOCOUNT ON;
 	  
 	if(@SearchType=2 or @SearchType=3)  
 	begin  
-		declare @prefval nvarchar(50),@linkcc INT  
+		declare @prefval nvarchar(50),@linkcc bigint  
 		select @prefval=value from COM_CostCenterPreferences  with(nolock) where CostCenterID=3 and name='LinkedProductDimension'  
 		if(@prefval is not null and @prefval<>'')  
-			set @linkcc =convert(INT,@prefval)  
+			set @linkcc =convert(bigint,@prefval)  
 
 		if(@linkcc>0)  
 		begin  

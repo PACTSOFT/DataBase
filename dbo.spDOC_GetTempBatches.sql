@@ -3,25 +3,25 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetTempBatches]
-	@PRODUCTID [int],
-	@DOCDetailsID [int],
-	@DOCID [int],
+	@PRODUCTID [bigint],
+	@DOCDetailsID [bigint],
+	@DOCID [bigint],
 	@VoucherType [int],
 	@DocDate [datetime],
-	@DivisionID [int],
-	@LocationID [int],
+	@DivisionID [bigint],
+	@LocationID [bigint],
 	@CostCenterID [int],
-	@DimensionNodeID [int],
-	@BatchFilterDim [int],
-	@UserID [int],
-	@RoleID [int],
+	@DimensionNodeID [bigint],
+	@BatchFilterDim [bigint],
+	@UserID [bigint],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY          
 SET NOCOUNT ON;        
             
-	  DECLARE @SQL NVARCHAR(MAX) ,@ConsolidatedBatches nvarchar(50),@LWBatch nvarchar(50),@CCID INT,@Colname nvarchar(200),@GridviewID INT,@PrefValue nvarchar(50)
+	  DECLARE @SQL NVARCHAR(MAX) ,@ConsolidatedBatches nvarchar(50),@LWBatch nvarchar(50),@CCID bigint,@Colname nvarchar(200),@GridviewID bigint,@PrefValue nvarchar(50)
       DECLARE @CustomQuery1 nvarchar(max),@FeatureName nvarchar(100),@CustomQuery2 nvarchar(max),@PrefExpiredValue nvarchar(50),@PrefonlyExpired nvarchar(50),@shelfLife float
 	  DECLARE @CustomQuery3 nvarchar(max),@i int ,@CNT int,@TableName nvarchar(100),@TabRef nvarchar(3),@PrefExcludePreExpiry nvarchar(50),@textNum nvarchar(max),@months int
 	  DECLARE @CustomQuery4 nvarchar(max),@CustomQuery5 nvarchar(max),@FilterDim int,@SearchFilter nvarchar(max),@isQOHExists bit,@HoldResCancelledDocs nvarchar(max),@sorton nvarchar(100)
@@ -48,12 +48,12 @@ SET NOCOUNT ON;
 		select @shelfLife=ShelfLife from INV_Product WITH(NOLOCK) where ProductID=@PRODUCTID
 
 		 
-		declare @CustomTable table(ID int identity(1,1),Name INT,colname nvarchar(200),CCID INT)
+		declare @CustomTable table(ID int identity(1,1),Name bigint,colname nvarchar(200),CCID bigint)
 
 		SELECT @GridviewID=ParentNodeID FROM COM_CostCenterCostCenterMap a WITH(NOLOCK) 
 		join ADM_GridView b WITH(NOLOCK) on a.ParentNodeID=b.GridViewID and b.CostCenterID=16
 		WHERE ParentCostCenterID=26 AND a.CostCenterID=6 AND NodeID=@RoleID
-		if not exists(SELECT GridViewID FROM [ADM_GridView] WITH(NOLOCK)  WHERE GridViewID =@GridviewID and CostCenterID=16)
+		if not exists(SELECT GridViewID FROM [ADM_GridView]  WHERE GridViewID =@GridviewID and CostCenterID=16)
 		set @GridviewID=300
 		
 		set @textNum=''
@@ -62,20 +62,20 @@ SET NOCOUNT ON;
 		join ADM_CostCenterDef b with(nolock) on a.CostCenterColID=b.CostCenterColID
 		where GridViewID=@GridviewID and b.CostCenterColID between 1100 and 1250 
 		union
-		select SysColumnName from COM_DocumentBatchLinkDetails a WITH(NOLOCK)
+		select SysColumnName from COM_DocumentBatchLinkDetails a
 		join ADM_CostCenterDef b with(nolock) on a.BatchColID=b.CostCenterColID
 		where a.[CostCenterID]=@CostCenterID  and BatchColID between 1100 and 1250) as t
 		
 		insert into @CustomTable(Name,colname,CCID)
 		select a.CostCenterColID,b.SysColumnName,b.ColumnCostCenterID from adm_gridviewcolumns a with(nolock)
 		join ADM_CostCenterDef b with(nolock) on a.CostCenterColID=b.CostCenterColID
-		where GridViewID=@GridviewID and b.CostCenterID=16  
-		AND (a.CostCenterColID in(1582,1584,53584) or b.SysColumnName LIKE 'alpha%' or b.SysColumnName LIKE 'ccnid%')		 
+		where GridViewID=@GridviewID and 
+		(a.CostCenterColID in(1582,1584,53584) or a.CostCenterColID between 53591 and 53691)		 
 		union
-		select BatchColID,SysColumnName,b.ColumnCostCenterID   from COM_DocumentBatchLinkDetails a WITH(NOLOCK)
+		select BatchColID,SysColumnName,b.ColumnCostCenterID   from COM_DocumentBatchLinkDetails a
 		join ADM_CostCenterDef b with(nolock) on a.BatchColID=b.CostCenterColID
-		where a.[CostCenterID]=@CostCenterID  and b.CostCenterID=16  
-		AND (BatchColID in(1582,1584,53584) or b.SysColumnName LIKE 'alpha%' or b.SysColumnName LIKE 'ccnid%')
+		where a.[CostCenterID]=@CostCenterID  and 
+		(BatchColID in(1582,1584,53584) or BatchColID between 53591 and 53691)
 	    
 	    if exists(select costcentercolid from adm_gridviewcolumns with(nolock)
 					where GridViewID=@GridviewID and costcentercolid=53732)
@@ -104,7 +104,7 @@ SET NOCOUNT ON;
 				--set @CustomQuery3=@CustomQuery3+' '+@TabRef+'.Name as A'+@FeatureName+' ,'
 				
 				set @CustomQuery2=@CustomQuery2+@Colname+' ,'+@Colname+'_Key ,'
-				set @CustomQuery3=@CustomQuery3+'c.'+@Colname+' '+@Colname+'_Key,'+@TabRef+'.Name as '+@Colname+' ,'
+				set @CustomQuery3=@CustomQuery3+'c.'+@Colname+' ,'+@TabRef+'.Name as '+@Colname+'_Key ,'
 			end
 			else if(@Colname = 'RetestDate')
     		begin    			
@@ -132,13 +132,13 @@ SET NOCOUNT ON;
 			set @SearchFilter=Replace(@SearchFilter,'CCM.CCNID','C.CCNID')
 		END
 		
-		declare @DimensionTable table(ID int identity(1,1),colname nvarchar(200),CCID INT)
+		declare @DimensionTable table(ID int identity(1,1),colname nvarchar(200),CCID bigint)
 		insert into @DimensionTable(colname,CCID)
 		select b.SysColumnName,b.ColumnCostCenterID from adm_gridviewcolumns a with(nolock)
 		join ADM_CostCenterDef b with(nolock) on a.CostCenterColID=b.CostCenterColID
 		where GridViewID=@GridviewID and b.CostCenterColID between 1261 and 1310
 		union
-		select b.SysColumnName,b.ColumnCostCenterID from COM_DocumentBatchLinkDetails a WITH(NOLOCK)
+		select b.SysColumnName,b.ColumnCostCenterID from COM_DocumentBatchLinkDetails a
 		join ADM_CostCenterDef b with(nolock) on a.BatchColID=b.CostCenterColID
 		where a.[CostCenterID]=@CostCenterID  and BatchColID between 1261 and 1310
 		
@@ -156,8 +156,7 @@ SET NOCOUNT ON;
 			set @CCID=@CCID-50000
 			
 			set @CustomQuery4=@CustomQuery4+' left join '+@TableName+' '+@TabRef+' with(nolock) on '+@TabRef+'.NodeID=CC.dcCCNID'+CONVERT(nvarchar,@CCID)
-			--set @CustomQuery5=@CustomQuery5+'CC.'+@Colname+' ,'+@TabRef+'.Name as '+@Colname+'_Key ,'
-			set @CustomQuery5=@CustomQuery5+'CC.'+@Colname+' '+@Colname+'_Key,'+@TabRef+'.Name as '+@Colname+' ,'
+			set @CustomQuery5=@CustomQuery5+'CC.'+@Colname+' ,'+@TabRef+'.Name as '+@Colname+'_Key ,'
 			
 			set @i=@i+1
 		end
@@ -225,19 +224,8 @@ SET NOCOUNT ON;
 				where Name='Excluderetestbatches' and costcenterid=16
 			
 
-			SET @SQL='	select * from (SELECT BD.BillNo,CONVERT(DATETIME, BD.BillDate) AS BillDate, BD.InvDocDetailsID,BD.VoucherNo,CONVERT(DATETIME,BD.DocDate) DocDate,BD.BatchID, B.BATCHNUMBER,B.BatchCode, CONVERT(DATETIME, B.MfgDate) AS MfgDate, CONVERT(DATETIME, B.ExpiryDate) AS ExpiryDate'
-			 
-			if(@isQOHExists=1)
-			BEGIN
-				SET @SQL=@SQL+', ROUND(case when CONVERT(Datetime,BD.DOCDate)<='''+CONVERT(NVARCHAR(50),@DocDate)+''' then BD.ReleaseQuantity else 0 end-isnull((select sum(UOMConvertedQty) from Inv_DocDetails td with(nolock) 
-				 where td.RefInvDocDetailsID =BD.InvDocDetailsID and td.STATUSID in(369,371,441) and CONVERT(Datetime,td.DOCDate)<='''+CONVERT(NVARCHAR(50),@DocDate)+''''
-				
-				if(@DOCID is not null and @DOCID>0)
-					set @SQL=@SQL+' and td.DOCID <>'+CONVERT(nvarchar,@DOCID)
-									
-				 set @SQL=@SQL+' and td.VoucherType = - 1 and td.IsQtyIgnored=0 ),0),4) as QOH' 
-			END
-			SET @SQL=@SQL+'	,BD.ReleaseQuantity-isnull((select sum(UOMConvertedQty) from Inv_DocDetails td with(nolock) 
+			 SET @SQL='	select * from (SELECT BD.BillNo,CONVERT(DATETIME, BD.BillDate) AS BillDate, BD.InvDocDetailsID,BD.VoucherNo,CONVERT(DATETIME,BD.DocDate) DocDate,BD.BatchID, B.BATCHNUMBER,B.BatchCode, CONVERT(DATETIME, B.MfgDate) AS MfgDate, CONVERT(DATETIME, B.ExpiryDate) AS ExpiryDate, 
+				 BD.ReleaseQuantity-isnull((select sum(UOMConvertedQty) from Inv_DocDetails td with(nolock) 
 				 where td.RefInvDocDetailsID =BD.InvDocDetailsID and td.STATUSID in(369,371,441) '				 
 				if(@DOCID is not null and @DOCID>0)
 					set @SQL=@SQL+' and td.DOCID <>'+CONVERT(nvarchar,@DOCID)
@@ -271,7 +259,7 @@ SET NOCOUNT ON;
 						if(@DivisionID is not null and @DivisionID>0)
 							set @SQL=@SQL+' and DCC.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 					   
-						if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+						if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 						begin  				 
 							  set @SQL=@SQL+' and DCC.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 						end  
@@ -304,7 +292,7 @@ SET NOCOUNT ON;
 						if(@DivisionID is not null and @DivisionID>0)
 							set @SQL=@SQL+' and DCC.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 					   
-						if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+						if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 						begin  				 
 							  set @SQL=@SQL+' and DCC.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 						end  
@@ -326,16 +314,7 @@ SET NOCOUNT ON;
 					set @SQL=@SQL+@CustomQuery4
 					
                 set @SQL=@SQL+@CustomQuery1+'
-               WHERE BD.VoucherType = 1 and BD.IsQtyIgnored=0 and B.STATUSID = 77 and B.ProductID='+ CONVERT(NVARCHAR(50),@PRODUCTID)
-               
-               if(@DOCDetailsID>0)
-               BEGIN
-					select @i=BatchID from Inv_DocDetails WITH(NOLOCK) where InvDocDetailsID=@DOCDetailsID
-					set @SQL=@SQL+ ' and (BD.BatchID='+convert(nvarchar(max),@i)+' or (BD.BatchID<>'+convert(nvarchar(max),@i)+'  and BD.STATUSID=369 and CONVERT(Datetime,BD.DOCDate)<='''+CONVERT(NVARCHAR(50),@DocDate)+''' ))'
-                
-               END
-               ELSE
-					set @SQL=@SQL+ ' and BD.STATUSID=369 and CONVERT(Datetime,BD.DOCDate)<='''+CONVERT(NVARCHAR(50),@DocDate)+''' '
+               WHERE BD.VoucherType = 1 and BD.STATUSID=369 and BD.IsQtyIgnored=0 and B.STATUSID = 77 and B.ProductID='+ CONVERT(NVARCHAR(50),@PRODUCTID)
                 
                 if(@PrefonlyExpired is not null and @PrefonlyExpired ='true')
                 BEGIN
@@ -376,9 +355,9 @@ SET NOCOUNT ON;
 					set @PrefValue=''
 					select @PrefValue= isnull(Value,'') from ADM_GlobalPreferences with(nolock) where Name='Maintain Dimensionwise Batches'  
 				    
-					if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+					if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 					begin  
-						  set @PrefValue=convert(INT,@PrefValue)-50000  						 
+						  set @PrefValue=convert(bigint,@PrefValue)-50000  						 
 						  set @SQL=@SQL+' and CC.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 					end  			
 				end
@@ -390,7 +369,7 @@ SET NOCOUNT ON;
               
 				if(@SearchFilter<>'')
 					set @SQL=@SQL+' and '+@SearchFilter
-              if exists(select DocumentType from ADM_DocumentTypes WITH(NOLOCK) where CostCenterID=@CostCenterID and DocumentType=31)              
+              if exists(select DocumentType from ADM_DocumentTypes where CostCenterID=@CostCenterID and DocumentType=31)              
                SET @SQL=@SQL+') AS T  order by '+@sorton
 			ELSE
                SET @SQL=@SQL+') AS T                                  
@@ -417,9 +396,9 @@ SET NOCOUNT ON;
 				set @SQL=@SQL+'and d.dcccnid2='+CONVERT(nvarchar,@LocationID)
 			if(@DivisionID is not null and @DivisionID>0)
 				set @SQL=@SQL+' and d.dcccnid1='+CONVERT(nvarchar,@DivisionID)
-			if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+			if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 			begin  			
-				  set @PrefValue=convert(INT,@PrefValue)-50000  				  				 
+				  set @PrefValue=convert(bigint,@PrefValue)-50000  				  				 
 				  set @SQL=@SQL+' and d.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 			end  
 			
@@ -432,7 +411,7 @@ SET NOCOUNT ON;
 			if(@DivisionID is not null and @DivisionID>0)
 				set @SQL=@SQL+' and d.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 		   
-			if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+			if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 			begin  				 
 				  set @SQL=@SQL+' and d.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 			end  			
@@ -470,7 +449,7 @@ SET NOCOUNT ON;
 					if(@DivisionID is not null and @DivisionID>0)
 						set @SQL=@SQL+' and DCC.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 				   
-					if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+					if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 					begin  				 
 						  set @SQL=@SQL+' and DCC.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 					end  
@@ -505,7 +484,7 @@ SET NOCOUNT ON;
 					if(@DivisionID is not null and @DivisionID>0)
 						set @SQL=@SQL+' and DCC.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 				   
-					if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+					if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 					begin  				 
 						  set @SQL=@SQL+' and DCC.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 					end  
@@ -527,7 +506,7 @@ SET NOCOUNT ON;
 					set @SQL=@SQL+'and d.dcccnid2='+CONVERT(nvarchar,@LocationID)
 				if(@DivisionID is not null and @DivisionID>0)
 					set @SQL=@SQL+' and d.dcccnid1='+CONVERT(nvarchar,@DivisionID)
-				if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+				if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 				begin  			
 						  				 
 					  set @SQL=@SQL+' and d.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
@@ -543,7 +522,7 @@ SET NOCOUNT ON;
 				if(@DivisionID is not null and @DivisionID>0)
 					set @SQL=@SQL+' and d.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 			   
-				if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+				if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 				begin  				 
 					  set @SQL=@SQL+' and d.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 				end  			
@@ -582,7 +561,7 @@ SET NOCOUNT ON;
 						if(@DivisionID is not null and @DivisionID>0)
 							set @SQL=@SQL+' and DCC.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 					   
-						if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+						if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 						begin  				 
 							  set @SQL=@SQL+' and DCC.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 						end  
@@ -618,7 +597,7 @@ SET NOCOUNT ON;
 						if(@DivisionID is not null and @DivisionID>0)
 							set @SQL=@SQL+' and DCC.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 					   
-						if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+						if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 						begin  				 
 							  set @SQL=@SQL+' and DCC.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 						end  
@@ -673,7 +652,7 @@ SET NOCOUNT ON;
 				
 			set @SQL=@SQL+') as ttt'
 			
-			if exists(select DocumentType from ADM_DocumentTypes WITH(NOLOCK) where CostCenterID=@CostCenterID and DocumentType=31)
+			if exists(select DocumentType from ADM_DocumentTypes where CostCenterID=@CostCenterID and DocumentType=31)
 				set @SQL=@SQL+'  order by '+@sorton
 			ELSE
 				set @SQL=@SQL+'  where ROUND(BalQty,2)>0 order by '+@sorton
@@ -693,7 +672,7 @@ SET NOCOUNT ON;
 				set @SQL=@SQL+'and d.dcccnid2='+CONVERT(nvarchar,@LocationID)
 			if(@DivisionID is not null and @DivisionID>0)
 				set @SQL=@SQL+' and d.dcccnid1='+CONVERT(nvarchar,@DivisionID)
-			if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+			if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 			begin 
 				  set @SQL=@SQL+' and d.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 			end  
@@ -707,7 +686,7 @@ SET NOCOUNT ON;
 			if(@DivisionID is not null and @DivisionID>0)
 				set @SQL=@SQL+' and d.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 		   
-			if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+			if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 			begin  				 
 				  set @SQL=@SQL+' and d.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 			end  			
@@ -738,7 +717,7 @@ SET NOCOUNT ON;
 					if(@DivisionID is not null and @DivisionID>0)
 						set @SQL=@SQL+' and DCC.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 				   
-					if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+					if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 					begin  				 
 						  set @SQL=@SQL+' and DCC.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 					end  
@@ -766,7 +745,7 @@ SET NOCOUNT ON;
 					if(@DivisionID is not null and @DivisionID>0)
 						set @SQL=@SQL+' and DCC.dcccnid1='+CONVERT(nvarchar,@DivisionID)
 				   
-					if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
+					if(@DimensionNodeID is not null and @DimensionNodeID>=0 and @PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
 					begin  				 
 						  set @SQL=@SQL+' and DCC.dcCCNID'+@PrefValue+' ='+convert(nvarchar,@DimensionNodeID)
 					end  
@@ -805,9 +784,9 @@ SET NOCOUNT ON;
    end
    
 	select Name,Value,@shelfLife ShelfLife from COM_CostCenterPreferences with(nolock)
-    where CostCenterID=16 and Name in('BatchNumSameAsCode','HoldandReleaseQTY','OnlyMonthYear','ConsolidatedBatches','AutoGenerateBatches','BatchCodeAutoGen','SortBatchGrid')
+    where CostCenterID=16 and Name in('HoldandReleaseQTY','OnlyMonthYear','ConsolidatedBatches','AutoGenerateBatches','BatchCodeAutoGen')
     
-    select b.SysColumnName BatchCol,c.SysColumnName BaseCol  from COM_DocumentBatchLinkDetails a WITH(NOLOCK)
+    select b.SysColumnName BatchCol,c.SysColumnName BaseCol  from COM_DocumentBatchLinkDetails a
 	join ADM_CostCenterDef b with(nolock) on a.BatchColID=b.CostCenterColID
 	join ADM_CostCenterDef c with(nolock) on a.CostCenterColIDBase=c.CostCenterColID
 	where a.[CostCenterID]=@CostCenterID  and 
@@ -822,9 +801,9 @@ SET NOCOUNT ON;
 	when SysColumnName='HoldQuantity' then 'Hold'
 	when SysColumnName='ReleaseQuantity' then 'Release' else SysColumnName end Name,
     UserColumnType, g.ColumnWidth, g.ColumnOrder, A.IsEditable                        
-    from adm_costcenterdef a WITH(NOLOCK) 
-    join    ADM_GridViewColumns g WITH(NOLOCK) on a.CostCenterColID=g.CostCenterColID and g.GridViewID=@GridviewID           
-    join    COM_LanguageResources R WITH(NOLOCK) on R.ResourceID=a.ResourceID and r.LanguageID=@LangID
+    from adm_costcenterdef a 
+    join    ADM_GridViewColumns g on a.CostCenterColID=g.CostCenterColID and g.GridViewID=@GridviewID           
+    join    COM_LanguageResources R on R.ResourceID=a.ResourceID and r.LanguageID=@LangID
     where a.CostCenterID=16 or a.CostCenterColID between 1101 and 1250 or  a.CostCenterColID between 1261 and 1310
     order by g.ColumnOrder
 	
@@ -834,26 +813,14 @@ SET NOCOUNT ON;
 	C.UserDefaultValue,C.UserProbableValues,isnull(C.IsMandatory,0) IsMandatory,isnull(C.IsEditable,1) IsEditable,isnull(C.IsVisible,1) IsVisible,C.ColumnCCListViewTypeID,                              
 	QuickAddOrder,C.IsCostCenterUserDefined,C.IsColumnUserDefined,C.ColumnCostCenterID,C.FetchMaxRows,C.SectionID,C.SectionName , C.RowNo,C.ColumnNo, C.ColumnSpan,C.TextFormat,C.SectionSeqNumber                             
 	FROM ADM_CostCenterDef C WITH(NOLOCK)                              
-	LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=1                              
+	LEFT JOIN COM_LanguageResources R ON R.ResourceID=C.ResourceID AND R.LanguageID=1                              
 	WHERE C.CostCenterID = 16 AND ShowInQuickAdd=1 and IsVisible=1  and C.SysColumnName not in ('Depth','ParentID')                             
 	AND (((C.IsColumnUserDefined=1 OR C.IsCostCenterUserDefined=1) AND C.IsColumnInUse=1 AND C.ISCOLUMNDELETED=0) OR C.IsColumnUserDefined=0)                              
 	ORDER BY QuickAddOrder
 
-	select * from com_costcentercodedef WITH(NOLOCK) WHERE CostCenterID=16                                           
+	select * from com_costcentercodedef WHERE CostCenterID=16                                           
 		
-	if exists(select * from ADM_TypeRestrictions with(nolock) where CostCenterID=16)
-	BEGIN
-		select @GridviewID=ParentID from inv_product WITH(NOLOCK) where Productid=@PRODUCTID
-		set @CCID=0
-		select @CCID=isnull(TypeID,0) from ADM_TypeRestrictions with(nolock) where CostCenterID=16 and TypeID=@GridviewID
-		while(@CCID=0 and @GridviewID>0)
-		BEGIN
-			select @GridviewID=ParentID from inv_product WITH(NOLOCK) where Productid=@GridviewID
-			set @CCID=0
-			select @CCID=isnull(TypeID,0) from ADM_TypeRestrictions with(nolock) where CostCenterID=16 and TypeID=@GridviewID
-		END
-		select * from ADM_TypeRestrictions with(nolock) where CostCenterID=16 and TypeID=@CCID
-	END
+	
            
 SET NOCOUNT OFF;        
 RETURN 1        
@@ -871,5 +838,9 @@ BEGIN CATCH
   END        
 SET NOCOUNT OFF          
 RETURN -999           
-END CATCH
+END CATCH        
+       
+       
+
+
 GO

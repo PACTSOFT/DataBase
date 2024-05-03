@@ -4,11 +4,11 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_CheckDuplicateName]
 	@CostCenterID [int],
-	@NodeID [int],
+	@NodeID [bigint],
 	@Name [nvarchar](200),
 	@AccountType [int],
 	@IsGroup [bit],
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -109,63 +109,25 @@ SET NOCOUNT ON;
 		IF @IsDuplicateNameAllowed IS NOT NULL AND @IsDuplicateNameAllowed=0  
 		BEGIN  
 			IF @NodeID=0  
-			BEGIN  												
+			BEGIN  
 				IF @IsIgnoreSpace IS NOT NULL AND @IsIgnoreSpace=1  
-				begin
-					if(@CostCenterID=89)
-						SET @DUPLICATECODE=' select @DUPNODENO=OpportunityID  from '+@Table+' WITH(NOLOCK) WHERE (replace(Company,'' '','''')=replace(@Name,'' '','''') OR replace(Code,'' '','''')=replace(@Name,'' '',''''))'    
-					else if(@CostCenterID=83)
-						SET @DUPLICATECODE=' select @DUPNODENO=CustomerID  from '+@Table+' WITH(NOLOCK) WHERE replace(CustomerName,'' '','''')=replace(@Name,'' '','''')'    
-					else if (@CostCenterID=65)
-						SET @DUPLICATECODE=' select @DUPNODENO=ContactID  from '+@Table+' WITH(NOLOCK) WHERE (replace(ContactName,'' '','''')=replace(@Name,'' '','''')	OR replace(FirstName,'' '','''')=replace(@Name,'' '','''') OR replace(MiddleName,'' '','''')=replace(@Name,'' '','''') OR replace(LastName,'' '','''')=replace(@Name,'' '',''''))'    
-					else
-						SET @DUPLICATECODE=' select @DUPNODENO=NodeID  from '+@Table+' WITH(NOLOCK) WHERE replace(NAME,'' '','''')=replace(@Name,'' '','''')'    
-				end
+					SET @DUPLICATECODE=' select @DUPNODENO=NodeID  from '+@Table+' WITH(NOLOCK) WHERE replace(NAME,'' '','''')=replace(@Name,'' '','''')'    
 				ELSE
-				begin
-					if(@CostCenterID=89)
-						SET @DUPLICATECODE=' select @DUPNODENO=OpportunityID  from '+@Table+' WITH(NOLOCK) WHERE (Company=@Name OR Code=@Name)'    
-					else if(@CostCenterID=83)
-						SET @DUPLICATECODE=' select @DUPNODENO=CustomerID  from '+@Table+' WITH(NOLOCK) WHERE CustomerName=@Name'    
-					else if (@CostCenterID=65)
-						SET @DUPLICATECODE=' select @DUPNODENO=ContactID  from '+@Table+' WITH(NOLOCK) WHERE (ContactName=@Name	OR FirstName=@Name OR MiddleName=@Name OR LastName=@Name)'    
-					else
-						SET @DUPLICATECODE=' select @DUPNODENO=NodeID  from '+@Table+' WITH(NOLOCK) WHERE NAME=@Name'    
-				end
+					SET @DUPLICATECODE=' select @DUPNODENO=NodeID  from '+@Table+' WITH(NOLOCK) WHERE NAME=@Name'    
 			END  
 			ELSE  
 			BEGIN   
-			
-				IF @IsIgnoreSpace IS NOT NULL AND @IsIgnoreSpace=1
-				begin
-					if(@CostCenterID=89)
-						SET @DUPLICATECODE=' select @DUPNODENO=OpportunityID  from '+@Table+' WITH(NOLOCK) WHERE (replace(Company,'' '','''')=replace(@Name,'' '','''') OR replace(Code,'' '','''')=replace(@Name,'' '','''')) AND OpportunityID!='+CONVERT(VARCHAR,@NodeID)   
-					else if(@CostCenterID=83)
-						SET @DUPLICATECODE=' select @DUPNODENO=CustomerID  from '+@Table+' WITH(NOLOCK) WHERE replace(CustomerName,'' '','''')=replace(@Name,'' '','''') AND CustomerID!='+CONVERT(VARCHAR,@NodeID)
-					else if (@CostCenterID=65)
-						SET @DUPLICATECODE=' select @DUPNODENO=ContactID  from '+@Table+' WITH(NOLOCK) WHERE (replace(ContactName,'' '','''')=replace(@Name,'' '','''')	OR replace(FirstName,'' '','''')=replace(@Name,'' '','''') OR replace(MiddleName,'' '','''')=replace(@Name,'' '','''') OR replace(LastName,'' '','''')=replace(@Name,'' '','''')) AND ContactID!='+CONVERT(VARCHAR,@NodeID)
-					else
-						SET @DUPLICATECODE=' select @DUPNODENO=NodeID  from '+@Table+' WITH(NOLOCK) WHERE replace(NAME,'' '','''')=replace(@Name,'' '','''') AND NodeID!='+CONVERT(VARCHAR,@NodeID)   
-				end
+				IF @IsIgnoreSpace IS NOT NULL AND @IsIgnoreSpace=1  
+					SET @DUPLICATECODE=' select @DUPNODENO=NodeID  from '+@Table+' WITH(NOLOCK) WHERE replace(NAME,'' '','''')=replace(@Name,'' '','''') AND NodeID!='+CONVERT(VARCHAR,@NodeID)   
 				ELSE
-				begin
-					if(@CostCenterID=89)
-						SET @DUPLICATECODE=' select @DUPNODENO=OpportunityID  from '+@Table+' WITH(NOLOCK) WHERE (Company=@Name OR Code=@Name) AND OpportunityID!='+CONVERT(VARCHAR,@NodeID)   
-					else if(@CostCenterID=83)
-						SET @DUPLICATECODE=' select @DUPNODENO=CustomerID  from '+@Table+' WITH(NOLOCK) WHERE CustomerName=@Name AND CustomerID!='+CONVERT(VARCHAR,@NodeID)   
-					else if (@CostCenterID=65)
-						SET @DUPLICATECODE=' select @DUPNODENO=ContactID  from '+@Table+' WITH(NOLOCK) WHERE (ContactName=@Name	OR FirstName=@Name OR MiddleName=@Name OR LastName=@Name) AND ContactID!='+CONVERT(VARCHAR,@NodeID)   
-					else
-						SET @DUPLICATECODE=' select @DUPNODENO=NodeID  from '+@Table+' WITH(NOLOCK) WHERE NAME=@Name AND NodeID!='+CONVERT(VARCHAR,@NodeID)   
-				end	
+					SET @DUPLICATECODE=' select @DUPNODENO=NodeID  from '+@Table+' WITH(NOLOCK) WHERE NAME=@Name AND NodeID!='+CONVERT(VARCHAR,@NodeID)   	
 			END  
-			print @DUPLICATECODE
 			EXEC sp_executesql @DUPLICATECODE, @tempCode,@DUPNODENO OUTPUT ,@Name 
 			IF @DUPNODENO >0  
 			BEGIN  
 				RAISERROR('-112',16,1)  
 			END  
-		END 
+		END   
   
 	END
 
@@ -195,4 +157,6 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
+
 GO

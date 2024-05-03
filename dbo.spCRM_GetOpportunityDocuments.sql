@@ -14,6 +14,14 @@ BEGIN TRY
 SET NOCOUNT ON;    
 
 
+--SELECT     I.DocID, I.CostCenterID, I.VoucherNo, CONVERT(DATETIME, I.DocDate) AS DocDate, D.DocumentName, I.DocPrefix, I.DocNumber,I.Gross as Amount,C.Name,S.Status
+--FROM         INV_DocDetails AS I INNER JOIN
+--                      ADM_DocumentTypes AS D ON I.DocumentTypeID = D.DocumentTypeID INNER JOIN
+--					  COM_Currency As C On I.CurrencyID=C.CurrencyID INNER JOIN 
+--					  COM_Status As S ON I.StatusID=S.StatusID
+--GROUP BY I.DocDate, I.VoucherNo, D.DocumentName, I.DocPrefix, I.DocNumber, I.DocID, I.CostCenterID,I.Gross,C.Name,S.Status
+
+		
 	IF @DOCUMENTID=0
 	BEGIN	
        CREATE TABLE #TBL(ID INT IDENTITY(1,1),DOCID BIGINT,DOCNAME NVARCHAR(MAX))
@@ -25,38 +33,38 @@ SET NOCOUNT ON;
 		EXEC SPSPLITSTRING @DATA,';'
 
 		DECLARE @I INT,@COUNT INT
-		SELECT @COUNT=COUNT(*) FROM #TBL WITH(NOLOCK)
+		SELECT @COUNT=COUNT(*) FROM #TBL
 		SET @I=1
 		WHILE @I<=@COUNT
 		BEGIN
-			SELECT @DOCID=DOCID FROM #TBL WITH(NOLOCK) WHERE ID=@I 
+			SELECT @DOCID=DOCID FROM #TBL WHERE ID=@I 
 			SELECT @DOCNAME=DocumentName FROM ADM_DocumentTypes WITH(NOLOCK) WHERE CostCenterID=@DOCID 
 			UPDATE #TBL SET DOCNAME=@DOCNAME
 			WHERE DOCID=@DOCID
 			SET @I=@I+1
 		END
 
-		SELECT * FROM #TBL WITH(NOLOCK)
+		SELECT * FROM #TBL
 		DROP TABLE #TBL 
 	END
 	ELSE
 	BEGIN
 
     DECLARE @INDEXID BIGINT, @CCID BIGINT,@SQL NVARCHAR(MAX),@TABLENAME NVARCHAR(300)
-	SELECT @CCID=Value FROM  COM_CostCenterPreferences WITH(NOLOCK) WHERE FeatureID=89 AND Name='LinkDimension'
+	SELECT @CCID=Value FROM  COM_CostCenterPreferences WHERE FeatureID=89 AND Name='OppLinkDimension'
 	SET @INDEXID=@CCID-50000
-	 SELECT @TABLENAME=TABLENAME FROM ADM_Features WITH(NOLOCK) WHERE FEATUREID=@CCID
+	 SELECT @TABLENAME=TABLENAME FROM ADM_Features WHERE FEATUREID=@CCID
 	 SET @SQL='
 	 SELECT     I.DocID, I.CostCenterID, I.VoucherNo, CONVERT(DATETIME, I.DocDate) AS DocDate, D.DocumentName, I.DocPrefix, I.DocNumber,I.Gross as Amount,C.Name,S.Status
-	 FROM         INV_DocDetails AS I WITH(NOLOCK) 
-	 INNER JOIN ADM_DocumentTypes AS D WITH(NOLOCK) ON I.DocumentTypeID = D.DocumentTypeID 
-	 INNER JOIN COM_Currency As C WITH(NOLOCK) On I.CurrencyID=C.CurrencyID 
-	 INNER JOIN COM_Status As S WITH(NOLOCK) ON I.StatusID=S.StatusID
-	  LEFT JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=I.ProductID 
-	  LEFT JOIN COM_DocCCData CC WITH(NOLOCK) ON CC.InvDocDetailsID=I.InvDocDetailsID
-	  LEFT JOIN '+@TABLENAME+' E WITH(NOLOCK) ON E.NODEID=CC.dcCCNID'+CONVERT(VARCHAR,@INDEXID)+'
+	 FROM         INV_DocDetails AS I INNER JOIN
+						  ADM_DocumentTypes AS D ON I.DocumentTypeID = D.DocumentTypeID INNER JOIN
+						  COM_Currency As C On I.CurrencyID=C.CurrencyID INNER JOIN 
+						  COM_Status As S ON I.StatusID=S.StatusID
+						  LEFT JOIN INV_Product P ON P.ProductID=I.ProductID 
+						  LEFT JOIN COM_DocCCData CC ON CC.InvDocDetailsID=I.InvDocDetailsID
+						  LEFT JOIN '+@TABLENAME+' E ON E.NODEID=CC.dcCCNID'+CONVERT(VARCHAR,@INDEXID)+'
 	WHERE D.CostCenterID='+CONVERT(VARCHAR,@DOCUMENTID)+ '
-    AND E.NODEID IN (SELECT CCOpportunityID FROM CRM_Opportunities WITH(NOLOCK) WHERE OpportunityID = '''+Convert(nvarchar,@OpportunityID)+''') '	
+    AND E.NODEID IN (SELECT CCOpportunityID FROM CRM_Opportunities WHERE OpportunityID = '''+Convert(nvarchar,@OpportunityID)+''') '	
 	EXEC (@SQL)
 	END
 
@@ -78,5 +86,6 @@ BEGIN CATCH
  ROLLBACK TRANSACTION  
  SET NOCOUNT OFF    
  RETURN -999     
-END CATCH
+END CATCH   
+
 GO

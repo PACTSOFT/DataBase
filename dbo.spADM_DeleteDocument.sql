@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_DeleteDocument]
-	@CostCenterId [int],
-	@RoleID [int],
+	@CostCenterId [bigint],
+	@RoleID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -27,17 +27,7 @@ SET NOCOUNT ON;
 	BEGIN
 		RAISERROR('-121',16,1)
 	END 
-	
-	if exists (select Value from COM_CostCenterPreferences with(nolock) where Value like '%'+convert(nvarchar,@CostCenterId)+'%')
-	BEGIN
-		DECLARE @ErrorMsg NVARCHAR(MAX)=''
-		SELECT @ErrorMsg='Document used in "'+F.Name+'" Preferences'
-		FROM COM_CostCenterPreferences CP WITH(NOLOCK)
-		JOIN ADM_FEATURES F  WITH(NOLOCK) ON F.FEATUREID=CP.CostCenterId 
-		WHERE CP.Value like '%'+convert(nvarchar,@CostCenterId)+'%'
-		RAISERROR(@ErrorMsg,16,1)
-	END 
-	
+
 	DECLARE @DocType int  , @DELCNT INT 
 	SELECT @DocType =  IsInventory FROM ADM_DocumentTypes with(nolock) WHERE (CostCenterID = @CostCenterId)
 
@@ -82,19 +72,14 @@ BEGIN CATCH
 	--Return exception info [Message,Number,ProcedureName,LineNumber]  
 	IF ERROR_NUMBER()=50000
 	BEGIN
-		if isnumeric(ERROR_MESSAGE())=1
-		begin
-			IF (ERROR_MESSAGE() LIKE '-144' )
-			BEGIN
-				SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) WHERE  ErrorNumber=-144  AND LanguageID=@LangID
-			END 
-			ELSE
-			BEGIN
-				SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID
-			END
-		end
-		else
-			SELECT ERROR_MESSAGE() ErrorMessage,-1 ErrorNumber
+		IF (ERROR_MESSAGE() LIKE '-144' )
+		BEGIN
+			SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) WHERE  ErrorNumber=-144  AND LanguageID=@LangID
+		END 
+		ELSE
+		BEGIN
+			SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID
+		END
 	END
 	ELSE
 	BEGIN
@@ -104,5 +89,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH 
 GO

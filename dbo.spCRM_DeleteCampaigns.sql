@@ -28,7 +28,7 @@ SET NOCOUNT ON;
 			RAISERROR('-105',16,1)
 		END
 
-		IF EXISTS(SELECT [Name] FROM CRM_Campaigns with(nolock) WHERE CampaignID=@CampaignID AND CampaignID=1)
+		IF EXISTS(SELECT [Name] FROM CRM_Campaigns WHERE CampaignID=@CampaignID AND CampaignID=1)
 		BEGIN
 			RAISERROR('-115',16,1)
 		END
@@ -36,20 +36,22 @@ SET NOCOUNT ON;
 		--Fetch left, right extent of Node along with width.
 		SELECT @lft = lft, @rgt = rgt, @Width = rgt - lft + 1
 		FROM CRM_Campaigns WITH(NOLOCK) WHERE CampaignID=@CampaignID
-		
-		---Delete from Extended Table
-     	DELETE FROM CRM_CampaignsExtended WHERE CampaignID in
-		(select CampaignID from CRM_Campaigns with(nolock) WHERE lft >= @lft AND rgt <= @rgt)
+
 
 		--Delete from main table
 		DELETE FROM CRM_Campaigns WHERE lft >= @lft AND rgt <= @rgt
 
 		SET @RowsDeleted=@@rowcount
 
+
 		--Update left and right extent to set the tree
-		UPDATE CRM_Campaigns SET rgt = rgt - @Width WHERE rgt > @rgt;
-		UPDATE CRM_Campaigns SET lft = lft - @Width WHERE lft > @rgt;
-		
+		UPDATE CRM_ContractTemplate SET rgt = rgt - @Width WHERE rgt > @rgt;
+		UPDATE CRM_ContractTemplate SET lft = lft - @Width WHERE lft > @rgt;
+	
+		---Delete from Extended Table
+     	DELETE FROM CRM_CampaignsExtended WHERE CampaignID in
+		(select CampaignID from CRM_Campaigns  WHERE lft >= @lft AND rgt <= @rgt)
+
 COMMIT TRANSACTION
 SET NOCOUNT OFF;  
 SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) 

@@ -3,12 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spINV_SetProductQuick]
-	@ProductID [int],
+	@ProductID [bigint],
 	@ProductCode [nvarchar](200) = NULL,
-	@ProductName [nvarchar](max),
+	@ProductName [nvarchar](500),
 	@ProductTypeID [int],
 	@CodePrefix [nvarchar](50) = null,
-	@CodeNumber [int],
+	@CodeNumber [bigint],
 	@StaticFieldsQuery [nvarchar](max),
 	@CustomFieldsQuery [nvarchar](max),
 	@CustomCostCenterFieldsQuery [nvarchar](max),
@@ -22,7 +22,7 @@ CREATE PROCEDURE [dbo].[spINV_SetProductQuick]
 	@UserName [nvarchar](50),
 	@WID [int] = 0,
 	@RoleID [int] = 0,
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -30,12 +30,12 @@ BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;
 		--Declaration Section  
-		DECLARE @Dt FLOAT,@StatusID INT,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsDuplicateCodeAllowed BIT,@IsProductCodeAutoGen bit,@MaintainUniqueProductDescription bit,@ProductCodeLength INT
-		DECLARE @TempGuid NVARCHAR(50),@DimensionPrefValue INT,@return_value int,@SQL NVARCHAR(MAX)
-		DECLARE @Dimesion INT   ,@IgnoreSpaces bit,@IsProductLinkDimension bit
+		DECLARE @Dt FLOAT,@StatusID INT,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsDuplicateCodeAllowed BIT,@IsProductCodeAutoGen bit,@MaintainUniqueProductDescription bit,@ProductCodeLength bigint
+		DECLARE @TempGuid NVARCHAR(50),@DimensionPrefValue bigint,@return_value int,@SQL NVARCHAR(MAX)
+		DECLARE @Dimesion bigint   ,@IgnoreSpaces bit,@IsProductLinkDimension bit
 		declare @ProductCodeIgnoreText nvarchar(50) ,@HistoryStatus NVARCHAR(300)
 		DECLARE @IsGroup BIT=0
-		DECLARE @RefSelectedNodeID INT,@SelectedNodeID INT
+		DECLARE @RefSelectedNodeID BIGINT,@SelectedNodeID BIGINT
 		
 		--SP Required Parameters Check
 		IF @CompanyGUID IS NULL OR @CompanyGUID=''
@@ -110,7 +110,7 @@ SET NOCOUNT ON;
 		WHERE COSTCENTERID=3 and Name='ProductCodeAutoGen'
 		select @MaintainUniqueProductDescription=convert(bit,Value) FROM COM_CostCenterPreferences WITH(NOLOCK) 
 		WHERE COSTCENTERID=3 and Name='MaintainUniqueProductDescription'
-		select @ProductCodeLength=convert(INT,Value)  FROM COM_CostCenterPreferences WITH(NOLOCK) 
+		select @ProductCodeLength=convert(bigint,Value)  FROM COM_CostCenterPreferences WITH(NOLOCK) 
 		WHERE COSTCENTERID=3 and Name='ProductCodeLength'
 		select @ProductCodeIgnoreText=Value   from COM_CostCenterPreferences with(nolock) 
 		where CostCenterID=3 and Name='CodeIgnoreSpecialCharacters'
@@ -128,7 +128,7 @@ SET NOCOUNT ON;
 		IF  @IsDuplicateCodeAllowed IS NOT NULL AND @IsDuplicateCodeAllowed=0
 		BEGIN
 			--Ignore special character in ProductCode while verifying duplicate check 
-			declare  @len INT,@CodeSQL NVARCHAR(MAX)
+			declare  @len bigint,@CodeSQL NVARCHAR(MAX)
 			set @CodeSQL='ProductCode'
 			set @len=len(@ProductCodeIgnoreText) 
 			if(@len>0)
@@ -218,13 +218,13 @@ SET NOCOUNT ON;
 		begin  
 
 			begin try  
-				select @Dimesion=convert(INT,@DimensionPrefValue)  
+				select @Dimesion=convert(BIGINT,@DimensionPrefValue)  
 			end try  
 			begin catch  
 				set @Dimesion=0   
 			end catch  
 			
-			declare @NID INT, @CCIDAcc INT
+			declare @NID bigint, @CCIDAcc bigint
 			
 			select @NID = ISNULL(CCNodeID,0), @CCIDAcc=CCID,@SelectedNodeID=ParentID  from INV_PRODUCT with(nolock) where ProductID=@ProductID 
 				
@@ -243,7 +243,7 @@ SET NOCOUNT ON;
 				WHERE CostCenterID=3 AND RefDimensionID=@Dimesion AND NodeID=@SelectedNodeID 
 				SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
 					
-				DECLARE @CCStatusID INT
+				DECLARE @CCStatusID bigint
 				select  @CCStatusID =statusid from com_status with(nolock) where costcenterid=@Dimesion and status = 'Active'
 				EXEC @return_value = [dbo].[spCOM_SetCostCenter]
 				@NodeID = @NID,@SelectedNodeID = @RefSelectedNodeID,@IsGroup = @IsGroup,
@@ -294,7 +294,7 @@ SET NOCOUNT ON;
   
 			INSERT INTO @TblCC(CC)
 			EXEC SPSplitString @CC,',' 
-			declare @value nvarchar(max),@BasedOnValue INT
+			declare @value nvarchar(max),@BasedOnValue bigint
 			set @i=1
 			set @CCStatusID=1 
 			select @cnt=count(*) from @TblCC
@@ -402,7 +402,7 @@ SET NOCOUNT ON;
 	--Update Main Table
 	IF(@StaticFieldsQuery IS NOT NULL AND @StaticFieldsQuery <> '')
 	BEGIN
-		DECLARE @TEMPUOMID INT , @CurrentUOM INT
+		DECLARE @TEMPUOMID BIGINT , @CurrentUOM bigint
 		if  @ProductID >0 and ((select isnull(ShowinQuickAdd,0) from adm_Costcenterdef with(nolock) where costcenterid=3 and syscolumnname='UOMID')=1 )
 			SELECT @TEMPUOMID=UOMID FROM INV_Product with(nolock) WHERE PRODUCTID=@ProductID
 		set @SQL='update INV_Product
@@ -457,7 +457,7 @@ SET NOCOUNT ON;
 	exec [spCOM_CheckUniqueCostCenter] @CostCenterID=3,@NodeID =@ProductID,@LangID=@LangID
 	
 	--Series Check
-	declare @retSeries INT
+	declare @retSeries bigint
 	EXEC @retSeries=spCOM_ValidateCodeSeries 3,@ProductID,@LangID
 	if @retSeries>0
 	begin
@@ -497,21 +497,13 @@ SET NOCOUNT ON;
 	
 	--Insert Notifications
 	EXEC spCOM_SetNotifEvent 3,3,@ProductID,@CompanyGUID,@UserName,@UserID,@RoleID
-	--validate Data External function
-	DECLARE @tempCCCode NVARCHAR(200)
-	set @tempCCCode=''
-	select @tempCCCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=3 and Mode=9
-	if(@tempCCCode<>'')
-	begin
-		exec @tempCCCode 3,@ProductID,@UserID,@LangID
-	end  
+	
 	--INSERT INTO HISTROY   
 	EXEC [spCOM_SaveHistory]  
 		@CostCenterID =3,    
 		@NodeID =@ProductID,
 		@HistoryStatus =@HistoryStatus,
-		@UserName=@UserName,
-		@DT=@DT
+		@UserName=@UserName
 		
 
 COMMIT TRANSACTION  

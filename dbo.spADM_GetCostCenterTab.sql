@@ -6,35 +6,22 @@ CREATE PROCEDURE [dbo].[spADM_GetCostCenterTab]
 	@CostCenterID [int] = 0,
 	@LocalReference [int] = 0,
 	@CompanyID [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION          
 BEGIN TRY          
 SET NOCOUNT ON          
-    
-    
-    IF(@CostCenterID=144 and @LocalReference between 40000 and 50000)    
-    BEGIN           
-		declare @PrefValue nvarchar(max)
-		select @PrefValue=PrefValue from [com_documentpreferences] WITH(nolock)
-		where PrefName='ActivityFields' and [CostCenterID]=@LocalReference
-		SELECT b.ResourceData,syscolumnname,@PrefValue PrefValue
-		FROM [ADM_CostCenterDef] a with(nolock)
-		LEFT JOIN COM_LanguageResources b with(nolock) ON b.RESOURCEID=a.RESOURCEID    		
-		where a.CostCenterID=@CostCenterID and b.languageid=@LangID		and LocalReference is null 		
-		and syscolumnname in('ActivityTypeID','StatusID','Subject','StartDate','EndDate','IsAllDayActivity','ActualCloseDate','AssignGroupID','CustomerID','Remarks','ContactId')
-    END    
-    ELSE
-    BEGIN
-		SELECT DISTINCT CostCenterID,[CCTabID],b.ResourceData,[CCTabName], [TabOrder] ,[IsVisible], IsTabUserDefined
-		  ,isnull(QuickViewCCID,0) QuickViewCCID,isnull(QuickViewID,0) QuickViewID
-		FROM [ADM_CostCenterTab] a with(nolock)           
-		LEFT JOIN COM_LanguageResources b with(nolock) ON b.RESOURCEID=a.RESOURCEID    and b.languageid=@LangID      
-		where a.CostCenterID=@CostCenterID       
-		order by [TabOrder]
-    END 
+          
+    declare @crmccid bigint      
+	SELECT DISTINCT CostCenterID,[CCTabID],b.ResourceData,[CCTabName], [TabOrder] ,[IsVisible], IsTabUserDefined
+      ,isnull(QuickViewCCID,0) QuickViewCCID,isnull(QuickViewID,0) QuickViewID
+	FROM [ADM_CostCenterTab] a with(nolock)           
+    LEFT JOIN COM_LanguageResources b with(nolock) ON b.RESOURCEID=a.RESOURCEID    and b.languageid=@LangID      
+	where a.CostCenterID=@CostCenterID       
+	order by [TabOrder]      
+     
     IF(@CostCenterID=144)    
     BEGIN  
 		SELECT distinct  c.CostCenterColID, COM_LanguageResources.resourcedata UserColumnName, c.UserColumnType,       
@@ -46,7 +33,7 @@ SET NOCOUNT ON
 		,IsUnique,IsnoTab,Decimal Decimals,c.IgnoreChar,IGC.Name IgnoreCharText,c.WaterMark,
 		case when (c.columncostcenterid=44 and C.UserDefaultValue is not null and isnumeric(C.UserDefaultValue)=1) 
 		then (select L.name from COM_LOOKUP L with(nolock) where L.NodeID=CONVERT(INT,C.UserDefaultValue) )
-		else '' end as LookUpName,c.MinChar,c.MaxChar,isnull(C.FieldExpression,'') FieldExpression,isnull(C.LabelColor,'') LabelColor
+		else '' end as LookUpName
 		FROM ADM_CostCenterDef c with(nolock) 
 		LEFT OUTER JOIN COM_LanguageResources with(nolock) ON COM_LanguageResources.ResourceID = c.ResourceID  
 		LEFT JOIN [COM_Lookup] IGC WITH(NOLOCK) ON  IGC.[NodeID]=  c.IgnoreChar    
@@ -66,8 +53,7 @@ SET NOCOUNT ON
 		,IsUnique,IsnoTab,Decimal Decimals,c.IgnoreChar,IGC.Name IgnoreCharText,c.WaterMark,
 		case when (c.columncostcenterid=44 and C.UserDefaultValue is not null and isnumeric(C.UserDefaultValue)=1) 
 		then (select L.name from COM_LOOKUP L with(nolock) where L.NodeID=CONVERT(INT,C.UserDefaultValue) )
-		else '' end as LookUpName,c.MinChar,c.MaxChar,isnull(C.FieldExpression,'') FieldExpression,isnull(C.LabelColor,'') LabelColor
-		,Calculate,EvalAfter
+		else '' end as LookUpName
 		FROM ADM_CostCenterDef c with(nolock) 
 		LEFT OUTER JOIN COM_LanguageResources with(nolock) ON COM_LanguageResources.ResourceID = c.ResourceID 
 		LEFT JOIN [COM_Lookup] IGC WITH(NOLOCK) ON  IGC.[NodeID]=  c.IgnoreChar     
@@ -93,7 +79,7 @@ SET NOCOUNT ON
 	BEGIN
 		SELECT D.SysColumnName,  D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo, D.ColumnSpan,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType, D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals
 		FROM ADM_COSTCENTERDEF D with(nolock) 
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID     
 		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
@@ -105,7 +91,7 @@ SET NOCOUNT ON
 	begin      
 		SELECT D.SysColumnName,  D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType, D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,D.SECTIONID,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,D.SECTIONID,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals
 		FROM ADM_COSTCENTERDEF D with(nolock) 
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID     
 		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
@@ -116,7 +102,7 @@ SET NOCOUNT ON
 	begin      
 		SELECT D.SysColumnName,  D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType, D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,'Main' TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,'Main' TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals
 		FROM ADM_COSTCENTERDEF D with(nolock) 
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID   
 		LEFT JOIN [COM_Lookup] IGC WITH(NOLOCK) ON  IGC.[NodeID]=  D.IgnoreChar  
@@ -128,7 +114,7 @@ SET NOCOUNT ON
 	begin      
 		SELECT D.SysColumnName,  D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType, D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,'Main' TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,'Main' TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals
 		FROM ADM_COSTCENTERDEF D with(nolock) 
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID  
 		LEFT JOIN [COM_Lookup] IGC WITH(NOLOCK) ON  IGC.[NodeID]=  D.IgnoreChar   
@@ -138,7 +124,7 @@ SET NOCOUNT ON
 	begin   
 		SELECT D.SysColumnName,D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType      ,D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals
 		FROM ADM_COSTCENTERDEF D with(nolock)
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID      
 		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
@@ -150,7 +136,7 @@ SET NOCOUNT ON
 	begin
 		SELECT D.SysColumnName,D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType      ,D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals
 		FROM ADM_COSTCENTERDEF D with(nolock)
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=1      
 		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
@@ -161,7 +147,7 @@ SET NOCOUNT ON
 	begin      
 		SELECT D.SysColumnName,D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType      ,D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,D.SECTIONID,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,D.SECTIONID
 		FROM ADM_COSTCENTERDEF D with(nolock)
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID      
 		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
@@ -173,7 +159,7 @@ SET NOCOUNT ON
 	begin      
 		SELECT D.SysColumnName,D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType      ,D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,D.SECTIONID,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,D.SECTIONID
 		FROM ADM_COSTCENTERDEF D with(nolock)
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID      
 		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
@@ -183,37 +169,20 @@ SET NOCOUNT ON
 	end   
 	else if (@CostCenterID=144)     
 	begin      
-	 IF EXISTS(SELECT SysColumnName FROM ADM_CostCenterDef WHERE COSTCENTERID=144 AND IsColumnUserDefined=0 AND IsColumnInUse=1 AND LOCALREFERENCE=@LocalReference)
-	 BEGIN
 		SELECT D.SysColumnName,D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType      ,D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals
 		FROM ADM_COSTCENTERDEF D with(nolock)
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID      
 		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
 		LEFT JOIN [COM_Lookup] IGC WITH(NOLOCK) ON  IGC.[NodeID]=  D.IgnoreChar
 		WHERE D.CostCenterID=@CostCenterID AND IsColumnUserDefined=0 AND IsColumnInUse=1 and LocalReference=@LocalReference order by d.sectionseqnumber       
-	END
-	ELSE
-	BEGIN
-	SELECT D.SysColumnName,D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
-		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType      ,D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,case when (D.SECTIONID IS NULL or D.SECTIONID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
-		FROM ADM_COSTCENTERDEF D with(nolock)
-		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID      
-		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
-		LEFT JOIN [COM_Lookup] IGC WITH(NOLOCK) ON  IGC.[NodeID]=  D.IgnoreChar
-		WHERE D.CostCenterID=@CostCenterID AND IsColumnUserDefined=0 AND IsColumnInUse=1 and LocalReference IS NULL 
-		AND SysColumnName in ('ActivityTypeID','ActivityTypeName','StatusID','Subject','StartDate','StartTime','EndDate','EndTime','IsAllDayActivity','ActualCloseDate','CustomerID','ContactId')
-		order by d.sectionseqnumber 
-	END
 	end  
-	else  if(@COSTCENTERID in( 2, 83, 86, 88, 89, 65, 73, 92, 93, 94, 95, 103, 104, 129))    
+	else  if(@COSTCENTERID in(86, 83, 88, 89, 65, 73, 92, 93, 94, 95, 103, 104, 129))    
 	begin      
 		SELECT D.SysColumnName,D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType      ,D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,D.SectionID,case when (D.SectionID IS NULL or D.SectionID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
-		,Cformula,Calculate,EvalAfter
+		,D.SectionID,case when (D.SectionID IS NULL or D.SectionID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals
 		FROM ADM_COSTCENTERDEF D with(nolock)
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID      
 		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
@@ -224,7 +193,7 @@ SET NOCOUNT ON
 	begin      
 		SELECT D.SysColumnName,D.CostCenterColID,R.ResourceData,D.ResourceID,D.IsMandatory, D.IsEditable, D.IsVisible,D.IsColumnInUse, D.SectionSeqNumber,      
 		D.UserProbableValues ProbableValues,D.RowNo, D.ColumnNo,d.IgnoreChar,d.WaterMark,IGC.Name IgnoreCharText, D.ColumnSpan,D.IsColumnUserDefined,D.TextFormat,D.ColumnDataType DataType      ,D.ColumnCCListViewTypeID,D.ColumnCostCenterID 
-		,D.SectionID,case when (D.SectionID IS NULL or D.SectionID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals,d.MinChar,d.MaxChar,isnull(d.FieldExpression,'') FieldExpression,isnull(d.LabelColor,'') LabelColor
+		,D.SectionID,case when (D.SectionID IS NULL or D.SectionID=0 ) THEN ('Main') else (T.CCTabName) end as TabName  , D.UserDefaultValue DefaultValue,IsUnique,IsnoTab,[Decimal] Decimals
 		FROM ADM_COSTCENTERDEF D with(nolock)
 		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID      
 		LEFT JOIN ADM_COSTCENTERTAB T with(nolock) ON D.SECTIONID=T.CCTABID 
@@ -253,7 +222,7 @@ SET NOCOUNT ON
 	END
 	
 	--Link Dimension Preference
-	Declare @LinkDimID INT
+	Declare @LinkDimID BIGINT
 	select @LinkDimID=(case when isnumeric(Value)=1 then convert(int,Value) else 0 end) from COM_CostCenterPreferences WITH(NOLOCK) 
 	where CostCenterID=@CostCenterID and 
 	((CostCenterID=3 and Name='ProductLinkWithDimension') or 
@@ -265,7 +234,7 @@ SET NOCOUNT ON
 	
 	--Preferences
 	select Name,Value from COM_CostCenterPreferences WITH(NOLOCK) 
-	WHERE CostCenterID=@CostCenterID AND Name IN ('EnableAssignMapInQuickAdd','AccountImageDimensions'
+	WHERE CostCenterID=@CostCenterID AND Name IN ('EnableAssignMapInQuickAdd'
 	,'ProductImageDimensions','ImageDimensions','EnableQuickAdd')
 	
 	
@@ -313,9 +282,6 @@ SET NOCOUNT ON
 		
 	SELECT QID,QName,CostCenterID FROM ADM_QuickViewDefn WITH(NOLOCK)   
 	GROUP BY QID,QName,CostCenterID
-	
-	select CostCenterColID,Mode,Shortcut,SpName,IpParams,OpParams,Expression from ADM_DocFunctions WITH(NOLOCK)
-	Where CostCenterID=@COSTCENTERID
 	 
 COMMIT TRANSACTION          
 SET NOCOUNT OFF;          
@@ -335,5 +301,6 @@ BEGIN CATCH
 ROLLBACK TRANSACTION          
 SET NOCOUNT OFF            
 RETURN -999             
-END CATCH
+END CATCH            
+
 GO

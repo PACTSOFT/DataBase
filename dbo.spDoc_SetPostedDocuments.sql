@@ -7,11 +7,10 @@ CREATE PROCEDURE [dbo].[spDoc_SetPostedDocuments]
 	@HoldXML [nvarchar](max),
 	@PostonConversionDate [bit],
 	@LockWhere [nvarchar](max) = '',
-	@AP [varchar](10) = '',
 	@CompanyGUID [nvarchar](50),
 	@sysinfo [nvarchar](max),
 	@UserName [nvarchar](50),
-	@UserID [int],
+	@UserID [bigint],
 	@RoleID [int],
 	@LangID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -23,26 +22,24 @@ SET NOCOUNT ON;
 	DECLARE @XML XML,@DocumentType INT,@TypeID INT,@CCID INT,@I INT,@Cnt INT,@DOCNumber NVARCHAR(MAX),@CreditAccountID INT,@ConDate float,@docseq int
 	,@AccDocDetails INT ,@status int,@DocID INT,@CostCenterID INT,@IsDiscounted bit,@Columnname nvarchar(100),@dimWiseCurr int
 	,@DebitAccountID INT,@oldPDCStatus int,@billwiseVNO nvarchar(200),@BillWiseDocType int,@sql nvarchar(max),@InterOnCDate nvarchar(50)
-	DECLARE @DoCPrefix nvarchar(50),@ABBR nvarchar(50),@NewVoucherNO nvarchar(200),@retValue int,@NID INT,@ExchRate float
-	Declare @LocationID INT,@DivisionID INT,@Acc INT,@Series int,@Action int,@PostedDate datetime,@PrefValue nvarchar(50),@tempDocid int,@tempccid int
-	declare @vouNO nvarchar(200),@OldvouNO nvarchar(200),@seqno int,@oldstatus int,@Dupl INT,@Dt float,@BillDate FLOAT,@NewBillDate FLOAT,@baseCurr int
-	declare @temptype int ,@tempcr INT,@tempdr INT,@tempbid INT,@PrefCheqReturn nvarchar(50),@Adb INT,@penalty float,@Decimals nvarchar(10)
-	DECLARE @AuditTrial BIT,@HistoryStatus nvarchar(50),@CCCols nvarchar(max),@CCreplCols nvarchar(max),@NumCols nvarchar(max),@TextCols nvarchar(max),@IsReplace int,@IsHold bit,@LinkedDB INT,@LinkedCr INT
-	declare @HoldDim int,@HoldDimID INT,@HoldDateField nvarchar(20),@HoldDate nvarchar(20),@HoldDateRemarksField nvarchar(20),@HoldDateRemarks nvarchar(max)
+	DECLARE @DoCPrefix nvarchar(50),@ABBR nvarchar(50),@NewVoucherNO nvarchar(200),@retValue int,@NID BIGINT,@ExchRate float
+	Declare @LocationID bigint,@DivisionID bigint,@Acc BIGINT,@Series int,@Action int,@PostedDate datetime,@PrefValue nvarchar(50)
+	declare @vouNO nvarchar(200),@OldvouNO nvarchar(200),@seqno int,@oldstatus int,@Dupl bigint,@Dt float,@BillDate FLOAT,@NewBillDate FLOAT,@baseCurr int
+	declare @temptype int ,@tempcr bigint,@tempdr bigint,@tempbid bigint,@PrefCheqReturn nvarchar(50),@Adb bigint,@penalty float,@Decimals nvarchar(10)
+	DECLARE @AuditTrial BIT,@HistoryStatus nvarchar(50),@CCCols nvarchar(max),@CCreplCols nvarchar(max),@NumCols nvarchar(max),@TextCols nvarchar(max),@IsReplace int,@IsHold bit,@LinkedDB BIGINT,@LinkedCr BIGINT
+	declare @HoldDim int,@HoldDimID bigint,@HoldDateField nvarchar(20),@HoldDate nvarchar(20),@HoldDateRemarksField nvarchar(20),@HoldDateRemarks nvarchar(max)
 	Declare @DocCol nvarchar(max),@TablCol nvarchar(max),@table nvarchar(max),@fid int,@dttemp datetime,@docOrder int,@refccid int,@refNodeid int
-	Declare @PdcDoc nvarchar(max),@InterDOc nvarchar(max),@ConDoc nvarchar(max),@BounceDoc nvarchar(max),@clearonConvert bit,@refAccid INT,@BRDim nvarchar(max)
+	Declare @PdcDoc nvarchar(max),@InterDOc nvarchar(max),@ConDoc nvarchar(max),@BounceDoc nvarchar(max),@clearonConvert bit,@refAccid bigint
 	
-	declare @ddxml nvarchar(max),@bxml nvarchar(max),@return_value int,@ddID INT,@RefID int,@Prefix nvarchar(200),@AUTOCCID INT,@DetIDS nvarchar(max),@CCStatusID int,@TEmpWid INT   
-
 	declare @preftble table(name nvarchar(200),value nvarchar(max),ccid int)
 	insert into @preftble
 	SELECT Name,Value,0 FROM ADM_GlobalPreferences WITH(NOLOCK) 
 	WHERE name in('EnableCrossDimension','DimensionwiseCurrency','BaseCurrency','OnOpbConvert','OnOpbBounce','ClearonConvert','DecimalsinAmount','Intermediate PDC','IntermediatePDConConversionDate'
-	,'PDCBounceResonDim','PDCHoldDimension','PDCHoldDate','PDCHoldRemarks','enableChequeReturnHistory','Dont Change PDC Bank On Convert')
+	,'PDCHoldDimension','PDCHoldDate','PDCHoldRemarks','enableChequeReturnHistory','Dont Change PDC Bank On Convert')
 		
 	set @dimWiseCurr=0
 	select @dimWiseCurr=isnull(value,0) from @preftble 
-	where  Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(INT,value)>50000
+	where  Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>50000
 	
 	SELECT @baseCurr=Value FROM @preftble WHERE Name='BaseCurrency'
 						
@@ -79,13 +76,14 @@ SET NOCOUNT ON;
 	select @PrefValue=value from @preftble  where name='Intermediate PDC'
 	select @InterOnCDate=value from @preftble  where name='IntermediatePDConConversionDate'
 		
-	Declare @TBL TABLE(ID INT IDENTITY(1,1),AccDocDetailsID INT,STATUS INT,PostedDate datetime,[Action] int,CreditAccountID INT,DebitAccountID INT,Dupl INT,IsReplace int,IsHold bit,Penalty float,isLock bit,BRDIM nvarchar(max),DocXML XML)
-	Declare @XMLNode XML,@ACCDetailsID Int
+	Declare @TBL TABLE(ID INT IDENTITY(1,1),AccDocDetailsID BIGINT,STATUS INT,PostedDate datetime,[Action] int,CreditAccountID INT,DebitAccountID INT,Dupl bigint,IsReplace int,IsHold bit,Penalty float,isLock bit)
+
 	insert into @TBL
-	select X.value('@ID','INT'),X.value('@StatusID','INT') ,X.value('@PostedDate','DATETIME'),X.value('@ACTION','int')
-	,X.value('@CreditAccountID','INT'),X.value('@DebitAccountID','INT'),X.value('@Dupl','INT') ,X.value('@IsReplace','int') ,X.value('@IsHold','bit')
-	,isnull(X.value('@Penalty','Float'),0),0,X.value('@BRDim','nvarchar(max)'), X.query('AutoPOstXML')
+	select X.value('@ID','bigint'),X.value('@StatusID','INT') ,X.value('@PostedDate','DATETIME'),X.value('@ACTION','int')
+	,X.value('@CreditAccountID','INT'),X.value('@DebitAccountID','INT'),X.value('@Dupl','bigint') ,X.value('@IsReplace','int') ,X.value('@IsHold','bit')
+	,isnull(X.value('@Penalty','Float'),0),0
 	from @XMl.nodes('/XML/Row') as Data(X)
+	
 	
 	IF @HoldXML!='' OR exists (select ID FROM @TBL where IsHold=1)
 	BEGIN
@@ -95,60 +93,43 @@ SET NOCOUNT ON;
 		SELECT @HoldDateRemarksField=Value FROM @preftble  where Name='PDCHoldRemarks'
 	END
 	
-	DECLARE @DocDate float,@DAllowLockData BIT ,@DLockCC INT ,@AllowLockData BIT,@LockCC INT,@LockCCValues nvarchar(max)
+	DECLARE @DocDate DATETIME,@DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLockCC bigint  
+	DECLARE @LockFromDate DATETIME,@LockToDate DATETIME,@AllowLockData BIT,@LockCC bigint,@LockCCValues nvarchar(max)     
 
 	SELECT @AllowLockData=CONVERT(BIT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='Lock Data Between' 
 	IF (@AllowLockData=1)  
-	BEGIN   		
-		SELECT @LockCC=CONVERT(INT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockCostCenters' and isnumeric(Value)=1  
+	BEGIN   
+		SELECT @LockFromDate=CONVERT(DATETIME,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockDataFromDate'      
+		SELECT @LockToDate=CONVERT(DATETIME,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockDataToDate'      
+		SELECT @LockCC=CONVERT(BIGINT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockCostCenters' and isnumeric(Value)=1  
 	END	
 	
 	select @I=1,@Cnt=count(*) from @TBL
-	--select * from @TBL
+	--select * from #TBL
 	while(@I<=@Cnt)
 	Begin 
 		set @IsReplace=0
-		set @BRDim=''
 		select @PostedDate=PostedDate,@status=STATUS,@Action=Action,@Acc=AccDocDetailsID,@penalty=Penalty
-		 ,@CreditAccountID=CreditAccountID,@DebitAccountID=DebitAccountID,@Dupl=Dupl,@IsReplace=isnull(IsReplace,0),@IsHold=isnull(IsHold,0),@BRDim=BRDim , @XMLNode=DocXML,@ACCDetailsID = AccDocDetailsID
+		 ,@CreditAccountID=CreditAccountID,@DebitAccountID=DebitAccountID,@Dupl=Dupl,@IsReplace=isnull(IsReplace,0),@IsHold=isnull(IsHold,0)
 		  from @TBL where ID=@I
 		
 		set @ConDoc=null
 		set @InterDOc=null
 		set @BounceDoc=null
 		 
-		if(@Action=2)
-		BEGIN
-				select @NID=0,@CostCenterID=CostCenterID,@DocID=DocID  
-				from ACC_DocDetails with(nolock) where AccDocDetailsID=@Acc
-				
-				select @CCID=ConvertAs from ADM_DOCUMENTTYPES with(nolock) where CostCenterID=@CostCenterID
-				
-				select @DocDate=DocDate from ACC_DocDetails with(nolock) 
-				where refccid=400 and RefNodeID=@Acc and CostCenterID=@CCID
-		
-		END
-		ELSE
-		BEGIN 
-			select @NID=0,@DocDate=case when @PostonConversionDate=1 then floor(convert(float,getdate()))
-												when @PostedDate is not null then convert(float,@PostedDate)
-											 when [ChequeMaturityDate] is not null and [ChequeMaturityDate]>0 then [ChequeMaturityDate]
-											 when [ChequeDate] is not null and [ChequeDate]>0 then [ChequeDate]
-											 else DocDate end,@CostCenterID=CostCenterID,@DocID=DocID  from ACC_DocDetails with(nolock) where AccDocDetailsID=@Acc
-		END
-		
+		select @NID=0,@DocDate=CONVERT(DATETIME,DocDate),@CostCenterID=CostCenterID,@DocID=DocID  from ACC_DocDetails with(nolock) where AccDocDetailsID=@Acc
+
 		if(dbo.fnCOM_HasAccess(@RoleID,43,193)=0 and (SELECT PrefValue FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='OverrideLock')<>'true')  
 		BEGIN  
 			IF (@AllowLockData=1)  
 			BEGIN   
-				IF exists(select LockID from ADM_LockedDates WITH(NOLOCK) where isEnable=1 
-				 and @DocDate between FromDate and ToDate and CostCenterID=0)
+				if(@DocDate BETWEEN @LockFromDate AND @LockToDate)  
 				BEGIN  
 					if(@LockCC is null or @LockCC=0)  
 						SET @NID=-125    
 					else if(@LockCC>50000)  
 					BEGIN  
-						SELECT @LockCCValues=CONVERT(INT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockCostCenterNodes'  
+						SELECT @LockCCValues=CONVERT(BIGINT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockCostCenterNodes'  
 
 						set @LockCCValues= rtrim(@LockCCValues)  
 						set @LockCCValues=substring(@LockCCValues,0,len(@LockCCValues)- charindex(',',reverse(@LockCCValues))+1)  
@@ -157,12 +138,12 @@ SET NOCOUNT ON;
 						join [ACC_DocDetails] b with(nolock) on a.AccDocDetailsID=b.AccDocDetailsID  
 						WHERE b.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND b.docid='+convert(nvarchar,@DocID)+' and a.dcccnid'+convert(nvarchar,(@LockCC-50000))+' in('+@LockCCValues+'))  
 						SET @NID=-125 '   
-						EXEC sp_executesql @sql,N'@NID INT OUTPUT',@NID output
+						EXEC sp_executesql @sql,N'@NID bigint OUTPUT',@NID output
 					END  
 				END      
 			END  
   
-			if(@LockWhere <>'')
+			if(dbo.fnCOM_HasAccess(@RoleID,43,193)=0 and @LockWhere <>'')
 			BEGIN
 				if(@LockWhere like '<XML%')
 				BEGIN
@@ -172,7 +153,7 @@ SET NOCOUNT ON;
 					from @XML.nodes('/XML') as Data(X)    		         
 					set @sql ='if exists (select a.CostCenterID from Acc_DocDetails a WITH(NOLOCK)
 						join COM_DocCCData b WITH(NOLOCK) on a.AccDocDetailsID=b.AccDocDetailsID
-						join ADM_DimensionWiseLockData c  WITH(NOLOCK) on '+convert(nvarchar(max),@DocDate)+' between c.fromdate and c.todate and c.isEnable=1 '+@LockCCValues+'
+						join ADM_DimensionWiseLockData c  WITH(NOLOCK) on a.DocDate between c.fromdate and c.todate and c.isEnable=1 '+@LockCCValues+'
 						where  a.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND a.docid='+convert(nvarchar,@DocID)+@TEMPLockWhere+')  
 						SET @NID=-125 '  
 				END
@@ -180,27 +161,28 @@ SET NOCOUNT ON;
 				BEGIN
 					set @sql ='if exists (select a.CostCenterID from Acc_DocDetails a WITH(NOLOCK)
 						join COM_DocCCData b WITH(NOLOCK) on a.AccDocDetailsID=b.AccDocDetailsID
-						join ADM_DimensionWiseLockData c  WITH(NOLOCK) on '+convert(nvarchar(max),@DocDate)+' between c.fromdate and c.todate and c.isEnable=1
+						join ADM_DimensionWiseLockData c  WITH(NOLOCK) on a.DocDate between c.fromdate and c.todate and c.isEnable=1
 						where  a.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND a.docid='+convert(nvarchar,@DocID)+@LockWhere+')  
 						SET @NID=-125 ' 
 				END	
 				print @sql
-				EXEC sp_executesql @sql,N'@NID INT OUTPUT',@NID output
+				EXEC sp_executesql @sql,N'@NID bigint OUTPUT',@NID output
 			END
 			
 			SELECT @DAllowLockData=CONVERT(BIT,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='Lock Data Between'  
 			IF (@DAllowLockData=1)  
 			BEGIN  
-				SELECT @DLockCC=CONVERT(INT,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='LockCostCenters' and isnumeric(PrefValue)=1  
+				SELECT @DLockFromDate=CONVERT(DATETIME,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='LockDataFromDate'  
+				SELECT @DLockToDate=CONVERT(DATETIME,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='LockDataToDate'  
+				SELECT @DLockCC=CONVERT(BIGINT,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='LockCostCenters' and isnumeric(PrefValue)=1  
 
-				IF exists(select LockID from ADM_LockedDates WITH(NOLOCK) where isEnable=1 
-				 and @DocDate between FromDate and ToDate and CostCenterID=@CostCenterID)  
+				if(@DocDate BETWEEN @DLockFromDate AND @DLockToDate)  
 				BEGIN  
 					if(@DLockCC is null or @DLockCC=0)  
 						SET @NID=-125  
 					else if(@DLockCC>50000)  
 					BEGIN  
-						SELECT @LockCCValues=CONVERT(INT,PrefValue) FROM COM_DocumentPreferences with(nolock) WHERE CostCenterID=@CostCenterID and  PrefName='LockCostCenterNodes'  
+						SELECT @LockCCValues=CONVERT(BIGINT,PrefValue) FROM COM_DocumentPreferences with(nolock) WHERE CostCenterID=@CostCenterID and  PrefName='LockCostCenterNodes'  
 
 						set @LockCCValues= rtrim(@LockCCValues)  
 						set @LockCCValues=substring(@LockCCValues,0,len(@LockCCValues)- charindex(',',reverse(@LockCCValues))+1)  
@@ -209,7 +191,7 @@ SET NOCOUNT ON;
 						join [ACC_DocDetails] b with(nolock) on a.AccDocDetailsID=b.AccDocDetailsID  
 						WHERE b.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND b.docid='+convert(nvarchar,@DocID)+' and a.dcccnid'+convert(nvarchar,(@DLockCC-50000))+' in('+@LockCCValues+'))  
 						SET @NID=-125 '  
-						EXEC sp_executesql @sql,N'@NID INT OUTPUT',@NID output
+						EXEC sp_executesql @sql,N'@NID bigint OUTPUT',@NID output
 					END   
 				END         
 			END  
@@ -252,10 +234,8 @@ SET NOCOUNT ON;
 					@ReviseReason ='',
 					@LangID =@LangID,
 					@UserName=@UserName,
-					@ModDate=@Dt,
-					@CCID=0,
-					@AP=@AP,
-					@sysinfo=@sysinfo
+					@ModDate=@Dt
+
 		END
 		
 		if(@Action=3)
@@ -272,9 +252,7 @@ SET NOCOUNT ON;
 					@UserID=@UserID ,    
 					@UserName =@UserName,
 					@RoleID=@RoleID,
-					@LangID =  @LangID ,
-					@AP=@AP,
-					@sysinfo=@sysinfo
+					@LangID =  @LangID 
 			
 		
 			set @I=@I+1;
@@ -325,10 +303,7 @@ SET NOCOUNT ON;
 			@UserName=@UserName ,    
 			@UserID=@UserID ,
 			@RoleID=@RoleID ,
-			@LangID=@LangID ,
-			@AP=@AP,
-			@sysinfo=@sysinfo
-			
+			@LangID=@LangID 
 			
 			if(@retValue=-999)
 				return -999
@@ -352,7 +327,7 @@ SET NOCOUNT ON;
 			BEGIN
 				set @CCID=0
 				select @CCID=isnull(value,0) from @preftble 
-				where  Name='OnOpbConvert' and ISNUMERIC(value)=1 and CONVERT(INT,value)>40000
+				where  Name='OnOpbConvert' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>40000
 				set @Series=0
 			END	
 			else
@@ -369,10 +344,9 @@ SET NOCOUNT ON;
 				where AccDocDetailsID=@Acc
 				
 				if(@oldPDCStatus=369)
-					UPDATE A 
-					SET A.StatusID = 429 
-					FROM ACC_DocDetails A WITH(NOLOCK)
-					where A.RefCCID=400 and A.RefNodeID=@Acc 
+					UPDATE ACC_DocDetails 
+					SET StatusID = 429 
+					where RefCCID=400 and RefNodeID=@Acc 
 			END	
 			ELSE
 			begin
@@ -396,20 +370,17 @@ SET NOCOUNT ON;
 					from ACC_DocDetails with(nolock)
 					where AccDocDetailsID=@Acc
 				 
-					update B
-					set B.docno=@OldvouNO,B.DocDate=@BillDate,B.DocType=@DocumentType,B.StatusID=429,B.ConvertedDate=NUll
-					FROM com_billWise B WITH(NOLOCK)
-					where B.docno=@vouNO and B.DocSeqNo=@seqno
+					update com_billWise
+					set docno=@OldvouNO,DocDate=@BillDate,DocType=@DocumentType,StatusID=429,ConvertedDate=NUll
+					where docno=@vouNO and DocSeqNo=@seqno
 					
-					update B
-					set B.Refdocno=@OldvouNO,B.refDocDate=@BillDate,B.RefStatusID=429
-					FROM com_billWise B WITH(NOLOCK)
-					where B.Refdocno=@vouNO and B.RefDocSeqNo=@seqno
+					update com_billWise
+					set Refdocno=@OldvouNO,refDocDate=@BillDate,RefStatusID=429
+					where Refdocno=@vouNO and RefDocSeqNo=@seqno
 					
-					UPDATE A 
-					SET A.StatusID = 429 
-					FROM ACC_DocDetails A WITH(NOLOCK)
-					where A.RefCCID=400 and A.RefNodeID=@Acc 
+					UPDATE ACC_DocDetails 
+					SET StatusID = 429 
+					where RefCCID=400 and RefNodeID=@Acc 
 					
 				end	
 			END
@@ -442,7 +413,7 @@ SET NOCOUNT ON;
 			BEGIN
 				set @CCID=0
 				select @CCID=isnull(value,0) from @preftble 
-				where  Name='OnOpbBounce' and ISNUMERIC(value)=1 and CONVERT(INT,value)>40000				
+				where  Name='OnOpbBounce' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>40000				
 				set @Series=0
 			END	
 			else	
@@ -478,10 +449,9 @@ SET NOCOUNT ON;
 				delete from COM_ChequeReturn
 				where Refdocno=@OldvouNO and RefDocSeqNo=@seqno
 				
-				update B
-				set B.docno=@OldvouNO,B.DocDate=@BillDate,B.StatusID=@status,B.AdjAmount=AdjAmount,B.AmountFC=AmountFC,B.DocType=@DocumentType
-				FROM com_billWise B WITH(NOLOCK)
-				where B.docno=@vouNO and B.DocSeqNo=@seqno
+				update com_billWise
+				set docno=@OldvouNO,DocDate=@BillDate,StatusID=@status,AdjAmount=AdjAmount,AmountFC=AmountFC,DocType=@DocumentType
+				where docno=@vouNO and DocSeqNo=@seqno
 				
 				select @CCID=Bounce,@Series=Series from ADM_DOCUMENTTYPES with(nolock) where CostCenterID=@CostCenterID
 				select @DocumentType=DocumentType,@ABBR=DocumentAbbr from ADM_DOCUMENTTYPES with(nolock) where CostCenterId=@CCID						
@@ -489,76 +459,58 @@ SET NOCOUNT ON;
 				select @OldvouNO=voucherNo,@seqno=DocSeqNo from ACC_DocDetails with(nolock)
 				where refccid=400 and refnodeid=@Acc and CostCenterID=@CCID
 			
-				delete B from com_billWise B WITH(NOLOCK)
-				where B.docno=@OldvouNO and B.DocSeqNo=@seqno and B.DocType=@DocumentType
-				
-				set @ccid=0
-				set @docid=0
-				select @ccid=CostCenterID,@docid=DocID from INV_DocDetails with(nolock)
-				where RefCCID=400 and RefNodeID=@Acc
-				if(@ccid>0 and @docid>0)
-				BEGIN
-					 EXEC @retValue = [dbo].[spDOC_DeleteInvDocument]  
-						 @CostCenterID = @ccid,  
-						 @DocPrefix = '',  
-						 @DocNumber = '',
-						 @DocID=@docid,
-						 @UserID = @UserID,  
-						 @UserName = @UserName,  
-						 @LangID = @LangID,
-						 @RoleID=@RoleID
-				END		 
+				delete from com_billWise
+				where docno=@OldvouNO and DocSeqNo=@seqno and DocType=@DocumentType
 			end
 			else if(@oldstatus=369)
 			begin
-				update B
-				set B.docno=@OldvouNO,B.DocDate=@BillDate,B.DocType=@DocumentType,B.StatusID=@status,B.ConvertedDate=NUll
-				FROM com_billWise B WITH(NOLOCK)
-				where B.docno=@vouNO and B.DocSeqNo=@seqno
+				update com_billWise
+				set docno=@OldvouNO,DocDate=@BillDate,DocType=@DocumentType,StatusID=@status,ConvertedDate=NUll
+				where docno=@vouNO and DocSeqNo=@seqno
 				
-				if exists(select Refdocno from com_billWise	with(nolock) where Refdocno=@vouNO and RefDocSeqNo=@seqno)
+				if exists(select Refdocno from com_billWise	where Refdocno=@vouNO and RefDocSeqNo=@seqno)
 				BEGIN	
-					update B
-					set B.Refdocno=NULL,B.RefDocSeqNo=NULL,B.IsNewReference=1,B.RefStatusID=null
-					FROM com_billWise B WITH(NOLOCK)
-					where B.Refdocno=@vouNO and B.RefDocSeqNo=@seqno
+					update com_billWise
+					set Refdocno=NULL,RefDocSeqNo=NULL,IsNewReference=1,RefStatusID=null
+					where Refdocno=@vouNO and RefDocSeqNo=@seqno
 				END
 			end
 			
 			set @CCID=0
 			SELECT @CCID=value FROM @preftble  
 			WHERE ccid=@CostCenterID and name='DiscDoc' and value<>'' and isnumeric(value)=1
-
-			delete D from [COM_DocCCData] D WITH(NOLOCK)
-			where AccDocDetailsID is not null and AccDocDetailsID in(select AccDocDetailsID from ACC_DocDetails with(nolock)
-			where RefCCID=400 and RefNodeID=@Acc and CostCenterID<>@CCID)
 			
-			delete D from [COM_DocNumData] D WITH(NOLOCK)
-			where AccDocDetailsID is not null and AccDocDetailsID in(select AccDocDetailsID from ACC_DocDetails with(nolock)
-			where RefCCID=400 and RefNodeID=@Acc and CostCenterID<>@CCID)
 			
-			delete D from [COM_DocTextData] D WITH(NOLOCK)
+			
+			delete from [COM_DocCCData]
+			where AccDocDetailsID is not null and AccDocDetailsID in(select AccDocDetailsID from ACC_DocDetails with(nolock)
+			where RefCCID=400 and RefNodeID=@Acc and @CostCenterID<>@CCID)
+			
+			delete from [COM_DocNumData]
+			where AccDocDetailsID is not null and AccDocDetailsID in(select AccDocDetailsID from ACC_DocDetails with(nolock)
+			where RefCCID=400 and RefNodeID=@Acc and @CostCenterID<>@CCID)
+			
+			delete from [COM_DocTextData]
 			where AccDocDetailsID is not null and AccDocDetailsID in (select AccDocDetailsID from ACC_DocDetails with(nolock)
-			where RefCCID=400 and RefNodeID=@Acc and CostCenterID<>@CCID)
+			where RefCCID=400 and RefNodeID=@Acc and @CostCenterID<>@CCID)
 			
-			delete D from [COM_DocID] D WITH(NOLOCK)
+			delete from [COM_DocID]
 			where ID in (select docid from ACC_DocDetails with(nolock)
-			where RefCCID=400 and RefNodeID=@Acc and CostCenterID<>@CCID) 
-
-			delete D from ACC_DocDetails D WITH(NOLOCK)
-			where RefCCID=400 and RefNodeID=@Acc and CostCenterID<>@CCID
+			where RefCCID=400 and RefNodeID=@Acc and @CostCenterID<>@CCID) 
 			
-			UPDATE A 
-			SET A.ConvertedDate=NUll
-			FROM ACC_DocDetails A WITH(NOLOCK)
-			where A.AccDocDetailsID=@Acc or A.LinkedAccDocDetailsID=@Acc
+			delete from ACC_DocDetails
+			where RefCCID=400 and RefNodeID=@Acc and @CostCenterID<>@CCID
+			
+			UPDATE ACC_DocDetails 
+			SET ConvertedDate=NUll
+			where AccDocDetailsID=@Acc or LinkedAccDocDetailsID=@Acc
 			
 		end
 		--select * from adm_globalpreferences
 		if(@Action=1)
 		begin
 			set @tempbid=0
-			declare @BankAccountID INT,@tempAccID INT,@ChangeCheck bit
+			declare @BankAccountID bigint,@tempAccID bigint,@ChangeCheck bit
 		    select @tempcr=case when IsNegative=1 THEN DebitAccount else CreditAccount end,@tempdr=case when IsNegative=1 THEN CreditAccount else DebitAccount end,@temptype=DocumentType,@tempbid=BankAccountID from ACC_DocDetails with(nolock) where AccDocDetailsID=@Acc
 			select @ChangeCheck=Value from @preftble  where Name='Dont Change PDC Bank On Convert'
 			if(@temptype=16)
@@ -582,10 +534,9 @@ SET NOCOUNT ON;
 						 IF(@tempAccID is null or @tempAccID <=1)
 							RAISERROR('-365',16,1)									
 					end
-							UPDATE A 
-							SET A.DebitAccount = @tempAccID ,A.BankAccountID=@BankAccountID
-							FROM ACC_DocDetails A WITH(NOLOCK)
-							where A.AccDocDetailsID=@Acc 
+							UPDATE ACC_DocDetails 
+							SET DebitAccount = @tempAccID ,BankAccountID=@BankAccountID
+							where AccDocDetailsID=@Acc 
 							set @tempdr=@tempAccID
 					end
 					else 
@@ -597,10 +548,9 @@ SET NOCOUNT ON;
 							 IF(@tempAccID is null or @tempAccID <=1)
 								RAISERROR('-366',16,1)				
 						end
-							UPDATE A 
-							SET A.CreditAccount = @tempAccID ,A.BankAccountID=@BankAccountID
-							FROM ACC_DocDetails A WITH(NOLOCK)
-							where A.AccDocDetailsID=@Acc 
+							UPDATE ACC_DocDetails 
+							SET CreditAccount = @tempAccID ,BankAccountID=@BankAccountID
+							where AccDocDetailsID=@Acc 
 							set @tempcr=@tempAccID
 					end
 				end
@@ -608,17 +558,15 @@ SET NOCOUNT ON;
 				begin
 					if(@temptype=19 and @tempdr<>@DebitAccountID )
 					begin
-							UPDATE A 
-							SET A.DebitAccount = @Adb 
-							FROM ACC_DocDetails A WITH(NOLOCK)
-							where A.AccDocDetailsID=@Acc 
+							UPDATE ACC_DocDetails 
+							SET DebitAccount = @Adb 
+							where AccDocDetailsID=@Acc 
 					end
 					else if(@temptype=14 and @tempcr<>@CreditAccountID)
 					begin
-							UPDATE A 
-							SET A.CreditAccount = @CreditAccountID 
-							FROM ACC_DocDetails A WITH(NOLOCK)
-							where A.AccDocDetailsID=@Acc 
+							UPDATE ACC_DocDetails 
+							SET CreditAccount = @CreditAccountID 
+							where AccDocDetailsID=@Acc 
 					end
 				end
 			END
@@ -647,15 +595,13 @@ SET NOCOUNT ON;
 		--select * from COM_CostCenterCodeDef
 		--UPDATING PRESENT DOC status
 		if(@temptype=16)
-			UPDATE A 
-			SET A.OpPdcStatus = @status 
-			FROM ACC_DocDetails A WITH(NOLOCK)
-			where A.AccDocDetailsID=@Acc or A.LinkedAccDocDetailsID=@Acc
+			UPDATE ACC_DocDetails 
+			SET OpPdcStatus = @status 
+			where AccDocDetailsID=@Acc or LinkedAccDocDetailsID=@Acc
 		ELSE	
-			UPDATE A 
-			SET A.StatusID = @status 
-			FROM ACC_DocDetails A WITH(NOLOCK)
-			where A.AccDocDetailsID=@Acc or A.LinkedAccDocDetailsID=@Acc
+			UPDATE ACC_DocDetails 
+			SET StatusID = @status 
+			where AccDocDetailsID=@Acc or LinkedAccDocDetailsID=@Acc
 		
 		if(@Action=1 or @Action=0)
 		begin
@@ -807,7 +753,6 @@ SET NOCOUNT ON;
 					 INSERT INTO COM_CostCenterCodeDef(CostCenteriD,FeatureiD,CodePrefix,CodeNumberRoot,CodeNumberInc,CurrentCodeNumber,CodeNumberLength,GUID,CreatedBy,CreatedDate,Location,Division)    
 					 VALUES(@CCID,@CCID,@DocPrefix,1,1,1,1,Newid(),@UserName,convert(float,getdate()),@LocationID,@DivisionID)    				 
 				end   	
-				
 			END   		
 			
 			
@@ -819,19 +764,6 @@ SET NOCOUNT ON;
 			
 			if not (@Action=1 and @PrefValue='True' and (@tempbid is null or @tempbid=0))
 			BEGIN
-				select @tempDocid=DocID,@tempccid=Costcenterid from ACC_DocDetails with(nolock)  where AccDocDetailsID=@Acc
-				if not exists(select * from COM_Files WITH(NOLOCK) where  FeatureID=@CCID  and FeaturePK=@DocID)			
-				BEGIN
-					insert into COM_Files(FilePath,ActualFileName,RelativeFileName,FileExtension,IsProductImage,FeatureID,FeaturePK,CompanyGUID
-					,GUID,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,FileDescription,CostCenterID,AllowInPrint,IsDefaultImage
-					,RowSeqNo,ColName,LocationID,DivisionID,ValidTill,RefNo,HasThumb,RefNum,Remarks,DocNo,Type,IssueDate,status,IsSign)
-					select FilePath,ActualFileName,RelativeFileName,FileExtension,IsProductImage,@CCID,@DocID,CompanyGUID
-					,GUID,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,FileDescription,@CCID,AllowInPrint,IsDefaultImage
-					,RowSeqNo,ColName,LocationID,DivisionID,ValidTill,RefNo,HasThumb,RefNum,Remarks,DocNo,Type,IssueDate,status,IsSign
-					from COM_Files WITH(NOLOCK)
-					where FeatureID=@tempccid  and FeaturePK=@tempDocid
-				END	 
-
 			set @billwiseVNO=@NewVoucherNO
 			set @BillWiseDocType=@DocumentType
 			
@@ -865,7 +797,7 @@ SET NOCOUNT ON;
 								 ,[ExchangeRate] 
 								 ,[AmountFC]   								   
 								 ,[CreatedBy]    
-								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,BRS_Status,ClearanceDate,BankAccountID,AP)
+								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,BRS_Status,ClearanceDate)
 								 
 								 Select @DocID  
 										,@CCID 										  
@@ -906,9 +838,6 @@ SET NOCOUNT ON;
 										 when [ChequeMaturityDate] is not null and [ChequeMaturityDate]>0 then [ChequeMaturityDate]
 										 when [ChequeDate] is not null and [ChequeDate]>0 then [ChequeDate]
 										 else DocDate end else 0 end
-										 ,case when @Action!=0 and DocumentType=19 then CreditAccount 
-										 when @Action!=0 then DebitAccount
-										 else null END,@AP
 										 from ACC_DocDetails with(nolock) where  AccDocDetailsID =@Acc
 
 			set @AccDocDetails=@@IDENTITY
@@ -957,7 +886,8 @@ SET NOCOUNT ON;
 						
 					set @sql='INSERT INTO ACC_DocDetails    
 								 ([DocID]    
-								 ,[CostCenterID]      
+								 ,[CostCenterID]    
+								 ,[DocumentTypeID]    
 								 ,[DocumentType]    
 								 ,[VersionNo]    
 								 ,[VoucherNo]    
@@ -983,11 +913,14 @@ SET NOCOUNT ON;
 								 ,[DocSeqNo]    
 								 ,[CurrencyID]    
 								 ,[ExchangeRate] 
-								 ,[AmountFC]     
+								 ,[AmountFC]   
+								 ,[CompanyGUID]    
+								 ,[GUID]    
 								 ,[CreatedBy]    
-								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AmountBC,ExhgRtBC,AP)
+								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AmountBC,ExhgRtBC)
 								 Select '+CONVERT(nvarchar,@DocID)+'
-										,'+CONVERT(nvarchar,@CCID)+'  
+										,'+CONVERT(nvarchar,@CCID)+' 
+										,'+CONVERT(nvarchar,@TypeID)+'   
 										,'+CONVERT(nvarchar,@DocumentType)+'   
 										,[VersionNo]    
 										,'''+CONVERT(nvarchar,@NewVoucherNO)+'''
@@ -1013,11 +946,11 @@ SET NOCOUNT ON;
 										,[DocSeqNo]    
 										,[CurrencyID]    
 										,[ExchangeRate] 
-										,[AmountFC]      
+										,[AmountFC]   
+										,[CompanyGUID]    
+										,[GUID]    
 										,'''+@UserName+'''    
-										,'+CONVERT(nvarchar,@Dt)+','+CONVERT(nvarchar,@Dt)+',400,'+CONVERT(nvarchar,@Acc)+',AmountBC,ExhgRtBC
-										,'''+@AP+'''
-										 from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID ='+CONVERT(nvarchar,@Acc)
+										,'+CONVERT(nvarchar,@Dt)+','+CONVERT(nvarchar,@Dt)+',400,'+CONVERT(nvarchar,@Acc)+',AmountBC,ExhgRtBC from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID ='+CONVERT(nvarchar,@Acc)
 										
 					
 					exec(@sql)						
@@ -1054,7 +987,7 @@ SET NOCOUNT ON;
 								 ,[ExchangeRate] 
 								 ,[AmountFC]   								    
 								 ,[CreatedBy]    
-								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AP)
+								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID)
 								 Select @DocID  
 										,@CCID 										
 										,@DocumentType   
@@ -1088,7 +1021,7 @@ SET NOCOUNT ON;
 										,[ExchangeRate] 
 										,[AmountFC]
 										,@UserName    
-										,@Dt,@Dt,400,@Acc,@AP from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID =@Acc
+										,@Dt,@Dt,400,@Acc from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID =@Acc
 						END		
 										  
 				set @sql=' INSERT INTO [COM_DocCCData]('+@CCCols+'[AccDocDetailsID]) select '+@CCCols+'a.AccDocDetailsID
@@ -1106,12 +1039,6 @@ SET NOCOUNT ON;
 			FROM [COM_DocNumData]  WITH(NOLOCK)
 			WHERE  AccDocDetailsID='+convert(nvarchar,@Acc)		
 			exec(@sql)
-			
-			if not (@Dupl is not null and @Dupl>0) and (@Action=0 and @IsReplace=0)
-			BEGIN
-				EXEC spCOM_SetNotifEvent 429,@CCID,@DocID,@CompanyGUID,@UserName,@UserID,@RoleID
-			END	
-			
 		END
 			if(@penalty>0 and @Action=0)
 			BEGIN
@@ -1228,7 +1155,7 @@ SET NOCOUNT ON;
 								 ,[ExchangeRate] 
 								 ,[AmountFC]   								   
 								 ,[CreatedBy]    
-								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AP)
+								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID)
 								 Select @DocID  
 										,@CCID 										
 										,@DocumentType   
@@ -1254,7 +1181,7 @@ SET NOCOUNT ON;
 										,1 
 										,@penalty   										   
 										,@UserName    
-										,@Dt,@Dt,400,@Acc ,@AP
+										,@Dt,@Dt,400,@Acc 
 										from ACC_DocDetails with(nolock) where  AccDocDetailsID =@AccDocDetails										
 										
 										set @HoldDimID=@@IDENTITY
@@ -1314,7 +1241,7 @@ SET NOCOUNT ON;
 							  ,0
 							  ,'+@CCreplCols+Convert(nvarchar(max),@penalty)+',NULL,NULL,a.StatusID,null,null
 						  FROM  ACC_DocDetails a with(nolock)
-						  join COM_DocCCData d with(nolock) on a.AccDocDetailsID=d.AccDocDetailsID
+						  join COM_DocCCData d on a.AccDocDetailsID=d.AccDocDetailsID
 						   where  a.AccDocDetailsID ='+Convert(nvarchar(max),@HoldDimID)
 					
 					exec(@sql)	   
@@ -1335,15 +1262,13 @@ SET NOCOUNT ON;
 						where CurrencyID = @baseCurr AND EXCHANGEDATE <= CONVERT(FLOAT,convert(datetime,@NewBillDate))
 						and DimNodeID=@NID ORDER BY EXCHANGEDATE DESC
 						
-						set @sql='update A
-							set A.AmountBC=round(Amount/'+convert(nvarchar,@ExchRate)+','+@Decimals+'),A.ExhgRtBC='+convert(nvarchar,@ExchRate)+'
-							FROM ACC_DocDetails A WITH(NOLOCK)
-							where A.AccDocDetailsID='+convert(nvarchar,@HoldDimID)+'
+						set @sql='update ACC_DocDetails
+							set AmountBC=round(Amount/'+convert(nvarchar,@ExchRate)+','+@Decimals+'),ExhgRtBC='+convert(nvarchar,@ExchRate)+'
+							where AccDocDetailsID='+convert(nvarchar,@HoldDimID)+'
 							
-							update B 
-							set B.AmountBC=round(AdjAmount/'+convert(nvarchar,@ExchRate)+','+@Decimals+'),B.ExhgRtBC='+convert(nvarchar,@ExchRate)+'
-							FROM com_billWise B WITH(NOLOCK)
-							where B.DocNo='''+@NewVoucherNO+''''
+							update COM_Billwise 
+							set AmountBC=round(AdjAmount/'+convert(nvarchar,@ExchRate)+','+@Decimals+'),ExhgRtBC='+convert(nvarchar,@ExchRate)+'
+							where DocNo='''+@NewVoucherNO+''''
 						
 						exec(@sql)
 						
@@ -1365,15 +1290,13 @@ SET NOCOUNT ON;
 			    where AccDocDetailsID=@AccDocDetails
 			    
 			
-				update B
-				set B.docno=@NewVoucherNO,B.DocDate=@BillDate,B.DocType=@DocumentType,B.StatusID=@status
-				FROM com_billWise B WITH(NOLOCK)
-				where B.docno=@OldvouNO and B.DocSeqNo=@seqno
+				update com_billWise
+				set docno=@NewVoucherNO,DocDate=@BillDate,DocType=@DocumentType,StatusID=@status
+				where docno=@OldvouNO and DocSeqNo=@seqno
 				
-				update B
-				set B.Refdocno=@NewVoucherNO,B.RefDocDate=@BillDate,B.RefStatusID=@status
-				FROM com_billWise B WITH(NOLOCK)
-				where B.Refdocno=@OldvouNO and B.RefDocSeqNo=@seqno
+				update com_billWise
+				set Refdocno=@NewVoucherNO,RefDocDate=@BillDate,RefStatusID=@status
+				where Refdocno=@OldvouNO and RefDocSeqNo=@seqno
 			end
 			else if(@Action=0)
 			begin
@@ -1381,10 +1304,9 @@ SET NOCOUNT ON;
 				select @OldvouNO=voucherNo,@seqno=DocSeqNo,@oldstatus=StatusID from ACC_DocDetails with(nolock)
 			    where AccDocDetailsID=@Acc
 			 
-				update B
-				set B.Refdocno=NULL,B.RefStatusID=null,B.RefDocSeqNo=NUll,B.RefDocDate=NULL,B.RefDocDueDate=NULL,B.IsNewReference=1
-				FROM com_billWise B WITH(NOLOCK)
-				where B.Refdocno=@OldvouNO and B.RefDocSeqNo=@seqno
+				update com_billWise
+				set Refdocno=NULL,RefStatusID=null,RefDocSeqNo=NUll,RefDocDate=NULL,RefDocDueDate=NULL,IsNewReference=1
+				where Refdocno=@OldvouNO and RefDocSeqNo=@seqno
 				
 			end
 		
@@ -1430,7 +1352,7 @@ SET NOCOUNT ON;
 			BEGIN
 				set @CCID=0
 				select @CCID=isnull(value,0) from @preftble 
-				where  Name='OnOpbConvert' and ISNUMERIC(value)=1 and CONVERT(INT,value)>40000
+				where  Name='OnOpbConvert' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>40000
 				set @Series=0
 			END	
 			else			
@@ -1611,20 +1533,6 @@ SET NOCOUNT ON;
 				BEGIN
 					RAISERROR('-395',16,1)
 				END
-				
-				select @tempDocid=DocID,@tempccid=Costcenterid from ACC_DocDetails with(nolock)  where AccDocDetailsID=@Acc
-				if not exists(select * from COM_Files WITH(NOLOCK) where  FeatureID=@CCID  and FeaturePK=@DocID)			
-				BEGIN
-					insert into COM_Files(FilePath,ActualFileName,RelativeFileName,FileExtension,IsProductImage,FeatureID,FeaturePK,CompanyGUID
-					,GUID,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,FileDescription,CostCenterID,AllowInPrint,IsDefaultImage
-					,RowSeqNo,ColName,LocationID,DivisionID,ValidTill,RefNo,HasThumb,RefNum,Remarks,DocNo,Type,IssueDate,status,IsSign)
-					select FilePath,ActualFileName,RelativeFileName,FileExtension,IsProductImage,@CCID,@DocID,CompanyGUID
-					,GUID,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,FileDescription,@CCID,AllowInPrint,IsDefaultImage
-					,RowSeqNo,ColName,LocationID,DivisionID,ValidTill,RefNo,HasThumb,RefNum,Remarks,DocNo,Type,IssueDate,status,IsSign
-					from COM_Files WITH(NOLOCK)
-					where FeatureID=@tempccid  and FeaturePK=@tempDocid
-				END	 
-
  							     INSERT INTO ACC_DocDetails    
 								 ([DocID]    
 								 ,[CostCenterID]    								
@@ -1656,7 +1564,7 @@ SET NOCOUNT ON;
 								 ,[AmountFC]   
 								  
 								 ,[CreatedBy]    
-								 ,[CreatedDate],RefCCID,RefNodeID,BRS_Status,ClearanceDate,BankAccountID)
+								 ,[CreatedDate],RefCCID,RefNodeID,BRS_Status,ClearanceDate)
 								 
 								 Select @DocID  
 										,@CCID 										
@@ -1699,9 +1607,7 @@ SET NOCOUNT ON;
 										 when [ChequeMaturityDate] is not null and [ChequeMaturityDate]>0 then [ChequeMaturityDate]
 										 when [ChequeDate] is not null and [ChequeDate]>0 then [ChequeDate]
 										 else DocDate end  
-										 ,case when DocumentType=19 then CreditAccount else DebitAccount END
 										 from ACC_DocDetails with(nolock) where  AccDocDetailsID =@Acc
-	
 
 				set @AccDocDetails=@@IDENTITY
 				
@@ -1736,7 +1642,8 @@ SET NOCOUNT ON;
 						
 					set @sql='INSERT INTO ACC_DocDetails    
 								 ([DocID]    
-								 ,[CostCenterID]       
+								 ,[CostCenterID]    
+								 ,[DocumentTypeID]    
 								 ,[DocumentType]    
 								 ,[VersionNo]    
 								 ,[VoucherNo]    
@@ -1762,11 +1669,14 @@ SET NOCOUNT ON;
 								 ,[DocSeqNo]    
 								 ,[CurrencyID]    
 								 ,[ExchangeRate] 
-								 ,[AmountFC]    
+								 ,[AmountFC]   
+								 ,[CompanyGUID]    
+								 ,[GUID]    
 								 ,[CreatedBy]    
-								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AmountBC,ExhgRtBC,AP)
+								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AmountBC,ExhgRtBC)
 								 Select '+CONVERT(nvarchar,@DocID)+'
-										,'+CONVERT(nvarchar,@CCID)+'    
+										,'+CONVERT(nvarchar,@CCID)+' 
+										,'+CONVERT(nvarchar,@TypeID)+'   
 										,'+CONVERT(nvarchar,@DocumentType)+'   
 										,[VersionNo]    
 										,'''+CONVERT(nvarchar,@NewVoucherNO)+'''
@@ -1792,11 +1702,11 @@ SET NOCOUNT ON;
 										,[DocSeqNo]    
 										,[CurrencyID]    
 										,[ExchangeRate] 
-										,[AmountFC]     
+										,[AmountFC]   
+										,[CompanyGUID]    
+										,[GUID]    
 										,'''+@UserName+'''
-										,'+CONVERT(nvarchar,@Dt)+','+CONVERT(nvarchar,@Dt)+',400,'+CONVERT(nvarchar,@Acc)+',AmountBC,ExhgRtBC
-										,'''+@AP+'''
-										 from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID ='+CONVERT(nvarchar,@Acc)
+										,'+CONVERT(nvarchar,@Dt)+','+CONVERT(nvarchar,@Dt)+',400,'+CONVERT(nvarchar,@Acc)+',AmountBC,ExhgRtBC from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID ='+CONVERT(nvarchar,@Acc)
 					
 					exec(@sql)						
 				END
@@ -1832,7 +1742,7 @@ SET NOCOUNT ON;
 								 ,[ExchangeRate] 
 								 ,[AmountFC]   								  
 								 ,[CreatedBy]    
-								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AP)
+								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID)
 								 Select @DocID  
 										,@CCID 										 
 										,@DocumentType   
@@ -1866,7 +1776,7 @@ SET NOCOUNT ON;
 										,[ExchangeRate] 
 										,[AmountFC]
 										,@UserName    
-										,@Dt,@Dt,400,@Acc,@AP from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID =@Acc										
+										,@Dt,@Dt,400,@Acc from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID =@Acc										
 					END					
 	  									   
 					set @sql=' INSERT INTO [COM_DocCCData]('+@CCCols+'[AccDocDetailsID]) select '+@CCCols+'a.AccDocDetailsID
@@ -1922,10 +1832,9 @@ SET NOCOUNT ON;
 				select @OldvouNO=voucherNo,@seqno=DocSeqNo,@oldstatus=StatusID from ACC_DocDetails with(nolock)
 			    where AccDocDetailsID=@Acc
 			
-				update B
-				set B.DocType=@DocumentType
-				FROM com_billWise B WITH(NOLOCK)
-				where B.docno=@OldvouNO and B.DocSeqNo=@seqno
+				update com_billWise
+				set DocType=@DocumentType
+				where docno=@OldvouNO and DocSeqNo=@seqno
 				
 			 	select @CCID=IntermediateConvertion,@series=isnull(IntermedSeries,1) from ADM_DOCUMENTTYPES with(nolock) where CostCenterID=@CostCenterID
 				select @TypeID=DocumentTypeID,@DocumentType=DocumentType,@ABBR=DocumentAbbr from ADM_DOCUMENTTYPES with(nolock) where CostCenterId=@CCID						
@@ -2053,19 +1962,6 @@ SET NOCOUNT ON;
 							BEGIN
 								RAISERROR('-396',16,1)
 							END
-				
-						select @tempDocid=DocID,@tempccid=Costcenterid from ACC_DocDetails with(nolock)  where AccDocDetailsID=@Acc
-						if not exists(select * from COM_Files WITH(NOLOCK) where  FeatureID=@CCID  and FeaturePK=@DocID)			
-						BEGIN
-							insert into COM_Files(FilePath,ActualFileName,RelativeFileName,FileExtension,IsProductImage,FeatureID,FeaturePK,CompanyGUID
-							,GUID,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,FileDescription,CostCenterID,AllowInPrint,IsDefaultImage
-							,RowSeqNo,ColName,LocationID,DivisionID,ValidTill,RefNo,HasThumb,RefNum,Remarks,DocNo,Type,IssueDate,status,IsSign)
-							select FilePath,ActualFileName,RelativeFileName,FileExtension,IsProductImage,@CCID,@DocID,CompanyGUID
-							,GUID,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,FileDescription,@CCID,AllowInPrint,IsDefaultImage
-							,RowSeqNo,ColName,LocationID,DivisionID,ValidTill,RefNo,HasThumb,RefNum,Remarks,DocNo,Type,IssueDate,status,IsSign
-							from COM_Files WITH(NOLOCK)
-							where FeatureID=@tempccid  and FeaturePK=@tempDocid
-						END	 
 
 							INSERT INTO ACC_DocDetails    
 								 ([DocID]    
@@ -2097,7 +1993,7 @@ SET NOCOUNT ON;
 								 ,[ExchangeRate] 
 								 ,[AmountFC]   
 								 ,[CreatedBy]    
-								 ,[CreatedDate],RefCCID,RefNodeID,ConvertedDate,BankAccountID,AP)
+								 ,[CreatedDate],RefCCID,RefNodeID,ConvertedDate)
 								 
 								 Select @DocID  
 										,@CCID 										 
@@ -2139,8 +2035,7 @@ SET NOCOUNT ON;
 										 when @PostedDate is not null then convert(float,@PostedDate)
 										 when [ChequeMaturityDate] is not null and [ChequeMaturityDate]>0 then [ChequeMaturityDate]
 										 when [ChequeDate] is not null and [ChequeDate]>0 then [ChequeDate]
-										 else DocDate end,BankAccountID,@AP  from ACC_DocDetails with(nolock) where  AccDocDetailsID =@Acc
-	
+										 else DocDate end  from ACC_DocDetails with(nolock) where  AccDocDetailsID =@Acc
 
 							set @AccDocDetails=@@IDENTITY
 							set @InterDOc=@NewVoucherNO
@@ -2172,7 +2067,8 @@ SET NOCOUNT ON;
 						
 					set @sql='INSERT INTO ACC_DocDetails    
 								 ([DocID]    
-								 ,[CostCenterID]       
+								 ,[CostCenterID]    
+								 ,[DocumentTypeID]    
 								 ,[DocumentType]    
 								 ,[VersionNo]    
 								 ,[VoucherNo]    
@@ -2198,11 +2094,14 @@ SET NOCOUNT ON;
 								 ,[DocSeqNo]    
 								 ,[CurrencyID]    
 								 ,[ExchangeRate] 
-								 ,[AmountFC]  
+								 ,[AmountFC]   
+								 ,[CompanyGUID]    
+								 ,[GUID]    
 								 ,[CreatedBy]    
-								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AmountBC,ExhgRtBC,AP)
+								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AmountBC,ExhgRtBC)
 								 Select '+CONVERT(nvarchar,@DocID)+'
-										,'+CONVERT(nvarchar,@CCID)+'    
+										,'+CONVERT(nvarchar,@CCID)+' 
+										,'+CONVERT(nvarchar,@TypeID)+'   
 										,'+CONVERT(nvarchar,@DocumentType)+'   
 										,[VersionNo]    
 										,'''+CONVERT(nvarchar,@NewVoucherNO)+'''
@@ -2228,11 +2127,11 @@ SET NOCOUNT ON;
 										,[DocSeqNo]    
 										,[CurrencyID]    
 										,[ExchangeRate] 
-										,[AmountFC]  
+										,[AmountFC]   
+										,[CompanyGUID]    
+										,[GUID]    
 										,'''+@UserName+'''    
-										,'+CONVERT(nvarchar,@Dt)+','+CONVERT(nvarchar,@Dt)+',400,'+CONVERT(nvarchar,@Acc)+',AmountBC,ExhgRtBC
-										,'''+@AP+'''  
-										 from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID ='+CONVERT(nvarchar,@Acc)
+										,'+CONVERT(nvarchar,@Dt)+','+CONVERT(nvarchar,@Dt)+',400,'+CONVERT(nvarchar,@Acc)+',AmountBC,ExhgRtBC from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID ='+CONVERT(nvarchar,@Acc)
 					exec(@sql)						
 				END
 				ELSE
@@ -2268,7 +2167,7 @@ SET NOCOUNT ON;
 								 ,[ExchangeRate] 
 								 ,[AmountFC]   								
 								 ,[CreatedBy]    
-								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID,AP)
+								 ,[CreatedDate],[ModifiedDate],RefCCID,RefNodeID)
 								 Select @DocID  
 										,@CCID 										 
 										,@DocumentType   
@@ -2302,7 +2201,7 @@ SET NOCOUNT ON;
 										,[ExchangeRate] 
 										,[AmountFC]   										  
 										,@UserName    
-										,@Dt,@Dt,400,@Acc,@AP from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID =@Acc										
+										,@Dt,@Dt,400,@Acc from ACC_DocDetails with(nolock) where  LinkedAccDocDetailsID =@Acc										
 						END				
 	  				
 	  					set @sql=' INSERT INTO [COM_DocCCData]('+@CCCols+'[AccDocDetailsID]) select '+@CCCols+'a.AccDocDetailsID
@@ -2334,15 +2233,13 @@ SET NOCOUNT ON;
 					 select @BillDate=DocDate,@ConDate=ConvertedDate from ACC_DocDetails with(nolock)
 					 where AccDocDetailsID=@AccDocDetails
 			    
-					update B
-					set B.docno=@NewVoucherNO,B.DocDate=@BillDate,B.DocType=@DocumentType,B.StatusID=@status,B.ConvertedDate=@ConDate
-					FROM com_billWise B WITH(NOLOCK)
-					where B.docno=@OldvouNO and B.DocSeqNo=@seqno
+					update com_billWise
+					set docno=@NewVoucherNO,DocDate=@BillDate,DocType=@DocumentType,StatusID=@status,ConvertedDate=@ConDate
+					where docno=@OldvouNO and DocSeqNo=@seqno
 					
-					update B
-					set B.Refdocno=@NewVoucherNO,B.RefDocDate=@BillDate,B.RefStatusID=@status
-					FROM com_billWise B WITH(NOLOCK)
-					where B.Refdocno=@OldvouNO and B.RefDocSeqNo=@seqno					
+					update com_billWise
+					set Refdocno=@NewVoucherNO,RefDocDate=@BillDate,RefStatusID=@status
+					where Refdocno=@OldvouNO and RefDocSeqNo=@seqno					
 				end
 		
 		 
@@ -2374,22 +2271,6 @@ SET NOCOUNT ON;
 		 end  
 		 end
 		 
-		 if(@BRDim<>'')
-		 BEGIN
-			 set @sql='update a
-			 set '+@BRDim+'
-			 from COM_DocCCData a WITH(NOLOCK)
-			 where AccDocDetailsID ='+convert(nvarchar,@Acc)
-			 
-			 set @sql=@sql+'  update a
-			 set '+@BRDim+'
-			 from COM_DocCCData a WITH(NOLOCK)
-			 join Acc_DocDetails b WITH(NOLOCK) on a.AccDocDetailsID=b.AccDocDetailsID
-			 where b.RefCCID=400 and b.RefNodeid ='+convert(nvarchar,@Acc)			 
-			 
-			 exec (@sql)
-			
-		 END
 		 
 		  if(@Action=0)
 		  begin
@@ -2469,25 +2350,23 @@ SET NOCOUNT ON;
 				exec(@sql)
 		
 			
-				update B
-				set B.docno=@NewVoucherNO,B.docdate=@BillDate,B.AdjAmount=AdjAmount,B.AmountFC=AmountFC,B.DocType=@DocumentType
-				,B.StatusID=@status,B.RefStatusID=null,B.Refdocno=NULL,B.RefDocSeqNo=NUll,B.RefDocDate=NULL,B.RefDocDueDate=NULL,B.IsNewReference=1
-				FROM com_billWise B WITH(NOLOCK)
-				where B.docno=@OldvouNO and B.DocSeqNo=@seqno
+				update com_billWise
+				set docno=@NewVoucherNO,docdate=@BillDate,AdjAmount=AdjAmount,AmountFC=AmountFC,DocType=@DocumentType
+				,StatusID=@status,RefStatusID=null,Refdocno=NULL,RefDocSeqNo=NUll,RefDocDate=NULL,RefDocDueDate=NULL,IsNewReference=1
+				where docno=@OldvouNO and DocSeqNo=@seqno
 				
 				
 				if((select COUNT(BillwiseID) from com_billwise WITH(NOLOCK)
 				where docno=@NewVoucherNO and DocSeqNo=@seqno)>1)
 				BEGIN
-					declare @amt float,@fcamt float,@billid INT
+					declare @amt float,@fcamt float,@billid bigint
 
 					select @billid=min(BillwiseID),@amt=sum(AdjAmount),@fcamt=sum(AmountFC) from com_billWise with(nolock)
 					where docno=@NewVoucherNO and DocSeqNo=@seqno
 
-					update B
-					set B.AdjAmount=@amt,B.AmountFC=@fcamt
-					FROM com_billWise B WITH(NOLOCK)
-					where B.BillwiseID=@billid 
+					update com_billWise
+					set AdjAmount=@amt,AmountFC=@fcamt
+					where BillwiseID=@billid 
 					
 					
 					if(@dimWiseCurr>50000)
@@ -2497,26 +2376,24 @@ SET NOCOUNT ON;
 						select @amtBc=sum(AmountBC) from com_billWise with(nolock)
 						where docno='''+@NewVoucherNO+''' and DocSeqNo='+convert(nvarchar,@seqno)+'
 
-						update B
-						set B.AmountBC=@amtBc
-						FROM com_billWise B WITH(NOLOCK)
-						where B.BillwiseID='+convert(nvarchar,@billid)
+						update com_billWise
+						set AmountBC=@amtBc
+						where BillwiseID='+convert(nvarchar,@billid)
 					
 						exec(@sql)
 					END
 
-					delete B from com_billWise B WITH(NOLOCK)
+					delete from com_billWise
 					where BillwiseID<>@billid and docno=@NewVoucherNO and DocSeqNo=@seqno
 					
 					select @billid=min(BillwiseID),@amt=sum(AdjAmount),@fcamt=sum(AmountFC) from com_billWise with(nolock)
 					where DocNo=@billwiseVNO and RefDocNo=@NewVoucherNO and RefDocSeqNo=@seqno and IsNewReference=0
 
-					update B
-					set B.AdjAmount=@amt,B.AmountFC=@fcamt
-					FROM com_billWise B WITH(NOLOCK)
-					where B.BillwiseID=@billid 
+					update com_billWise
+					set AdjAmount=@amt,AmountFC=@fcamt
+					where BillwiseID=@billid 
 					
-					delete B from com_billWise B WITH(NOLOCK)
+					delete from com_billWise
 					where BillwiseID<>@billid and docno=@billwiseVNO  and IsNewReference=0
 				END
 				
@@ -2537,10 +2414,9 @@ SET NOCOUNT ON;
 		
 		if(@Action=0)
 		BEGIN			
-			update A
-			set A.BillDate=@IsReplace
-			FROM ACC_DocDetails A WITH(NOLOCK)
-			where A.AccDocDetailsID=@Acc or (A.RefCCID=400 and A.RefNodeid=@Acc)
+			update ACC_DocDetails
+			set BillDate=@IsReplace
+			where AccDocDetailsID=@Acc or (RefCCID=400 and RefNodeid=@Acc)
 		END
 		if (select count(*) from sys.columns a
 			join sys.tables b on a.object_id=b.object_id
@@ -2555,89 +2431,16 @@ SET NOCOUNT ON;
 			END
 		if(@Action in(1,0))
 		BEGIN
-			update A
-			set A.converteddate=case when @PostonConversionDate=1 then floor(convert(float,getdate()))
+			update ACC_DocDetails
+			set converteddate=case when @PostonConversionDate=1 then floor(convert(float,getdate()))
 				when @PostedDate is not null then convert(float,@PostedDate)
-			 when A.[ChequeMaturityDate] is not null and A.[ChequeMaturityDate]>0 then A.[ChequeMaturityDate]
-			 when A.[ChequeDate] is not null and A.[ChequeDate]>0 then A.[ChequeDate]
-			 else A.DocDate end 
-			 FROM ACC_DocDetails A WITH(NOLOCK)
-			where A.AccDocDetailsID=@Acc
+			 when [ChequeMaturityDate] is not null and [ChequeMaturityDate]>0 then [ChequeMaturityDate]
+			 when [ChequeDate] is not null and [ChequeDate]>0 then [ChequeDate]
+			 else DocDate end 
+			where AccDocDetailsID=@Acc
 		END
 		
 		set @I=@I+1;
-		
-		select @documenttype=documenttype,@CostCenterID=CostCenterID,@DocID=DocID from ACC_DocDetails with(nolock) where AccDocDetailsID=@Acc		
-		
-		if (@documenttype in(19) and exists(select value from com_costcenterpreferences WITH(NOLOCK)
-		WHere costcenterid=92 and name ='EnableManagProp' and value='true'))
-		BEGIN
-			if(@Action=1)
-			BEGIN
-				set @sql='spRen_CommisionPosting'
-				exec @sql @Acc,@CostCenterID,@DocID,@UserID,@LangID
-			END	
-			ELSE if(@Action in(0,2))
-			BEGIN
-				set @docid=0
-				select @ccid=costcenterid,@docid=docid from inv_docdetails WITH(NOLOCK) 
-				where refccid=400 and refnodeid=@Acc and statusid<>376
-				if(@docid>0)
-				BEGIN	
-					if(@Action =0)
-						set @sql='PDC Bounced'
-					ELSE if(@Action =2)
-						set @sql='PDC UnConverted'
-							
-					EXEC	@retValue = [dbo].[spDOC_SuspendInvDocument]
-							@CostCenterID = @ccid,
-							@DocID = @docid,
-							@DocPrefix = N'',
-							@DocNumber = N'',
-							@Remarks =@sql,
-							@LockWhere = N'',
-							@SuspendAll = 0,
-							@sysinfo = @sysinfo,
-							@AP = @AP,
-							@UserID = @UserID,
-							@UserName =@UserName,
-							@RoleID = @RoleID,
-							@LangID = @LangID
-				
-							    
-					 --EXEC @retValue = [dbo].[spDOC_DeleteInvDocument]  
-					 --@CostCenterID = @ccid,  
-					 --@DocPrefix = '',  
-					 --@DocNumber = '',
-					 --@DocID=@docid,
-					 --@UserID = @UserID,  
-					 --@UserName = @UserName,  
-					 --@LangID = @LangID,
-					 --@RoleID=@RoleID
-				END 
-				
-				set @docid=0
-				select @ccid=costcenterid,@docid=docid from inv_docdetails WITH(NOLOCK) 
-				where refccid=400 and refnodeid=@Acc and statusid<>376
-				if(@docid>0)
-				BEGIN				    
-						EXEC	@retValue = [dbo].[spDOC_SuspendInvDocument]
-							@CostCenterID = @ccid,
-							@DocID = @docid,
-							@DocPrefix = N'',
-							@DocNumber = N'',
-							@Remarks = @sql,
-							@LockWhere = N'',
-							@SuspendAll = 0,
-							@sysinfo = @sysinfo,
-							@AP = @AP,
-							@UserID = @UserID,
-							@UserName =@UserName,
-							@RoleID = @RoleID,
-							@LangID = @LangID
-				END 
-			END			
-		END
 		
 		set @sql=''
 		select @sql=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=13
@@ -2651,76 +2454,6 @@ SET NOCOUNT ON;
 			select @CostCenterID=CostCenterID,@DocID=DocID from ACC_DocDetails with(nolock) where AccDocDetailsID=@Acc
 			EXEC spCOM_SetNotifEvent 429,@CostCenterID,@DocID,@CompanyGUID,@UserName,@UserID,@RoleID
 		END	
-
-		--Select @XMLNode = DocXML , @ACCDetailsID = AccDocDetailsID from @TBL where ID=@I
-		
-		set @AUTOCCID=0					
-	    SELECT @AUTOCCID=ISNULL(X.value('@CCID','INT'),0)  from @XMLNode.nodes('/AutoPOstXML') as Data(X)
-		print @AUTOCCID
-	    if (@XMLNode Is not null and @AUTOCCID <> 0)
-		begin			
-		
-			SELECT @AUTOCCID=X.value('@CCID','INT')
-			from @XMLNode.nodes('/AutoPOstXML') as Data(X)
-
-			SELECT @ddxml=CONVERT(NVARCHAR(MAX), X.query('DOCXML'))
-			from @XMLNode.nodes('/AutoPOstXML') as Data(X)
-			
-			SELECT @bxml=CONVERT(NVARCHAR(MAX), X.query('BillXML'))
-			from @XMLNode.nodes('/AutoPOstXML') as Data(X)
-			
-			set @DetIDS=''
-			SELECT @DetIDS=X.value('@DocDetIDs','nvarchar(max)')
-			from @XMLNode.nodes('/AutoPOstXML') as Data(X)
-			
-			SELECT @ddID=X.value('@DocID','INT')
-			from @XMLNode.nodes('/AutoPOstXML') as Data(X)
-			
-			set @TEmpWid=0
-			SELECT @TEmpWid=ISNULL(X.value('@WOrkFlowID','int'),0)
-			from @XMLNode.nodes('/AutoPOstXML') as Data(X)
-			
-			set @ddxml=Replace(@ddxml,'<RowHead/>','')
-			set @ddxml=Replace(@ddxml,'</DOCXML>','')
-			set @ddxml=Replace(@ddxml,'<DOCXML>','')
-			set @Prefix=''
-			EXEC [sp_GetDocPrefix] @ddxml,@DocDate,@AUTOCCID,@Prefix output
-			
-			
-			set @SQL='<XML '
-			if(@DetIDS<>'')
-				set @SQL=@SQL+' DetailIds="'+@DetIDS+'" '
-			
-			set @SQL=@SQL+'></XML>'
-			
-			EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]      
-			  @CostCenterID = @AUTOCCID,      
-			  @DocID = @ddID,      
-			  @DocPrefix = @Prefix,      
-			  @DocNumber = N'1',      
-			  @DocDate = @DocDate,      
-			  @DueDate = NULL,      
-			  @BillNo = N'',      
-			  @InvDocXML =@ddxml,      
-			  @BillWiseXML = @bxml,      
-			  @NotesXML = N'',      
-			  @AttachmentsXML = N'',    
-			  @ActivityXML = @SQL,       
-			  @IsImport = 0,      
-			  @LocationID = 0,      
-			  @DivisionID = 0 ,      
-			  @WID = @TEmpWid,      
-			  @RoleID = @RoleID,      
-			  @DocAddress = N'',      
-			  @RefCCID = 400,    
-			  @RefNodeid  = @ACCDetailsID,    
-			  @CompanyGUID = @CompanyGUID,      
-			  @UserName = @UserName,      
-			  @UserID = @UserID,      
-			  @LangID = @LangID    			  
-			 
-		END
-
 	End
 		
 		
@@ -2754,16 +2487,14 @@ SET NOCOUNT ON;
 		where d.costcenterid =(select bounce from ADM_DocumentTypes D with(nolock) where d.CostCenterID =
 		(select costcenterid from acc_docdetails with(nolock) where Accdocdetailsid=A.AccDocDetailsID))
 	end
-	ELSE 
-		SELECT 1 where 1<>1
-		
+
 	--HOLD PDC	
 	IF @HoldXML!=''
 	BEGIN		
-		Declare @TBLHOLD TABLE(ID INT IDENTITY(1,1),AccDocDetailsID INT,HoldDimension INT,HoldDate nvarchar(50),Remarks nvarchar(max))
+		Declare @TBLHOLD TABLE(ID INT IDENTITY(1,1),AccDocDetailsID BIGINT,HoldDimension bigint,HoldDate nvarchar(50),Remarks nvarchar(max))
 		set @XMl=@HoldXML
 		insert into @TBLHOLD
-		select X.value('@ID','INT'),X.value('@HoldDimension','INT'),X.value('@HoldDate','nvarchar(20)'),X.value('@HoldRemarks','nvarchar(max)')
+		select X.value('@ID','bigint'),X.value('@HoldDimension','BIGINT'),X.value('@HoldDate','nvarchar(20)'),X.value('@HoldRemarks','nvarchar(max)')
 		from @XMl.nodes('/XML/Row') as Data(X)
 
 		select @I=1,@Cnt=count(*) from @TBLHOLD
@@ -2799,8 +2530,6 @@ SET NOCOUNT ON;
 		end
 	END
 	
-	 
-
 	SELECT distinct VoucherNo from acc_docdetails D WITH(NOLOCK)
 	join @TBL a on d.AccDocDetailsID=a.AccDocDetailsID
 	WHERE isLock=1
@@ -2830,5 +2559,4 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
-
 GO

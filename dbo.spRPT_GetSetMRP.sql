@@ -4,8 +4,8 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spRPT_GetSetMRP]
 	@Type [int] = 0,
-	@MRPID [int],
-	@SelectedNodeID [int],
+	@MRPID [bigint],
+	@SelectedNodeID [bigint],
 	@IsGroup [bit],
 	@Param1 [nvarchar](max) = null,
 	@Param2 [nvarchar](max) = null,
@@ -86,7 +86,7 @@ SET NOCOUNT ON;
 				StatusID,IsGroup,Depth,ParentID,lft,rgt
 				,DefaultPreferences,OrderFilter,TreeXML,
 				GUID,CreatedBy,CreatedDate)
-			select @MRPID,@ProfileName,x.value('FCID[1]','INT'),x.value('FCPeriod[1]','nvarchar(50)'),convert(float,x.value('FromDate[1]','DateTime')),convert(float,x.value('ToDate[1]','DateTime')),
+			select @MRPID,@ProfileName,x.value('FCID[1]','bigint'),x.value('FCPeriod[1]','nvarchar(50)'),convert(float,x.value('FromDate[1]','DateTime')),convert(float,x.value('ToDate[1]','DateTime')),
 			  x.value('StatusID[1]','int'),0,0,0,0,0
 			  ,convert(nvarchar(max),x.query('DefaultPref[1]')),@Param2,@Param3,
 			  newid(),@UserName,convert(float,getdate())
@@ -96,7 +96,7 @@ SET NOCOUNT ON;
 		END
 		ELSE
 		BEGIN
-			update INV_MRP set FCID=x.value('FCID[1]','INT'),FCPeriod=x.value('FCPeriod[1]','nvarchar(50)')
+			update INV_MRP set FCID=x.value('FCID[1]','bigint'),FCPeriod=x.value('FCPeriod[1]','nvarchar(50)')
 			,FromDate=convert(float,x.value('FromDate[1]','DateTime')),ToDate=convert(float,x.value('ToDate[1]','DateTime'))
 			,DefaultPreferences=convert(nvarchar(max),x.query('DefaultPref[1]'))
 			,OrderFilter=@Param2
@@ -114,7 +114,7 @@ SET NOCOUNT ON;
 	BEGIN
 		BEGIN TRANSACTION
 		DECLARE @SelectedIsGroup bit
-		DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT
+		DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint
 
 		set @XML=@Param1
 		select @ProfileName=x.value('Name[1]','nvarchar(200)') from @XML.nodes('/XML') as data(x)
@@ -168,7 +168,7 @@ SET NOCOUNT ON;
 				StatusID,IsGroup,Depth,ParentID,lft,rgt
 				,DefaultPreferences,OrderFilter,TreeXML,
 				GUID,CreatedBy,CreatedDate)
-			select @ProfileName,x.value('FCID[1]','INT'),x.value('FCPeriod[1]','nvarchar(50)'),convert(float,x.value('FromDate[1]','DateTime')),convert(float,x.value('ToDate[1]','DateTime')),
+			select @ProfileName,x.value('FCID[1]','bigint'),x.value('FCPeriod[1]','nvarchar(50)'),convert(float,x.value('FromDate[1]','DateTime')),convert(float,x.value('ToDate[1]','DateTime')),
 			  x.value('StatusID[1]','int'),@IsGroup,@Depth,@ParentID,@lft,@rgt
 			  ,convert(nvarchar(max),x.query('DefaultPref[1]')),@Param2,@Param3,
 			  newid(),@UserName,convert(float,getdate())
@@ -178,7 +178,7 @@ SET NOCOUNT ON;
 		ELSE
 		BEGIN
 			update INV_MRP set Name=@ProfileName
-			,FCID=x.value('FCID[1]','INT'),FCPeriod=x.value('FCPeriod[1]','nvarchar(50)')
+			,FCID=x.value('FCID[1]','bigint'),FCPeriod=x.value('FCPeriod[1]','nvarchar(50)')
 			,FromDate=convert(float,x.value('FromDate[1]','DateTime')),ToDate=convert(float,x.value('ToDate[1]','DateTime'))
 			,DefaultPreferences=convert(nvarchar(max),x.query('DefaultPref[1]'))
 			,OrderFilter=@Param2
@@ -196,9 +196,9 @@ SET NOCOUNT ON;
 	END
 	ELSE IF @Type=5
 	BEGIN
-		CREATE TABLE #TblOrderFilter(InvDetailsID INT)
-		CREATE TABLE #TblOrderProducts(PID INT)
-		CREATE TABLE #TblProducts(ID int identity(1,1),PID INT,BOMID INT,ParentRowID int,RawQty float,OPID INT,OPIDQty float,ORD INT)
+		CREATE TABLE #TblOrderFilter(InvDetailsID bigint)
+		CREATE TABLE #TblOrderProducts(PID bigint)
+		CREATE TABLE #TblProducts(ID int identity(1,1),PID bigint,BOMID bigint,ParentRowID int,RawQty float)
 		declare @TblComQty as table(Qry nvarchar(max))
 		declare @OrderDateField nvarchar(30),@OrderWhere nvarchar(60),@ToDate datetime,@OrderDetailsIDFilter nvarchar(max),@ShowRaw bit,@ShowRMBasedOnKIT bit
 		
@@ -223,7 +223,6 @@ SET NOCOUNT ON;
 		BEGIN		
 			insert into #TblOrderProducts
 			exec spRPT_MRPPendingOrders 'ProductsList',@CommitedQTY,@OrderDateField,0,@OrderWhere,@Param3
-			select 'we',@CommitedQTY,@OrderDateField,0,@OrderWhere,@Param3
 		END
 		set @CommitedQTY=''
 		select @CommitedQTY=X.value('@CC','nvarchar(max)') from @XML.nodes('XML/SOFilter') as Data(X)
@@ -236,11 +235,9 @@ SET NOCOUNT ON;
 
 			insert into #TblOrderProducts
 			exec spRPT_MRPPendingOrders 'ProductsList',@CommitedQTY,@OrderDateField,1,@OrderWhere,@Param3
-			
-			select 'ProductsList',@CommitedQTY,@OrderDateField,1,@OrderWhere,@Param3
 		END
 
-		set @SQL='SELECT P.ProductID,P.BOM,0,0,0,0,0
+		set @SQL='SELECT P.ProductID,P.BOM,0,0
 FROM INV_Product P WITH(NOLOCK)'
         IF @Param2!=''
 			set @SQL=@SQL+' left join #TblOrderProducts OP on OP.PID=P.ProductID'
@@ -266,23 +263,20 @@ FROM INV_Product P WITH(NOLOCK)'
 		SET @I=0
 		while(1=1 and @ShowRaw=1)
 		begin
-			set @CNT=(select Count(*) FROM #TblProducts WITH(NOLOCK))
+			set @CNT=(select Count(*) FROM #TblProducts)
 			--Group By added if same rawmaterial used @ different stages in same bom
 			insert into #TblProducts
 			SELECT BP.ProductID,P.BOM,TP.ID,sum((BP.Quantity/(isnull(PU.Conversion,1)*U.Conversion))/BOM.FPQty)--,BP.Quantity/isnull(PU.Conversion,1)
-			,(SELECT TOP 1 OUTBP.ProductID FROM PRD_BOMProducts OUTBP with(nolock) WHERE OUTBP.BOMID=BP.BOMID AND OUTBP.StageID=BP.StageID AND OUTBP.ProductUse=2)
-			,SUM(isnull(BP.Quantity,0))/isnull((SELECT TOP 1 OUTBP.Quantity FROM PRD_BOMProducts OUTBP with(nolock) WHERE OUTBP.BOMID=BP.BOMID AND OUTBP.StageID=BP.StageID AND OUTBP.ProductUse=2),0),BP.BOMProductID
 			FROM PRD_BOMProducts BP with(nolock)
-			inner join #TblProducts TP WITH(NOLOCK) ON BP.BOMID=TP.BOMID			
+			inner join #TblProducts TP ON BP.BOMID=TP.BOMID			
 			inner join INV_Product P WITH(NOLOCK) ON P.ProductID=BP.ProductID
 			inner join PRD_BillOfMaterial BOM with(nolock) on BOM.BOMID=TP.BOMID
-			inner join PRD_BOMStages BS with(nolock) on BS.StageID=BP.StageID
 			left join COM_UOM PU with(nolock) ON PU.UOMID=P.UOMID
 			LEFT JOIN COM_UOM U with(nolock) ON U.UOMID=BOM.UOMID
 			WHERE  BP.ProductUse=1 and TP.ID>@I and TP.ID<=@CNT
-			group by BP.ProductID,P.BOM,TP.ID,BP.StageID,BP.BOMID,BP.BOMProductID
+			group by BP.ProductID,P.BOM,TP.ID
 			
-			IF @CNT=(SELECT Count(*) FROM #TblProducts WITH(NOLOCK))
+			IF @CNT=(SELECT Count(*) FROM #TblProducts)
 				BREAK
 			SET @I=@CNT
 		end
@@ -291,16 +285,11 @@ FROM INV_Product P WITH(NOLOCK)'
 	
 		set @SQL='SELECT P.ProductID,P.ProductCode,P.ProductName,P.LeadTime,P.SafetyStock,P.ReorderMinOrderQty,P.ReorderOrderMultiple'
 		if @ShowRaw=1
-			set @SQL=@SQL+',TP.ID,isnull(TP.BOMID,0) BOMID,TP.ParentRowID,TP.RawQty,TP.OPID,TP.OPIDQty,TP.ORD'
+			set @SQL=@SQL+',TP.ID,isnull(TP.BOMID,0) BOMID,TP.ParentRowID,TP.RawQty'
 		set @SQL=@SQL+'
 FROM INV_Product P WITH(NOLOCK)
-inner join #TblProducts TP WITH(NOLOCK) on TP.PID=P.ProductID'
-
-		if @ShowRaw=1
-			set @SQL=@SQL+' order by TP.ParentRowID,TP.ORD DESC,TP.ID DESC'
-		ELSE
-			set @SQL=@SQL+' order by TP.ID'
-			
+inner join #TblProducts TP on TP.PID=P.ProductID
+order by TP.ID'
 		--print(@SQL)
 		exec(@SQL)
 		
@@ -317,19 +306,19 @@ where INV.DocID='+convert(nvarchar,@MRPID)
 		SELECT V.ProductID,V.AccountID VendorID,(SELECT TOP 1 AccountName FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=V.AccountID) VendorName
 		FROM INV_ProductVendors V with(nolock) INNER JOIN (	
 				SELECT V.ProductID,MAX(Priority) Prio
-				FROM INV_ProductVendors V with(nolock) INNER JOIN #TblProducts TP WITH(NOLOCK) ON V.ProductID=TP.PID 
+				FROM INV_ProductVendors V with(nolock) INNER JOIN #TblProducts TP ON V.ProductID=TP.PID 
 				GROUP BY V.ProductID) AS T ON T.ProductID=V.ProductID AND T.Prio=V.Priority
 		
 		--KIT		
 		if @ShowRMBasedOnKIT=1
 		begin
 			select KP.ParentProductID,KP.ProductID,max(KP.Quantity) RawQty from INV_ProductBundles KP with(nolock)
-			inner join #TblProducts TP WITH(NOLOCK) on KP.ProductID=TP.PID
+			inner join #TblProducts TP on KP.ProductID=TP.PID
 			group by KP.ParentProductID,KP.ProductID
 		
 			set @SQL='SELECT distinct P.ProductID,P.ProductCode,P.ProductName,P.LeadTime,P.SafetyStock,P.ReorderMinOrderQty,P.ReorderOrderMultiple
 FROM INV_ProductBundles KP with(nolock)
-inner join #TblProducts TP WITH(NOLOCK) on KP.ProductID=TP.PID
+inner join #TblProducts TP on KP.ProductID=TP.PID
 inner join INV_Product P with(nolock) on KP.ParentProductID=P.ProductID
 '	
 			print(@SQL)
@@ -347,7 +336,7 @@ inner join INV_Product P with(nolock) on KP.ParentProductID=P.ProductID
 	END
 	ELSE IF @Type=6
 	BEGIN
-		CREATE TABLE #TblOrderList(InvDetailsID INT,Qty float,PendingQty float)
+		CREATE TABLE #TblOrderList(InvDetailsID bigint,Qty float,PendingQty float)
 		set @XML=@Param1
 		select @SQL=X.value('Select[1]','nvarchar(max)'),@Join=X.value('Join[1]','nvarchar(max)'),@CCWhere=X.value('CCWhere[1]','nvarchar(max)'),
 				@ProductWhere=isnull(X.value('ProductWhere[1]','nvarchar(max)'),''),@OrderDateField=X.value('@Filter','nvarchar(50)'),@ToDate=X.value('@ToDate','datetime')
@@ -402,8 +391,8 @@ inner join INV_Product P with(nolock) on KP.ParentProductID=P.ProductID
 	ELSE IF @Type=11--FIFO Priority Report
 	BEGIN
 		declare @QOH nvarchar(max),@PODocs nvarchar(max)
-		CREATE TABLE #TblOrderFIFO(InvDetailsID INT,Qty float,PendingQty float)
-		CREATE TABLE #TblPOFIFO(ProductID INT,PendingQty float)
+		CREATE TABLE #TblOrderFIFO(InvDetailsID bigint,Qty float,PendingQty float)
+		CREATE TABLE #TblPOFIFO(ProductID bigint,PendingQty float)
 		
 		set @XML=@Param1
 		select @SQL=X.value('Select[1]','nvarchar(max)'),@Join=X.value('Join[1]','nvarchar(max)'),@CCWhere=X.value('CCWhere[1]','nvarchar(max)'),

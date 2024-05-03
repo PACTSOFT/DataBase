@@ -18,7 +18,7 @@ SET NOCOUNT ON
 		if(@UserID=0 or @CostCenterID=0)
 			 RAISERROR('-100',16,1)
 		
-		DECLARE @Tbl AS TABLE(ID INT)
+		DECLARE @Tbl AS TABLE(ID BIGINT)
 		
 		INSERT INTO @Tbl
 		SELECT ParentNodeID FROM COM_CostCenterCostCenterMap WITH(NOLOCK) 
@@ -52,7 +52,7 @@ SET NOCOUNT ON
 			JOIN COM_LanguageResources D WITH(NOLOCK) ON D.ResourceID=C.ResourceID AND D.LanguageID=@LangID
 			where b.CostCenterID in (@CostCenterID,3)  AND (b.IsUserDefined=0 OR b.GridViewID IN (SELECT ID FROM @Tbl))
 			ORDER BY a.ColumnOrder
-		else if(@CostCenterID=2 or @CostCenterID =3 or @CostCenterID =94 or @CostCenterID>50000)
+		else if(@CostCenterID=2 or @CostCenterID =3 or @CostCenterID>50000)
 			select isnull(ResourceData,a.Description) ResourceData,UserColumnName,SysColumnName,a.ColumnOrder,ColumnWidth,
 			a.GridViewID,A.CostCenterColID,c.ColumnDataType,c.UserColumnType
 			 from ADM_GridViewColumns a WITH(NOLOCK) 
@@ -70,13 +70,13 @@ SET NOCOUNT ON
 			ORDER BY a.ColumnOrder
 		ELSE IF @CostCenterID BETWEEN 40000 AND 50000
 			select CASE WHEN C.COLUMNCOSTCENTERID > 50000 THEN E.Name ELSE D.ResourceData END AS ResourceData,UserColumnName,SysColumnName,a.ColumnOrder,ColumnWidth,
-			a.GridViewID,A.CostCenterColID,null ColumnDataType,UserColumnType,a.ColumnType
+			a.GridViewID,A.CostCenterColID,null ColumnDataType,UserColumnType
 			from ADM_GridViewColumns a WITH(NOLOCK) 
 			join ADM_GridView b WITH(NOLOCK) on a.GridViewID=b.GridViewID
 			join ADM_CostCenterDef c WITH(NOLOCK) on b.CostCenterID=c.CostCenterID and c.CostCenterColID=a.CostCenterColID
 			LEFT JOIN ADM_FEATURES E WITH(NOLOCK) ON E.FEATUREID =C.COLUMNCOSTCENTERID 
 			LEFT JOIN COM_LanguageResources D WITH(NOLOCK) ON D.ResourceID=C.ResourceID AND D.LanguageID=@LangID
-			where b.CostCenterID=@CostCenterID AND (b.IsUserDefined=0 OR b.GridViewID IN (SELECT ID FROM @Tbl)) --AND a.ColumnType=1
+			where b.CostCenterID=@CostCenterID AND (b.IsUserDefined=0 OR b.GridViewID IN (SELECT ID FROM @Tbl))
 			ORDER BY a.ColumnOrder
 		ELSE
 			select isnull(ResourceData,a.Description) ResourceData,UserColumnName,SysColumnName,a.ColumnOrder,ColumnWidth,
@@ -87,7 +87,8 @@ SET NOCOUNT ON
 			left JOIN COM_LanguageResources D WITH(NOLOCK) ON D.ResourceID=C.ResourceID AND D.LanguageID=@LangID
 			where b.CostCenterID=@CostCenterID AND (b.IsUserDefined=0 OR b.GridViewID IN (SELECT ID FROM @Tbl)) 
 			ORDER BY a.ColumnOrder
-		
+			
+
 		--GETTING CONTEXTMENU
 		SELECT DISTINCT A.GridViewID,GridViewColumnID,B.FeatureActionTypeID,isnull(D.ResourceData,B.Name) ResourceData,B.GridShortCut,A.MenuOrder
 		from  ADM_GridContextMenu A WITH(NOLOCK) 
@@ -118,7 +119,7 @@ SET NOCOUNT ON
 		if(@CostCenterID=3)
 		begin
 			--select * from com_costcenterpreferences  WITH(NOLOCK) where costcenterid=3 and Name='InheritGroupImage'
-			declare @GrpImage bit,@ImageDimCCID INT
+			declare @GrpImage bit,@ImageDimCCID bigint
 			SELECT @GrpImage=convert(bit,Value) from  COM_CostCenterPreferences WITH(NOLOCK)
 			WHERE CostCenterID=3 and Name='InheritGroupImage'     
             select @GrpImage Value
@@ -145,5 +146,6 @@ BEGIN CATCH
  
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
+
 GO

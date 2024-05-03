@@ -3,14 +3,13 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetSerialNumberScreenDetails]
-	@ProductID [int],
-	@DocDetID [int],
-	@DocID [int],
-	@DivisionID [int],
-	@LocationID [int],
-	@Dimwhere [nvarchar](max),
+	@ProductID [bigint],
+	@DocDetID [bigint],
+	@DocID [bigint],
+	@DivisionID [bigint],
+	@LocationID [bigint],
 	@Srnos [bit],
-	@UserID [int],
+	@UserID [bigint],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -56,7 +55,6 @@ SET NOCOUNT ON;
 		if(@DivisionID is not null and @DivisionID>0)
 			set @SQL=@SQL+' and D.dcccnid1='+CONVERT(nvarchar,@DivisionID)
  
-		 set @SQL=@SQL+@Dimwhere
 		 set @SQL=@SQL+' or a.InvDocDetailsID = '+convert(nvarchar,@DocDetID) +' order by a.IsAvailable'
 		 
 		 print @SQL
@@ -72,7 +70,6 @@ SET NOCOUNT ON;
 				set @SQL=@SQL+' and D.dcccnid2='+CONVERT(nvarchar,@LocationID)
 			if(@DivisionID is not null and @DivisionID>0)
 				set @SQL=@SQL+' and D.dcccnid1='+CONVERT(nvarchar,@DivisionID)
-			set @SQL=@SQL+@Dimwhere	
 			set @SQL=@SQL+' and e.docid<>'+CONVERT(nvarchar,@DocID)
 			print @SQL
 			exec(@SQL)	
@@ -84,7 +81,7 @@ SET NOCOUNT ON;
 		SELECT @SerialNumber=SerialNumber FROM INV_Product WITH(NOLOCK) WHERE [ProductID]=@ProductID
 		IF(@SerialNumber IS NOT NULL AND @SerialNumber<>'')
 		BEGIN
-			DECLARE @DSerialNumber NVARCHAR(50),@I INT=0,@NUM INT=0
+			DECLARE @DSerialNumber NVARCHAR(50),@I INT=0,@NUM BIGINT=0
 			SELECT @DSerialNumber=a.[SerialNumber]
 			FROM INV_SerialStockProduct a WITH(NOLOCK)
 			WHERE a.[SerialProductID]= (SELECT MAX([SerialProductID])
@@ -94,7 +91,7 @@ SET NOCOUNT ON;
 			BEGIN
 				IF ISNUMERIC(SUBSTRING(@DSerialNumber,LEN(@DSerialNumber)-@I,@I+1))=1
 				BEGIN
-					SET @NUM=CONVERT(INT,SUBSTRING(@DSerialNumber,LEN(@DSerialNumber)-@I,@I+1))
+					SET @NUM=CONVERT(BIGINT,SUBSTRING(@DSerialNumber,LEN(@DSerialNumber)-@I,@I+1))
 					SET @I=@I+1
 				END
 				ELSE
@@ -123,4 +120,7 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
+
+ 
 GO

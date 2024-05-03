@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetAddress]
 	@CostCenterID [int],
-	@NodeID [int],
+	@NodeID [bigint],
 	@AddressXML [nvarchar](max),
 	@UserName [nvarchar](50)
 WITH ENCRYPTION, EXECUTE AS CALLER

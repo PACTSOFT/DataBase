@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_SetEmployee]
-	@NodeID [int],
+	@NodeID [bigint],
 	@Code [nvarchar](200),
 	@Name [nvarchar](500),
 	@AliasName [nvarchar](500),
@@ -11,7 +11,7 @@ CREATE PROCEDURE [dbo].[spPAY_SetEmployee]
 	@EmpType [int],
 	@DOJ [datetime],
 	@DOB [datetime],
-	@RptManager [int],
+	@RptManager [bigint],
 	@Gender [nvarchar](50),
 	@ProbationDays [int],
 	@DOConfirmation [datetime],
@@ -23,20 +23,17 @@ CREATE PROCEDURE [dbo].[spPAY_SetEmployee]
 	@CustomFieldsQuery [nvarchar](max),
 	@CustomCostCenterFieldsQuery [nvarchar](max),
 	@HistoryXML [nvarchar](max) = null,
-	@IDHistoryXML [nvarchar](max) = null,
-	@PaymentModeXML [nvarchar](max) = null,
 	@DocumentsXML [nvarchar](max) = null,
 	@AccLinkXML [nvarchar](max) = null,
 	@PayQuery [nvarchar](max) = null,
 	@WID [int] = 0,
 	@AssignLeavesXML [nvarchar](max) = null,
 	@PrimaryContactQuery [nvarchar](max),
-	@SelectedNodeID [int],
+	@SelectedNodeID [bigint],
 	@IsGroup [bit],
 	@CodePrefix [nvarchar](200) = NULL,
-	@CodeNumber [int] = 0,
+	@CodeNumber [bigint] = 0,
 	@GroupSeqNoLength [int] = 0,
-	@IsImport [bit] = 0,
 	@CompanyGUID [nvarchar](50),
 	@GUID [varchar](50),
 	@UserName [nvarchar](50),
@@ -51,9 +48,9 @@ BEGIN TRY
 	SET NOCOUNT ON;
 	print 't'
 	--Declaration Section 
-	DECLARE @CostCenterID INT,@ActionType INT,@Hasaccesss BIT,@IsDuplicateNameAllowed BIT,@IsDuplicateCodeAllowed BIT,
+	DECLARE @CostCenterID BIGINT,@ActionType INT,@Hasaccesss BIT,@IsDuplicateNameAllowed BIT,@IsDuplicateCodeAllowed BIT,
 			@IsCodeAutoGen BIT,@IsIgnoreSpace BIT,@IsParentCode BIT,@Dt FLOAT,@SelectedIsGroup bit,
-			@Selectedlft INT,@Selectedrgt INT,@ParentID INT,@lft INT,@rgt INT,@Depth int,
+			@Selectedlft bigint,@Selectedrgt bigint,@ParentID bigint,@lft bigint,@rgt bigint,@Depth int,
 			@TempGuid NVARCHAR(50),@UpdateSql NVARCHAR(max),@XML XML,@TEMPDOJ DATETIME, @tStatus INT,@HistoryStatus NVARCHAR(300),@Audit NVARCHAR(100)
 			
 	SET @CostCenterID=50051
@@ -125,7 +122,7 @@ BEGIN TRY
 	IF @NodeID=0 and @Code='' and exists (SELECT * FROM COM_CostCenterCodeDef WITH(nolock) WHERE CostCenterID=@CostCenterID and IsEnable=1 and IsName=0 and IsGroupCode=@IsGroup)
 	BEGIN 
 		--CALL AUTOCODEGEN 
-		create table #temp1(prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+		create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
 		if(@SelectedNodeID is null)
 			insert into #temp1
 			EXEC [spCOM_GetCodeData] @CostCenterID,1,''  
@@ -286,7 +283,7 @@ BEGIN TRY
 			GUID=NEWID(),ModifiedBy=@UserName,ModifiedDate=@Dt   	  
 			WHERE NodeID=@NodeID
 			 print 'Empl'
-			declare @IsMove bit,@PaRID INT
+			declare @IsMove bit,@PaRID bigint
 	        select @PaRID=ParentId from COM_CC50051 where NodeID=@NodeID
 	        print @PaRID
 	        print @SelectedNodeID
@@ -328,12 +325,12 @@ BEGIN TRY
 		SET @UpdateSql='UPDATE COM_CC50051   
 		SET '+@CustomFieldsQuery+'[ModifiedBy] ='''+ @UserName  
 		+''',[ModifiedDate] =' + CONVERT(NVARCHAR,@Dt) +' WHERE NodeID='+CONVERT(NVARCHAR,@NodeID)   
-		EXEC sp_executesql @UpdateSql  
+		EXEC(@UpdateSql)  
 	END
 	
 	SET @UpdateSql='UPDATE COM_CCCCDATA SET '+@CustomCostCenterFieldsQuery+'[ModifiedBy] ='''+ @UserName+''',[ModifiedDate] =' + CONVERT(NVARCHAR,@Dt) +' 
 					WHERE NodeID = '+CONVERT(NVARCHAR,@NodeID) + ' AND CostCenterID = '+CONVERT(NVARCHAR,@CostCenterID) 
-	EXEC sp_executesql @UpdateSql
+	EXEC(@UpdateSql)
 	
 	--Update Employee Type If 0
 	IF (ISNULL(@EmpType,0)=0)
@@ -367,42 +364,6 @@ BEGIN TRY
 	IF (@HistoryXML IS NOT NULL AND @HistoryXML <> '')    
 		EXEC spCOM_SetHistory @CostCenterID,@NodeID,@HistoryXML,@UserName
 	
-	IF(@IsImport=0)
-	BEGIN
-		DELETE FROM PAY_EmpDetail 
-		WHERE EmployeeID=@NodeID AND DType IN(-51001,-51002,-51003,-51004,-51005,-51006,-51007)
-	END
-
-	IF (@IDHistoryXML IS NOT NULL AND @IDHistoryXML <> '') 
-	BEGIN
-		DECLARE @IDXML XML
-		SET @IDXML=@IDHistoryXML
-
-		INSERT INTO PAY_EmpDetail(EmployeeID,DType,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,Field1,Field2,Field3,Field4,Field5,Field6)
-		SELECT @NodeID,X.value('@DType','INT'),@UserName, @Dt,@UserName, @Dt,
-		X.value('@sDType','NVARCHAR(MAX)'),X.value('@SNo','INT'),X.value('@Number','NVARCHAR(MAX)'),
-		CASE WHEN X.value('@IssDate','NVARCHAR(MAX)') IS NOT NULL THEN CONVERT(INT,CONVERT(DATETIME,X.value('@IssDate','NVARCHAR(MAX)'))) ELSE NULL END,
-		CASE WHEN X.value('@ExpDate','NVARCHAR(MAX)') IS NOT NULL THEN CONVERT(INT,CONVERT(DATETIME,X.value('@ExpDate','NVARCHAR(MAX)'))) ELSE NULL END,
-		CASE WHEN X.value('@ExtendDate','NVARCHAR(MAX)') IS NOT NULL THEN CONVERT(INT,CONVERT(DATETIME,X.value('@ExtendDate','NVARCHAR(MAX)'))) ELSE NULL END
-		FROM @IDXML.nodes('/XML/Row') as Data(X)
-
-	END
-
-	IF (@PaymentModeXML IS NOT NULL AND @PaymentModeXML <> '') 
-	BEGIN
-		DECLARE @PMXML XML
-		SET @PMXML=@PaymentModeXML
-
-		DELETE FROM PAY_EmpDetail WHERE DType=-51011 AND EmployeeID=@NodeID 
-
-		INSERT INTO PAY_EmpDetail(EmployeeID,DType,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,Field1,Field2,Field3,Field4,Field5,Field6,Field7)
-		SELECT @NodeID,X.value('@DType','INT'),@UserName, @Dt,@UserName, @Dt,
-		X.value('@sDType','NVARCHAR(MAX)'),X.value('@SNo','INT'),X.value('@PaymentMode','NVARCHAR(MAX)'),X.value('@iBank','INT'),
-		X.value('@BankAccNo','NVARCHAR(MAX)'),X.value('@IBANNo','NVARCHAR(MAX)'),X.value('@StatusID','INT')
-		FROM @PMXML.nodes('/XML/Row') as Data(X)
-
-	END
-
 	--INSERTING DEFAULT GRADE '1-ALL' TO EMPLOYEE IF NOT ASSIGNED
 	IF NOT EXISTS( SELECT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) WHERE NodeID=@NodeID AND CostCenterID=50051 AND HistoryCCID=50053 )
 	BEGIN
@@ -423,7 +384,7 @@ BEGIN TRY
 		SET '+@PayQuery+'[ModifiedBy] ='''+ @UserName  
 		+''',[ModifiedDate] =' + CONVERT(NVARCHAR,@Dt) +' WHERE SeqNo=(SELECT TOP 1 SeqNo FROM PAY_EmpPay WHERE EmployeeID='+CONVERT(NVARCHAR,@NodeID)+' ORDER BY EffectFrom Desc,SeqNo Desc)'
 		print @UpdateSql
-		EXEC sp_executesql @UpdateSql 
+		EXEC(@UpdateSql) 
 		-- INSERTING EMPPAY_HISTORY DETAILS
 		IF(@Audit IS NOT NULL AND @Audit='True')
 		BEGIN
@@ -467,12 +428,12 @@ BEGIN TRY
 		UPDATE COM_Notes SET Note=Replace(X.value('@Note','NVARCHAR(MAX)'),'@~',''),     
 		GUID=NEWID(),ModifiedBy=@UserName,ModifiedDate=@Dt  
 		FROM COM_Notes C   
-		INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X) ON convert(INT,X.value('@NoteID','INT'))=C.NoteID  
+		INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X) ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID  
 		WHERE X.value('@Action','NVARCHAR(10)')='MODIFY'  
 
 		--If Action is DELETE then delete Notes  
 		DELETE FROM COM_Notes 
-		WHERE NoteID IN( SELECT X.value('@NoteID','INT')  
+		WHERE NoteID IN( SELECT X.value('@NoteID','bigint')  
 						 FROM @XML.nodes('/NotesXML/Row') as Data(X)  
 						 WHERE X.value('@Action','NVARCHAR(10)')='DELETE'
 						)  
@@ -505,12 +466,12 @@ BEGIN TRY
 		IsDefaultImage=X.value('@IsDefaultImage','bit'), GUID=X.value('@GUID','NVARCHAR(50)'),  
 		ModifiedBy=@UserName, ModifiedDate=@Dt  
 		FROM COM_Files C   
-		INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X) ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID  
+		INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X) ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID  
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
 
 		--If Action is DELETE then delete Attachments  
 		DELETE FROM COM_Files  
-		WHERE FileID IN( SELECT X.value('@AttachmentID','INT')  
+		WHERE FileID IN( SELECT X.value('@AttachmentID','bigint')  
 						 FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)  
 						 WHERE X.value('@Action','NVARCHAR(10)')='DELETE'
 						)  
@@ -526,7 +487,7 @@ BEGIN TRY
 		SET @XML=@AccLinkXML 
 		DELETE FROM PAY_EmpAccountsLinking WHERE EmpSeqNo=@NodeID
 		INSERT INTO PAY_EmpAccountsLinking(EmpSeqNo, ComponentID, Type, SNo, DebitAccountID, CreditAccountID)
-		SELECT @NodeID,A.value('@ComponentID','INT'),A.value('@Type','int'),A.value('@SNo','int'),A.value('@DebitAccountID','INT'),A.value('@CreditAccountID','INT')
+		SELECT @NodeID,A.value('@ComponentID','BIGINT'),A.value('@Type','int'),A.value('@SNo','int'),A.value('@DebitAccountID','BIGINT'),A.value('@CreditAccountID','BIGINT')
 		from @XML.nodes('Rows/Row') as Data(A)
 		----Inserting ACCOUNTS HISTORY LINKING
 		IF(@Audit IS NOT NULL AND @Audit='True')
@@ -553,7 +514,7 @@ BEGIN TRY
 		IF(@AssignLeavesXML IS NOT NULL AND @AssignLeavesXML <> '')
 		BEGIN
 			DECLARE @TEMPxml NVARCHAR(MAX),@varxml XML,@ddxml NVARCHAR(MAX),@Prefix NVARCHAR(MAX)
-			DECLARE @CCID INT,@DivisionID INT,@LocationID INT,@DocDate DATETIME,@return_value int
+			DECLARE @CCID BIGINT,@DivisionID BIGINT,@LocationID BIGINT,@DocDate DATETIME,@return_value int
 			SET @DocDate='01/Apr/2016'
 			
 			SET @XML=@AssignLeavesXML	
@@ -650,8 +611,8 @@ BEGIN TRY
 	IF(@ActionType=1 AND @IsGroup=0)
 	BEGIN
 		DECLARE @CrSalAcc NVARCHAR(100),@CrPayAcc NVARCHAR(100),@CrSalAccGrp NVARCHAR(10),@CrPayAccGrp NVARCHAR(10)
-		DECLARE @curSA INT,@curPA INT,@salAccType int,@payAccType int
-		declare @TCode NVARCHAR(100),@TName NVARCHAR(100) ,@return_value INT
+		DECLARE @curSA BIGINT,@curPA BIGINT,@salAccType int,@payAccType int
+		declare @TCode NVARCHAR(100),@TName NVARCHAR(100) ,@return_value BIGINT
 		
 		SELECT @CrSalAcc=Value From ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='CreateSalaryAcc'
 		SELECT @CrSalAccGrp=Value From ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='CreateSalaryAccGrp'
@@ -755,19 +716,13 @@ BEGIN TRY
 	
 	if (@IsGroup=0 and @LinkDimCC>50000 and @iLinkDimCC!=@CostCenterID)
 	begin
-		declare @LinkDimNodeID INT,@CCStatusID INT
-		declare @LinkDimCode nvarchar(max),@LinkDimAutoGen nvarchar(10),@CaseNumber nvarchar(500),@CaseID INT
+		declare @LinkDimNodeID INT,@CCStatusID bigint
+		declare @LinkDimCode nvarchar(max),@LinkDimAutoGen nvarchar(10),@CaseNumber nvarchar(500),@CaseID bigint
 		
 		select @LinkDimNodeID=RefDimensionNodeID from com_docbridge with(nolock) 
 		WHERE CostCenterID=@CostCenterID AND NodeID=@NodeID AND RefDimensionID=@iLinkDimCC
 		
 		set @CCStatusID=(select top 1 statusid from com_status with(nolock) where costcenterid=@LinkDimCC and status = 'Active')
-
-		IF EXISTS(select * from COM_DocumentBatchLinkDetails WITH(NOLOCK) WHERE BatchColID IN (SELECT CostCenterColID FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=50051 AND		SysColumnName='StatusID'))
-		BEGIN
-			IF(@STATUSID=251)
-				set @CCStatusID=(select top 1 statusid from com_status with(nolock) where costcenterid=@LinkDimCC and status = 'In Active')
-		END
 
 		if(@LinkDimNodeID is null or (@LinkDimNodeID<=0 and @LinkDimNodeID>-10000) or @LinkDimNodeID=1)
 		BEGIN
@@ -777,7 +732,7 @@ BEGIN TRY
 			SELECT @LinkDimAutoGen=Value FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE Name='CodeAutoGen' AND CostCenterID=@LinkDimCC     
 			if(@LinkDimAutoGen='True')
 			BEGIN
-					declare @Codetemp table (prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+					declare @Codetemp table (prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
 					
 					insert into @Codetemp
 					EXEC [spCOM_GetCodeData] @LinkDimCC,1,'' ,null,0,0 
@@ -833,7 +788,7 @@ BEGIN TRY
 			set @CCMapSql='update COM_CCCCDATA  
 			SET CCNID'+convert(nvarchar,(@LinkDimCC-50000))+'='+CONVERT(NVARCHAR,@return_value)+'  
 			WHERE CostCenterID='+convert(nvarchar,@CostCenterID) +' and NODEID='+convert(NVARCHAR,@NodeID)  
-			EXEC sp_executesql @CCMapSql
+			EXEC (@CCMapSql)
 			
 			Exec [spDOC_SetLinkDimension]
 				@InvDocDetailsID=@NodeID, 
@@ -846,7 +801,7 @@ BEGIN TRY
 
 				select @Table=Tablename from adm_features with(nolock) where featureid=@LinkDimCC
 				set @CCMapSql='Update '+@Table+' SET StatusID ='+convert(nvarchar,@CCStatusID)+' WHERE NodeID='+convert(nvarchar,@return_value)
-				EXEC sp_executesql @CCMapSql
+				exec(@CCMapSql)
 			
 		end	
 			

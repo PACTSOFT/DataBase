@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_GetEmpAsOnStatus]
-	@EmpSeqNo [int],
+	@EmpSeqNo [bigint],
 	@AsOnDate [datetime],
 	@LangID [int] = 1,
 	@AsOnStatus [nvarchar](500) OUTPUT
@@ -12,7 +12,7 @@ AS
 BEGIN TRY    
 SET NOCOUNT ON;
 --------------------------------------------------------------------------------
-DECLARE @TEmpSeqNo INT,@TAsOnDate DATETIME,@LType NVARCHAR(200)
+DECLARE @TEmpSeqNo BIGINT,@TAsOnDate DATETIME,@LType NVARCHAR(200)
 SET @TEmpSeqNo=@EmpSeqNo
 SET @TAsOnDate=CONVERT(DATETIME,CONVERT(VARCHAR(11),@AsOnDate,106))
 
@@ -41,9 +41,7 @@ BEGIN
 				FROM INV_DocDetails a WITH(NOLOCK) 
 				JOIN COM_DocCCData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
 				JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
-				WHERE a.CostCenterID=40072 and a.StatusID=369 
-				AND LEN(dcAlpha2)<=15 AND LEN(dcAlpha3)<=15
-				AND ISDATE(ISNULL(dcAlpha2,''))=1 AND ISDATE(ISNULL(dcAlpha3,''))=1  
+				WHERE a.CostCenterID=40072 and a.StatusID=369 AND ISDATE(ISNULL(dcAlpha2,''))=1 AND ISDATE(ISNULL(dcAlpha3,''))=1  
 				AND b.dcCCNID51=@TEmpSeqNo AND @TAsOnDate BETWEEN CONVERT(DATETIME,dcAlpha2) AND CONVERT(DATETIME,dcAlpha3)
 				ORDER BY CONVERT(DATETIME,dcAlpha2) DESC )
 				SET @AsOnStatus='On Vacation'
@@ -95,4 +93,6 @@ RETURN -999
 END CATCH
 
 ----spPAY_GetEmpAsOnStatus 626,'08-May-2019',1,''
+
+ 
 GO

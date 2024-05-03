@@ -6,8 +6,8 @@ CREATE PROCEDURE [dbo].[spPAY_ExtGetAssignedLeavesOP]
 	@EmployeeID [int] = 0,
 	@LeaveType [int] = 0,
 	@Date [datetime],
-	@Userid [int] = 1,
-	@Langid [int] = 1,
+	@Userid [bigint] = 1,
+	@Langid [bigint] = 1,
 	@AssignedLeavesOP [int] OUTPUT,
 	@AvlblLeavesOP [int] OUTPUT,
 	@FromDateOP [datetime] OUTPUT,
@@ -33,7 +33,7 @@ DECLARE @RC INT,@TRC INT,@ASSLEAVESTABLE INT,@FROMDATETABLE DATETIME,@TODATETABL
 DECLARE @PrevYearNOOFHOLIDAYS INT,@PrevYearWEEKLYOFFCOUNT INT,@PrevYearLeavestaken float,@PrevYearExstAppliedEncashdays float,@PrevYearLeaveBalance FLOAT,@FDYear DateTime,@TDYear DateTime
 
 DECLARE @GETLEAVES TABLE(AssignedLeaves INT,AvailableLeaves DECIMAL(9,2))
-DECLARE @TABASSIGNEDLEAVES TABLE(ID INT IDENTITY(1,1),AssignedLeaves INT,CarryforwardLeaves INT,EXTFROMDATE DATETIME,EXTTODATE DATETIME,NOOFMONTHS INT,TYPE VARCHAR(30))
+DECLARE @TABASSIGNEDLEAVES TABLE(ID BIGINT IDENTITY(1,1),AssignedLeaves INT,CarryforwardLeaves INT,EXTFROMDATE DATETIME,EXTTODATE DATETIME,NOOFMONTHS INT,TYPE VARCHAR(30))
 
 SET @AvlblLeaves=0	
 SET @PayrollDate=DATEADD(MONTH,DATEDIFF(MONTH,0,CONVERT(DATETIME,@Date)),0)
