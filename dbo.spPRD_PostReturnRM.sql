@@ -11,10 +11,12 @@ CREATE PROCEDURE [dbo].[spPRD_PostReturnRM]
 	@date [datetime],
 	@WONO [nvarchar](500),
 	@IsRec [bit],
-	@LocationID [bigint],
-	@DivisionID [bigint],
-	@MFGOrderID [bigint],
-	@RoleID [bigint],
+	@LocationID [int],
+	@DivisionID [int],
+	@MFGOrderID [int],
+	@sysinfo [nvarchar](max),
+	@AP [varchar](10),
+	@RoleID [int],
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
@@ -25,8 +27,10 @@ BEGIN TRANSACTION
 BEGIN TRY    
 SET NOCOUNT ON;  
   --Declaration Section  
-  Declare  @ExpCCID bigint,@RcrsCCID bigint,@RcvCCID bigint,@return_value int,@PrefValue nvarchar(200)
+  Declare  @ExpCCID INT,@RcrsCCID INT,@RcvCCID INT,@return_value int,@PrefValue nvarchar(200),@ActXml nvarchar(max)
   
+    set @ActXml='<XML SysInfo="'+@sysinfo+'" AP="'+@AP+'" ></XML>'
+
     if(@ResXML is not null and @ResXML<>'')
   begin
 		select @RcrsCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)
@@ -43,7 +47,7 @@ SET NOCOUNT ON;
 		@InvDocXML = @ResXML,
 		@NotesXML = N'',
 		@AttachmentsXML = N'',
-		@ActivityXML = N'',
+		@ActivityXML = @ActXml,
 		@IsImport = 0,
 		@LocationID = @LocationID,
 		@DivisionID = @DivisionID,
@@ -76,7 +80,7 @@ SET NOCOUNT ON;
 		@InvDocXML = @ExpXML,
 		@NotesXML = N'',
 		@AttachmentsXML = N'',
-		@ActivityXML = N'',
+		@ActivityXML = @ActXml,
 		@IsImport = 0,
 		@LocationID = @LocationID,
 		@DivisionID = @DivisionID,
@@ -115,7 +119,7 @@ SET NOCOUNT ON;
 			@BillWiseXML = N'',
 			@NotesXML = N'',
 			@AttachmentsXML = N'',
-			@ActivityXML = N'',
+			@ActivityXML = @ActXml,
 			@IsImport = 0,
 			@LocationID = @LocationID,
 			@DivisionID = @DivisionID ,
@@ -165,6 +169,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION  
  SET NOCOUNT OFF    
  RETURN -999     
-END CATCH  
-  
+END CATCH
 GO

@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_ExtGetDocumentValidations]
-	@COSTCENTERID [bigint],
-	@DOCID [bigint],
+	@COSTCENTERID [int],
+	@DOCID [int],
 	@UserID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER

@@ -3,7 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPRD_DeleteBOMDetails]
-	@BOMID [bigint] = 0,
+	@BOMID [int] = 0,
+	@RoleID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -12,13 +13,22 @@ BEGIN TRY
 SET NOCOUNT ON;  
 
 		--Declaration Section
-		DECLARE @HasAccess bit,@RowsDeleted bigint,@lft bigint,@rgt bigint,@Width bigint
+		DECLARE @HasAccess bit,@RowsDeleted INT,@lft INT,@rgt INT,@Width INT
 
 		--SP Required Parameters Check
 		if(@BOMID=0)
 		BEGIN
 			RAISERROR('-100',16,1)
 		END
+
+		--User acces check
+		SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,76,4)
+
+		IF @HasAccess=0
+		BEGIN
+			RAISERROR('-105',16,1)
+		END
+		
 		if exists(select * from PRD_JobOuputProducts WITH(NOLOCK) where BOMID=@BOMID)
 		BEGIN
 			RAISERROR('-110',16,1)
@@ -29,44 +39,66 @@ SET NOCOUNT ON;
 			RAISERROR('-117',16,1)
 		END
 		
+		--ondelete External function
+		IF (@BOMID>0)
+		BEGIN
+			DECLARE @tablename NVARCHAR(200)
+			set @tablename=''
+			select @tablename=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=76 and Mode=8
+			if(@tablename<>'')
+				exec @tablename 76,@BOMID,'',1,@LangID	
+		END	
+		
+		declare @Tbl as table(id int identity(1,1),BOMID INT)
 		--Fetch left, right extent of Node along with width.
 		SELECT @lft = lft, @rgt = rgt, @Width = rgt - lft + 1
 		FROM PRD_BillOfMaterial WITH(NOLOCK) WHERE BOMID=@BOMID
+			
+		if exists(SELECT * FROM PRD_BillOfMaterial WITH(NOLOCK) WHERE BOMID=@BOMID and IsGroup=1)
+		BEGIN
+			insert into @Tbl(BOMID)
+			select BOMID  from PRD_BillOfMaterial with(nolock) WHERE lft >= @lft AND rgt <= @rgt 
+		END
+		else
+			insert into @Tbl(BOMID)values(@BOMID)
 
-		delete from PRD_BOMProducts	where BOMID=@BOMID
-		delete from PRD_Expenses where BOMID=@BOMID
-		delete from PRD_BOMResources where BOMID=@BOMID
-		delete from PRD_BOMStages where BOMID=@BOMID
-		delete from PRD_BillOfMaterialExtended where BOMID=@BOMID
-		delete from COM_CCCCData where CostCenterID=76 and NodeID=@BOMID
-		declare @bomccid bigint
+		delete a from PRD_BOMProducts a with(nolock)
+		join @Tbl b on a.BOMID=b.BOMID	 
+		delete a from PRD_Expenses a with(nolock)
+		join @Tbl b on a.BOMID=b.BOMID	 
+		delete a from PRD_BOMResources a with(nolock)
+		join @Tbl b on a.BOMID=b.BOMID	 
+		delete a from PRD_BOMStages a with(nolock)
+		join @Tbl b on a.BOMID=b.BOMID	 
+		delete a from PRD_BillOfMaterialExtended a with(nolock)
+		join @Tbl b on a.BOMID=b.BOMID	 
+		delete a from COM_CCCCData a with(nolock)
+		join @Tbl b on a.CostCenterID=76 and a.NodeID=b.BOMID	
+
+		declare @bomccid INT
 		
-		SELECT @bomccid=Convert(bigint,isnull(Value,0)) FROM COM_CostCenterPreferences  WITH(nolock) 
+		SELECT @bomccid=Convert(INT,isnull(Value,0)) FROM COM_CostCenterPreferences  WITH(nolock) 
 		WHERE COSTCENTERID=76 and  Name='BOMDimension'      
  
 		if(@bomccid>50000)
 		begin
-			declare @temp table(id int identity(1,1), BOMID bigint)
-			
-			insert into @temp
-			select BOMID from PRD_BillOfMaterial  WHERE lft >= @lft AND rgt <= @rgt
 			
 			declare @i int, @cnt int
-			DECLARE @NodeID bigint, @Dimesion bigint 
+			DECLARE @NodeID INT, @Dimesion INT 
 					
-			select @i=1,@cnt=count(*) from @temp
+			select @i=1,@cnt=count(*) from @Tbl
 			while @i<=@cnt
+			begin
+				set @NodeID=0
+				set @Dimesion=0
+				select  @NodeID = CCNodeID, @Dimesion=CCID from PRD_BillOfMaterial with(nolock)
+				where BOMID in (select BOMID from @Tbl where id=@i)
+				if (@NodeID is not null and @NodeID>0)
 				begin
-					set @NodeID=0
-					set @Dimesion=0
-					select  @NodeID = CCNodeID, @Dimesion=CCID from PRD_BillOfMaterial with(nolock)
-					where BOMID in (select BOMID from @temp where id=@i)
-					if (@NodeID is not null and @NodeID>0)
-					begin
 					Update PRD_BillOfMaterial set CCID=0, CCNodeID=0 
-					where BOMID in (select BOMID from @temp where id=@i)
+					where BOMID in (select BOMID from @Tbl where id=@i)
 					
-					declare @return_value bigint
+					declare @return_value INT
 			
 					EXEC @return_value = [dbo].[spCOM_DeleteCostCenter]
 						@CostCenterID = @Dimesion,
@@ -82,7 +114,8 @@ SET NOCOUNT ON;
 		end
 		
 		
-		delete from PRD_BillOfMaterial where BOMID=@BOMID
+		delete a from PRD_BillOfMaterial a with(nolock)
+		join @Tbl b on a.BOMID=b.BOMID	 
 		
 		--Update left and right extent to set the tree
 		UPDATE PRD_BillOfMaterial SET rgt = rgt - @Width WHERE rgt > @rgt;
@@ -118,12 +151,4 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
-
-
-
-
-
-
-
- 
 GO

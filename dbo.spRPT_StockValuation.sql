@@ -27,9 +27,9 @@ AS
 BEGIN TRY  
 SET NOCOUNT ON;  
 
-	DECLARE @SQL NVARCHAR(MAX),@RecQty FLOAT,@ProductID BIGINT,@TagSQL NVARCHAR(MAX),
+	DECLARE @SQL NVARCHAR(MAX),@RecQty FLOAT,@ProductID INT,@TagSQL NVARCHAR(MAX),
 			@AvgRate FLOAT,@BalQty FLOAT,@BalValue FLOAT,@COGS FLOAT,@VoucherType INT,@I INT,@COUNT INT
-	create table #TblProducts(ID INT IDENTITY(1,1) NOT NULL,ProductID BIGINT)
+	create table #TblProducts(ID INT IDENTITY(1,1) NOT NULL,ProductID INT)
 	declare @PCRate float,@PCi INT,@PCCnt INT,@PCcol nvarchar(50),@PCxml nvarchar(max)
 	declare @TblPCRates AS TABLE(ID INT IDENTITY(1,1) NOT NULL,Rate NVARCHAR(50))
 	
@@ -64,8 +64,8 @@ SET NOCOUNT ON;
 			SET @TagSQL=@TagSQL+@DIMWHERE
 	END
 	
-	DECLARE @Tbl2 AS TABLE(ID INT IDENTITY(1,1) NOT NULL,ProductID BIGINT,TagID BIGINT,BalQty FLOAT,AvgRate FLOAT,BalValue FLOAT,PCxml NVARCHAR(max))
-	DECLARE @Tbl AS TABLE(ID INT IDENTITY(1,1) NOT NULL,ProductID BIGINT,BalQty FLOAT,AvgRate FLOAT,BalValue FLOAT,PCxml NVARCHAR(max))
+	DECLARE @Tbl2 AS TABLE(ID INT IDENTITY(1,1) NOT NULL,ProductID INT,TagID INT,BalQty FLOAT,AvgRate FLOAT,BalValue FLOAT,PCxml NVARCHAR(max))
+	DECLARE @Tbl AS TABLE(ID INT IDENTITY(1,1) NOT NULL,ProductID INT,BalQty FLOAT,AvgRate FLOAT,BalValue FLOAT,PCxml NVARCHAR(max))
 
 	IF @TagID=0
 	BEGIN
@@ -126,7 +126,7 @@ SET NOCOUNT ON;
 				EXEC [spRPT_AvgRate] 0,@ProductID,@TagSQL,@WHERE,@ToDate,@ToDate,@IncludeUpPostedDocs,@DefValuation,@CurrencyType,@CurrencyID,@SortTransactionsBy,1,@BalQty OUTPUT,@AvgRate OUTPUT,@BalValue OUTPUT,@COGS OUTPUT
 
 				INSERT INTO @Tbl2(ProductID,BalQty,AvgRate,BalValue,PCxml)
-				SELECT @ProductID,@BalQty,@AvgRate,@BalValue,@PCxml
+				SELECT @ProductID,@BalQty,isnull(@AvgRate,0),@BalValue,@PCxml
 				WHERE @BalQty IS NOT NULL
 
 				if (select count(*) from #TblAvgMn where BalQty IS NULL or BalQty=0)!=(select count(*) from #TblAvgMn)
@@ -139,7 +139,7 @@ SET NOCOUNT ON;
 				EXEC [spRPT_AvgRate] 0,@ProductID,@TagSQL,@WHERE,@ToDate,@ToDate,@IncludeUpPostedDocs,@DefValuation,@CurrencyType,@CurrencyID,@SortTransactionsBy,0,@BalQty OUTPUT,@AvgRate OUTPUT,@BalValue OUTPUT,@COGS OUTPUT
 			
 				INSERT INTO @Tbl(ProductID,BalQty,AvgRate,BalValue,PCxml)
-				SELECT @ProductID,@BalQty,@AvgRate,@BalValue,@PCxml
+				SELECT @ProductID,@BalQty,isnull(@AvgRate,0),@BalValue,@PCxml
 				WHERE @BalQty IS NOT NULL
 			end
 				
@@ -155,8 +155,8 @@ SET NOCOUNT ON;
 	ELSE
 	BEGIN
 
-		DECLARE @TI INT,@TCNT INT,@NodeID BIGINT,@SubTagSQL NVARCHAR(MAX)
-		create table #TblTags(ID INT IDENTITY(1,1) NOT NULL,NodeID BIGINT)
+		DECLARE @TI INT,@TCNT INT,@NodeID INT,@SubTagSQL NVARCHAR(MAX)
+		create table #TblTags(ID INT IDENTITY(1,1) NOT NULL,NodeID INT)
 
 		INSERT INTO #TblTags(NodeID)
 		EXEC SPSplitString @TagsList,','
@@ -194,7 +194,7 @@ SET NOCOUNT ON;
 				end
 				
 				INSERT INTO @Tbl2(ProductID,BalQty,AvgRate,BalValue,PCxml)
-				SELECT @ProductID,@BalQty,@AvgRate,@BalValue,@PCxml
+				SELECT @ProductID,@BalQty,isnull(@AvgRate,0),@BalValue,@PCxml
 				WHERE @BalQty IS NOT NULL
 			END
 
@@ -213,7 +213,7 @@ SET NOCOUNT ON;
 					EXEC [spRPT_AvgRate] 0,@ProductID,@SubTagSQL,@WHERE,@ToDate,@ToDate,@IncludeUpPostedDocs,@DefValuation,@CurrencyType,@CurrencyID,@SortTransactionsBy,0,@BalQty OUTPUT,@AvgRate OUTPUT,@BalValue OUTPUT,@COGS OUTPUT
 					
 					INSERT INTO @Tbl2(ProductID,TagID,BalQty,AvgRate,BalValue)
-					SELECT @ProductID,@NodeID,@BalQty,@AvgRate,@BalValue
+					SELECT @ProductID,@NodeID,@BalQty,isnull(@AvgRate,0),@BalValue
 					WHERE @BalQty IS NOT NULL-- and (@BalQty!=0 or @AvgRate!=0)
 					
 					SET @TI=@TI+1
@@ -277,5 +277,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

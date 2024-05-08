@@ -6,7 +6,7 @@ CREATE PROCEDURE [dbo].[spPAY_PayrollWorksheetData]
 	@Flag [int] = 0,
 	@EmpNode [int] = 0,
 	@PayrollMonth [datetime],
-	@UserID [bigint] = 1,
+	@UserID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -16,7 +16,7 @@ If (Isnull(@Flag,0)=0)
 Begin 
 	SELECT Top 1 A.InvDocDetailsID,A.DocID,A.CostCenterID,A.VoucherNo,CONVERT(DATETIME,A.DocDate) as DocDate
 	FROM INV_DocDetails A WITH(NOLOCK) 	JOIN COM_DocCCData B WITH(NOLOCK) ON B.INVDOCDETAILSID=a.INVDOCDETAILSID JOIN COM_DocTextData d WITH(NOLOCK) ON d.INVDOCDETAILSID=a.INVDOCDETAILSID
-	WHERE a.CostCenterID=40079 and a.StatusID=369 AND B.dccCNID51=@EmpNode AND ISDATE(d.dcAlpha1)=1 AND CONVERT(DATETIME,d.dcAlpha1)=CONVERT(DATETIME,@PayrollMonth)
+	WHERE d.tCostCenterID=40079 and a.StatusID=369 AND B.dccCNID51=@EmpNode AND ISDATE(d.dcAlpha1)=1 AND CONVERT(DATETIME,d.dcAlpha1)=CONVERT(DATETIME,@PayrollMonth)
 End
 Else if (Isnull(@Flag,0)=1)
 Begin 
@@ -32,11 +32,11 @@ Begin
 	JOIN COM_DocCCData CC WITH(NOLOCK) ON CC.INVDOCDETAILSID=ID.INVDOCDETAILSID 
 	JOIN COM_DocTextData TD WITH(NOLOCK) ON TD.INVDOCDETAILSID=ID.INVDOCDETAILSID
 	JOIN COM_DocNumData ND WITH(NOLOCK) ON ND.INVDOCDETAILSID=ID.INVDOCDETAILSID
-	WHERE ID.CostCenterID=40079 and ID.StatusID=369 AND ISDATE(TD.dcAlpha1)=1 AND CC.dccCNID51=@EmpNode AND  CONVERT(DATETIME,TD.dcAlpha1)=CONVERT(DATETIME,@PayrollMonth)
+	WHERE TD.tCostCenterID=40079 and ID.StatusID=369 AND ISDATE(TD.dcAlpha1)=1 AND CC.dccCNID51=@EmpNode AND  CONVERT(DATETIME,TD.dcAlpha1)=CONVERT(DATETIME,@PayrollMonth)
 	
 	Insert into @TabOTMap
 	Select CCD.UserColumnName,Isnull(DD.Distributeon,0) Distributeon,@PayrollMonth 
-	From Adm_CostCenterDef CCD join Adm_DocumentDef DD on CCD.CostCenterColID=DD.CostCenterColID 
+	From Adm_CostCenterDef CCD  WITH(NOLOCK) join Adm_DocumentDef DD WITH(NOLOCK) on CCD.CostCenterColID=DD.CostCenterColID 
 	AND ISNUMERIC(DD.Distributeon)=1 And CCD.CostCenterID=40067 And Convert(Int,Isnull(DD.Distributeon,0))>0
 	
 	--Update T Set OT1ID=T1.NodeID from @TabWorksheet T,@TabOTMap T1 Where T.PayrollMonth=T1.PayrollMonth And T1.ID=1
@@ -65,5 +65,5 @@ BEGIN
 END   
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH   
+END CATCH
 GO

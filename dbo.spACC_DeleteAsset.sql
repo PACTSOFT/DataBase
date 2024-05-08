@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_DeleteAsset]
-	@AssetID [bigint] = 0,
-	@UserID [bigint] = 1,
+	@AssetID [int] = 0,
+	@UserID [int] = 1,
 	@RoleID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -14,7 +14,7 @@ BEGIN TRY
 SET NOCOUNT ON;  
 
 	--Declaration Section
-	DECLARE @HasAccess bit,@lft bigint,@rgt bigint,@Width bigint
+	DECLARE @HasAccess bit,@lft INT,@rgt INT,@Width INT,@UserName NVARCHAR(50)
 
 	if(@AssetID=0)
 	BEGIN
@@ -39,6 +39,15 @@ SET NOCOUNT ON;
 		RAISERROR('-134',16,1)
 	END
 	
+	SELECT @UserName=USERNAME FROM ADM_USERS WITH(NOLOCK) WHERE UserID=@UserID
+
+	--INSERT INTO HISTROY   
+	EXEC [spCOM_SaveHistory]  
+		@CostCenterID =72,    
+		@NodeID =@AssetID,
+		@HistoryStatus ='Deleted',
+		@UserName=@UserName
+
 	DELETE FROM ACC_AssetDepSchedule WHERE AssetID=@AssetID
 	
 	--Fetch left, right extent of Node along with width.
@@ -52,21 +61,21 @@ SET NOCOUNT ON;
 	DELETE FROM COM_HistoryDetails where CostCenterID=72 and NodeID=@AssetID
 
 	--For deleting Asset dimension if exists
-	declare @assetccid bigint
+	declare @assetccid INT
 	
-	SELECT @assetccid=Convert(bigint,isnull(Value,0)) FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=72 and  Name='AssetDimension'      
+	SELECT @assetccid=Convert(INT,isnull(Value,0)) FROM COM_CostCenterPreferences  WITH(nolock) WHERE COSTCENTERID=72 and  Name='AssetDimension'      
 
 	if(@assetccid>50000)
 	begin
 		
-		declare @temp table(id int identity(1,1), AssetID bigint)
+		declare @temp table(id int identity(1,1), AssetID INT)
 		
 		--SELECT @lft,@rgt,@assetccid,@AssetID
 		insert into @temp
 		select AssetID from Acc_Assets WITH(nolock) WHERE lft >= @lft AND rgt <= @rgt
-	
+
 		declare @i int, @cnt int
-		DECLARE @NodeID bigint, @Dimesion bigint 
+		DECLARE @NodeID INT, @Dimesion INT 
 				
 		set @i=1
 		select @cnt=count(*) from @temp
@@ -77,6 +86,14 @@ SET NOCOUNT ON;
 			select  @NodeID = CCNodeID, @Dimesion=CCID from Acc_Assets WITH(nolock) where AssetID in (select AssetID from @temp where id=@i)
 			if (@NodeID is not null and @NodeID>0)
 			begin
+
+				--INSERT INTO HISTROY   
+				EXEC [spCOM_SaveHistory]  
+					@CostCenterID =@Dimesion,    
+					@NodeID =@NodeID,
+					@HistoryStatus ='Deleted',
+					@UserName=@UserName
+
 				Update Acc_Assets set CCID=0, CCNodeID=0 where AssetID in (select AssetID from @temp where id=@i)
 				
 				--Deleting from Mapping Table
@@ -84,7 +101,7 @@ SET NOCOUNT ON;
 				
 				Delete from com_docbridge WHERE CostCenterID = 72 AND RefDimensionNodeID = @NodeID AND RefDimensionID = @Dimesion
 			
-				declare @return_value bigint
+				declare @return_value INT
 				
 				EXEC @return_value = [dbo].[spCOM_DeleteCostCenter]
 					@CostCenterID = @Dimesion,
@@ -150,7 +167,4 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
-
-
-
 GO

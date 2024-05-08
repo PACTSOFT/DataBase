@@ -7,9 +7,11 @@ CREATE PROCEDURE [dbo].[spREN_UpdateCollectionReportJVVoucher]
 	@DocumentXML [nvarchar](max),
 	@MapIDs [nvarchar](max),
 	@AccIDs [nvarchar](max),
-	@LocationID [bigint] = 0,
-	@divisionID [bigint] = 0,
-	@RoleID [bigint] = 0,
+	@LocationID [int] = 0,
+	@divisionID [int] = 0,
+	@RoleID [int] = 0,
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
@@ -17,12 +19,16 @@ CREATE PROCEDURE [dbo].[spREN_UpdateCollectionReportJVVoucher]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION    
-DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE NVARCHAR(100), @XML xml 
+DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE NVARCHAR(100), @XML xml,@wid int 
 BEGIN TRY      
 select 1
 SET NOCOUNT ON;   
-  
-	DECLARE @return_value Bigint,@Prefix nvarchar(200),@sql nvarchar(max),@Vno nvarchar(200),@CostCenterID BIGINT
+	
+	
+ 
+	DECLARE @return_value INT,@Prefix nvarchar(200),@sql nvarchar(max),@Vno nvarchar(200),@CostCenterID INT ,@ActXml nvarchar(max)         
+	
+	set @ActXml='<XML SysInfo="'+@sysinfo+'" AP="'+@AP+'" ></XML>'   
 
 	set @CostCenterID=0
 	select @CostCenterID=Value from com_costcenterpreferences
@@ -32,6 +38,12 @@ SET NOCOUNT ON;
 	if(@CostCenterID<40000)
 		set @CostCenterID=40017
 		
+	   SELECT  @wid=isnull(a.[WorkFlowID],0) FROM [COM_WorkFlowDef]  a   WITH(NOLOCK)
+	   join COM_WorkFlow b WITH(NOLOCK) on a.WorkFlowID=b.WorkFlowID  and a.LevelID=b.LevelID
+	   LEFT JOIN COM_Groups G with(nolock) on b.GroupID=G.GID
+	   where [CostCenterID]=@CostCenterID and IsEnabled=1  
+	   and (b.UserID =@UserID or b.RoleID=@RoleID or G.UserID=@UserID or G.RoleID=@RoleID OR b.RoleID=-1)  
+    	
      set @Prefix=''
      EXEC [sp_GetDocPrefix] @DocumentXML,@Date,@CostCenterID,@Prefix   output
 
@@ -47,11 +59,11 @@ SET NOCOUNT ON;
 	   @InvDocXML = @DocumentXML,      
 	   @NotesXML = N'',      
 	   @AttachmentsXML = N'',      
-	   @ActivityXML  = N'',     
+	   @ActivityXML  = @ActXml,     
 	   @IsImport = 0,      
 	   @LocationID = @LocationID,      
 	   @DivisionID = @divisionID,      
-	   @WID = 0,      
+	   @WID = @wid,      
 	   @RoleID = @RoleID,      
 	   @RefCCID = 0,    
 	   @RefNodeid = 0 ,    
@@ -88,9 +100,9 @@ SET NOCOUNT ON;
  			set @XML=@AccIDs
  			
  			INSERT INTO  [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID,ReceiveDate,DocDetID,JVVoucherNO)
-			SELECT distinct -1,10,0,a.docid,a.CostcenterID,1,a.DocumentType,95,CONVERT(float,x.value('@ReceiveDate','DateTime')),x.value('@DocDetailsID','bigint'),@Vno
+			SELECT distinct -1,10,0,a.docid,a.CostcenterID,1,a.DocumentType,95,CONVERT(float,x.value('@ReceiveDate','DateTime')),x.value('@DocDetailsID','INT'),@Vno
 			FROM @XML.nodes('/XML/Row') as Data(X)   
-			join  ACC_DocDetails a on x.value('@DocDetailsID','bigint') = a.AccDocDetailsID
+			join  ACC_DocDetails a on x.value('@DocDetailsID','INT') = a.AccDocDetailsID
  		END
  		
  			

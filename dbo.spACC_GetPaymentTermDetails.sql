@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_GetPaymentTermDetails]
-	@AccountID [bigint] = 0,
-	@linkedID [bigint] = 0,
+	@AccountID [int] = 0,
+	@linkedID [int] = 0,
 	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -20,7 +20,7 @@ SET NOCOUNT ON;
  
 	select * from Acc_PaymentDiscountTerms  WITH(NOLOCK)
 		 
-	select [VoucherNo],[AccountID],[Amount],[days],[DueDate]
+	select [VoucherNo],[AccountID],[Amount],[days],[DueDate],DateNo,Remarks1
 	,[Percentage],[Remarts] Remarks,Period,BasedOn,a.ProfileID,b.ProfileName,a.dimccid,a.dimnodeid        from   [COM_DocPayTerms] a WITH(NOLOCK)
 	left join Acc_PaymentDiscountProfile b WITH(NOLOCK) on a.ProfileID=b.ProfileID
 	where [VoucherNo]=  (select VoucherNo from INV_DocDetails  WITH(NOLOCK) where InvDocDetailsID=@linkedID)
@@ -43,16 +43,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH 
-
-
-
-
- 
-  
-  
-  
-  
-  
-  
+END CATCH
 GO

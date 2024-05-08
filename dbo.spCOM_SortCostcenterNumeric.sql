@@ -3,19 +3,20 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SortCostcenterNumeric]
-	@CCNodeID [bigint],
-	@CostcenterID [bigint],
+	@CCNodeID [int],
+	@CostcenterID [int],
 	@ColumnName [nvarchar](200),
-	@UserID [bigint],
+	@sOrder [nvarchar](10) = 'ASC',
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION    
 BEGIN TRY    
 SET NOCOUNT ON;  
-	declare @i bigint,@cnt bigint,@nodeid bigint,@val nvarchar(max)  
+	declare @i INT,@cnt INT,@nodeid INT,@val nvarchar(max)  
 	declare @PrimKey nvarchar(200),@TableName nvarchar(200),@sql nvarchar(max),@ColumnText nvarchar(max)  
-	declare @ii bigint,@ccnt bigint
+	declare @ii INT,@ccnt INT
 	
 
 	set @PrimKey='NodeID'  
@@ -42,20 +43,20 @@ SET NOCOUNT ON;
   else if(@CostcenterID=76)  
    set @PrimKey='BOMID' 
 
-	select @TableName=tablename from adm_features where featureid=@CostcenterID  
+	select @TableName=tablename from adm_features with(nolock) where featureid=@CostcenterID  
 	
-	set @sql='select @i=min('+@PrimKey+'),@cnt=max('+@PrimKey+') from '+@TableName
+	set @sql='select @i=min('+@PrimKey+'),@cnt=max('+@PrimKey+') from '+@TableName +'  with(nolock)'
 
-	exec sp_executesql @sql,N'@i bigint output,@cnt bigint output',@i output, @cnt output 
+	exec sp_executesql @sql,N'@i INT output,@cnt INT output',@i output, @cnt output 
 
-	set @sql='alter table '+@TableName+' add temp bigint'
+	set @sql='alter table '+@TableName+' add temp INT'
 	exec(@sql)  
 
 	while(@i<=@cnt)  
 	begin  
 		begin try
 			set @ColumnText=''
-			set @sql='select @ColumnText='+@ColumnName+' from '+@TableName+'  
+			set @sql='select @ColumnText='+@ColumnName+' from '+@TableName+' with(nolock) 
 			where '+@PrimKey+'='+convert(nvarchar,@i)
 			
 			exec sp_executesql @sql,N'@ColumnText nvarchar(max)   output',@ColumnText output  
@@ -86,7 +87,7 @@ SET NOCOUNT ON;
 		set @i=@i+1  
 	END 
 	
-	exec [spCOM_SortCostcenter]  @CCNodeID,@CostcenterID,'temp',@UserID,@LangID 
+	exec [spCOM_SortCostcenter]  @CCNodeID,@CostcenterID,'temp',@sOrder,@UserID,@LangID 
 
 	set @sql='alter table '+@TableName+' Drop column temp '
 	exec(@sql)  
@@ -111,6 +112,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH    
- 
+END CATCH
 GO

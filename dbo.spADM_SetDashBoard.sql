@@ -3,12 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_SetDashBoard]
-	@ID [bigint] = 0,
+	@ID [int] = 0,
 	@XML [nvarchar](max),
-	@SelectedNodeID [bigint],
+	@SelectedNodeID [int],
 	@IsGroup [bit] = 0,
 	@CompanyGUID [nvarchar](max),
-	@UserID [bigint] = 1,
+	@UserID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -16,9 +16,10 @@ BEGIN TRANSACTION
 BEGIN TRY
 SET NOCOUNT ON
 
-	declare @DXML XML,@DashBoardID bigint,@DT Float,@RIBBONID bigint,@return bigint,@RID bigint,@RName nvarchar(50),@ResID bigint
-	DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint  
+	declare @DXML XML,@DashBoardID INT,@DT Float,@RIBBONID INT,@return INT,@RID INT,@RName nvarchar(50),@ResID INT
+	DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT  
 	DECLARE @SelectedIsGroup bit  
+	select * from adm_dashboard with(nolock) where dashboardid=@ID
 
 	set @DT=convert(Float,getdate())
 	set @DXML=@XML
@@ -70,15 +71,15 @@ SET NOCOUNT ON
 					insert into ADM_DashBoard(DashBoardID,DashBoardName,DashBoardType,ReportName,ReportID,AutoRefresh,RefreshRate,
 					Filter,CompanyGUID,GUID,CreatedBy,CreatedDate,[Type],[TypeID],GraphType,TextField,NumericField,
 					ShowGrid,TopRecords,lft,rgt,depth,parentid,Isgroup,RowNo,ColNo,RowSpan,ColSpan,ShowPoint,NumSeriesColor,Options,
-					WidgetXML)
+					WidgetXML,Mode)
 							select @DashBoardID,X.value('@Heading','nvarchar(50)'),X.value('@DashBoardType','nvarchar(50)'),X.value('@ScreenName','nvarchar(50)')
-							,X.value('@ReportID','bigint'),X.value('@AutoRefresh','bit'),X.value('@RefreshRate','float'),X.value('@Filter','bit')
-							,@CompanyGUID,newid(),@UserID,@DT,X.value('@Type','nvarchar(50)'),X.value('@TypeID','bigint')
-							,X.value('@GraphType','bigint'),X.value('@TextFields','nvarchar(max)'),X.value('@NumericFields','nvarchar(max)'),X.value('@ShowGrid','bit'),X.value('@TopRecords','int')
+							,X.value('@ReportID','INT'),X.value('@AutoRefresh','bit'),X.value('@RefreshRate','float'),X.value('@Filter','bit')
+							,@CompanyGUID,newid(),@UserID,@DT,X.value('@Type','nvarchar(50)'),X.value('@TypeID','INT')
+							,X.value('@GraphType','INT'),X.value('@TextFields','nvarchar(max)'),X.value('@NumericFields','nvarchar(max)'),X.value('@ShowGrid','bit'),X.value('@TopRecords','int')
 							,@lft,@rgt,@Depth,@Parentid,@IsGroup
 							,isnull(X.value('@row','int'),0),isnull(X.value('@col','int'),0),isnull(X.value('@rowspan','int'),1),isnull(X.value('@colspan','int'),1), X.value('@ShowPoint','int')
 							,X.value('@SeriesColor','nvarchar(max)'),isnull(X.value('@Options','nvarchar(max)'),convert(nvarchar(max),X.query('Options[1]')))
-							,convert(nvarchar(max),X.query('Widget[1]'))
+							,convert(nvarchar(max),X.query('Widget[1]')),isnull(X.value('@Mode','int'),0)
 							from  @DXML.nodes('/XML/Rows') as Data(x)						
 					set @return=SCOPE_IDENTITY()
 					
@@ -138,23 +139,23 @@ SET NOCOUNT ON
 					from ADM_DashBoard with(NOLOCK) where DashBoardID=@ID
 					 
 					delete from ADM_DashBoard where NodeID IN (
-					select D.NodeID from ADM_DashBoard D
-					left join @DXML.nodes('/XML/Rows') as Data(x) on D.NodeID=X.value('@NodeID','bigint')
-					where D.DashBoardID=@ID and X.value('@NodeID','bigint') is null)
+					select D.NodeID from ADM_DashBoard D with(nolock)
+					left join @DXML.nodes('/XML/Rows') as Data(x) on D.NodeID=X.value('@NodeID','INT')
+					where D.DashBoardID=@ID and X.value('@NodeID','INT') is null)
 				
 					update ADM_DashBoard
 					set DashBoardName=X.value('@Heading','nvarchar(50)'),
 						DashBoardType=X.value('@DashBoardType','nvarchar(50)'),
 						ReportName=X.value('@ScreenName','nvarchar(50)'),
-						ReportID=X.value('@ReportID','bigint'),
+						ReportID=X.value('@ReportID','INT'),
 						AutoRefresh=X.value('@AutoRefresh','bit'),
 						RefreshRate=X.value('@RefreshRate','nvarchar(50)'),
 						Filter=X.value('@Filter','bit'),					
 						CreatedBy=@UserID,
 						CreatedDate=@DT,
 						[Type]=X.value('@Type','nvarchar(50)'),
-						[TypeID]=X.value('@TypeID','bigint'),
-						GraphType=X.value('@GraphType','bigint'),
+						[TypeID]=X.value('@TypeID','INT'),
+						GraphType=X.value('@GraphType','INT'),
 						TextField=X.value('@TextFields','nvarchar(max)'),
 						NumericField=X.value('@NumericFields','nvarchar(max)'),
 						ShowGrid=X.value('@ShowGrid','bit'),
@@ -166,24 +167,25 @@ SET NOCOUNT ON
 						ShowPoint=X.value('@ShowPoint','int'),
 						NumSeriesColor=X.value('@SeriesColor','nvarchar(max)'),
 						Options=convert(nvarchar(max),X.query('Options[1]')),
-						WidgetXML=convert(nvarchar(max),X.query('Widget[1]'))
+						WidgetXML=convert(nvarchar(max),X.query('Widget[1]')),
+						Mode=isnull(X.value('@Mode','int'),0)
 					from  @DXML.nodes('/XML/Rows') as Data(x)
-					where DashBoardID=@ID and NodeID=X.value('@NodeID','bigint')
+					where DashBoardID=@ID and NodeID=X.value('@NodeID','INT')
 
 					SET @DashBoardID=@ID
 					
 					insert into ADM_DashBoard(DashBoardID,DashBoardName,DashBoardType,ReportName,ReportID,AutoRefresh,RefreshRate,
 					Filter,CompanyGUID,GUID,CreatedBy,CreatedDate,[Type],[TypeID],GraphType,TextField,NumericField,
-					ShowGrid,TopRecords,lft,rgt,depth,parentid,Isgroup,RowNo,ColNo,RowSpan,ColSpan,ShowPoint,NumSeriesColor,Options,WidgetXML)
+					ShowGrid,TopRecords,lft,rgt,depth,parentid,Isgroup,RowNo,ColNo,RowSpan,ColSpan,ShowPoint,NumSeriesColor,Options,WidgetXML,Mode)
 					select @DashBoardID,X.value('@Heading','nvarchar(50)'),X.value('@DashBoardType','nvarchar(50)'),X.value('@ScreenName','nvarchar(50)')
-					,X.value('@ReportID','bigint'),X.value('@AutoRefresh','bit'),X.value('@RefreshRate','float'),X.value('@Filter','bit')
-					,@CompanyGUID,newid(),@UserID,@DT,X.value('@Type','nvarchar(50)'),X.value('@TypeID','bigint')
-					,X.value('@GraphType','bigint'),X.value('@TextFields','nvarchar(max)'),X.value('@NumericFields','nvarchar(max)'),X.value('@ShowGrid','bit'),X.value('@TopRecords','int')
+					,X.value('@ReportID','INT'),X.value('@AutoRefresh','bit'),X.value('@RefreshRate','float'),X.value('@Filter','bit')
+					,@CompanyGUID,newid(),@UserID,@DT,X.value('@Type','nvarchar(50)'),X.value('@TypeID','INT')
+					,X.value('@GraphType','INT'),X.value('@TextFields','nvarchar(max)'),X.value('@NumericFields','nvarchar(max)'),X.value('@ShowGrid','bit'),X.value('@TopRecords','int')
 					,@lft,@rgt,@Depth,@Parentid,0
 					,X.value('@row','int'),X.value('@col','int'),X.value('@rowspan','int'),X.value('@colspan','int'),X.value('@ShowPoint','int')
-					,X.value('@SeriesColor','nvarchar(max)'),convert(nvarchar(max),X.query('Options[1]')),convert(nvarchar(max),X.query('Widget[1]'))
+					,X.value('@SeriesColor','nvarchar(max)'),convert(nvarchar(max),X.query('Options[1]')),convert(nvarchar(max),X.query('Widget[1]')),isnull(X.value('@Mode','int'),0)
 					from  @DXML.nodes('/XML/Rows') as Data(x)
-					where X.value('@NodeID','bigint') is null or X.value('@NodeID','bigint')=0
+					where X.value('@NodeID','INT') is null or X.value('@NodeID','INT')=0
 					
 					select @ResID=Resourceid from com_languageresources with(nolock)
 					where ResourceName=@OldDashName
@@ -206,7 +208,7 @@ SET NOCOUNT ON
 			END 
 		END		
 	END
-
+	
 COMMIT TRANSACTION
 --ROLLBACK TRANSACTION
 SET NOCOUNT OFF;
@@ -227,5 +229,6 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH 
+END CATCH
+
 GO

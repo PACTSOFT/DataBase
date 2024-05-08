@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_AssetDisposeReverse]
-	@AssetID [bigint],
+	@AssetID [int],
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
 	@LangID [int] = 1
@@ -12,8 +12,8 @@ AS
 BEGIN TRANSACTION      
 BEGIN TRY        
 SET NOCOUNT ON;
-	declare @HisID bigint,@DPScheduleID bigint,@CostCenterID int,@DOCID bigint, @return_value bigint
-	select @HisID=HistoryID from ACC_AssetsHistory where AssetManagementID=@AssetID and HistoryTypeID=3 and (PolicyType=1 or PolicyType=3)
+	declare @HisID INT,@DPScheduleID INT,@CostCenterID int,@DOCID INT, @return_value INT
+	select @HisID=HistoryID from ACC_AssetsHistory with(nolock) where AssetManagementID=@AssetID and HistoryTypeID=3 and (PolicyType=1 or PolicyType=3)
 	if @HisID is null
 	begin
 		rollback transaction
@@ -21,10 +21,10 @@ SET NOCOUNT ON;
 	end
 	
 	set @return_value=1
-	select @DPScheduleID=max(DPScheduleID) from ACC_AssetDepSchedule where assetid=@AssetID
-	if(@DPScheduleID is not null and @DPScheduleID=(select min(DPScheduleID) from ACC_AssetDeprSchTemp where assetid=@AssetID))
+	select @DPScheduleID=max(DPScheduleID) from ACC_AssetDepSchedule with(nolock) where assetid=@AssetID
+	if(@DPScheduleID is not null and @DPScheduleID=(select min(DPScheduleID) from ACC_AssetDeprSchTemp with(nolock) where assetid=@AssetID))
 	begin
-		select @DOCID=DOCID from ACC_AssetDepSchedule where DPScheduleID=@DPScheduleID
+		select @DOCID=DOCID from ACC_AssetDepSchedule with(nolock) where DPScheduleID=@DPScheduleID
 		select @COSTCENTERID=CostCenterID from ACC_DocDetails with(nolock) where @DOCID=DocID
 		
 		EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]    
@@ -41,11 +41,14 @@ SET NOCOUNT ON;
 	
 	if @return_value>0
 	begin
-		select @DOCID=DOCID,@COSTCENTERID=CostCenterID from ACC_AssetsHistory where HistoryID=@HisID
+		select @DOCID=DOCID,@COSTCENTERID=CostCenterID from ACC_AssetsHistory with(nolock) where HistoryID=@HisID
 		
-		EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]    
-		@CostCenterID = @COSTCENTERID,@DocPrefix = '',@DocNumber = '', @DOcID=   @DOCID,
-		@UserID = 1,@UserName = N'ADMIN',@LangID = 1,@RoleID=1
+		if @DOCID is not null
+		begin
+			EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]    
+			@CostCenterID = @COSTCENTERID,@DocPrefix = '',@DocNumber = '', @DOcID=   @DOCID,
+			@UserID = 1,@UserName = N'ADMIN',@LangID = 1,@RoleID=1
+		end
 		if @return_value>0
 		begin
 			declare @AssetNetValue float
@@ -54,7 +57,7 @@ SET NOCOUNT ON;
 			begin
 				delete from ACC_AssetDepSchedule where DPScheduleID=@DPScheduleID
 			end
-			select @AssetNetValue=AssetNetValue+DepAmount from ACC_AssetDeprSchTemp where DPScheduleID=@DPScheduleID
+			select @AssetNetValue=AssetNetValue+DepAmount from ACC_AssetDeprSchTemp with(nolock) where DPScheduleID=@DPScheduleID
 			
 			update ACC_Assets set AssetNetValue=@AssetNetValue where AssetID=@AssetID
 			
@@ -74,6 +77,7 @@ SET NOCOUNT ON;
 			insert into ACC_AssetChanges(AssetID,ChangeType,ChangeName,StatusID,ChangeDate,AssetOldValue,ChangeValue,AssetNewValue,Descriptions,LocationID,GUID,CreatedBy,CreatedDate)
 			values(@AssetID,5,'Dispose Reversal',1,floor(convert(float,getdate())),0,@AssetNetValue,@AssetNetValue,null,NULL,newid(),@UserName,convert(float,getdate()))
 		end
+		
 	end
 /*	
 select * from ACC_Assets where AssetID=@AssetID

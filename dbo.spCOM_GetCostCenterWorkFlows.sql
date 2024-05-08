@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetCostCenterWorkFlows]
 	@CostCenterId [int] = null,
-	@UserID [bigint],
+	@UserID [int],
 	@LangId [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -18,7 +18,7 @@ SET NOCOUNT ON
 		RAISERROR('-100',16,1)
 	END
 
-	SELECT  [WorkFlowDefID],[Action],[Expression],[WorkFlowID],[IsEnabled],LevelID,isinventory,OnReject,IsLineWise,IsExpressionLineWise,UserWise,FieldWidth	 
+	SELECT  [WorkFlowDefID],[Action],[Expression],[WorkFlowID],[IsEnabled],LevelID,isinventory,OnReject,IsLineWise,IsExpressionLineWise,UserWise,FieldWidth,Convert(DateTime,WEFDate) as WEFDate,Convert(DateTime,TillDate) as TillDate	 
 	FROM COM_WorkFlowDef a WITH(nolock)
 	join (select WorkFlowID WID,WorkFlowName WName from COM_WorkFlow with(nolock) group by WorkFlowID,WorkFlowName) W on W.WID=WorkFlowID
 	left join adm_documentTypes b on a.CostCenterID=b.CostCenterID
@@ -64,5 +64,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

@@ -4,18 +4,20 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_GetNextContractNo]
 	@CostCenterID [int],
-	@UserID [bigint],
+	@parContractID [int],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION      
 BEGIN TRY       
 SET NOCOUNT ON      
-	declare @SNO bigint
+	declare @SNO INT
 		
+			
 	IF (@CostCenterID=95 OR  @CostCenterID=104)
 		select @SNO=isnull(Max(SNO),0)+1  
-		from  REN_Contract WITH(NOLOCK)   WHERE   CostCenterID = @CostCenterID  
+		from  REN_Contract WITH(NOLOCK)   WHERE   CostCenterID = @CostCenterID  and isnull(parentContractID,0)=@parContractID 
 	else IF (@CostCenterID=103 OR @CostCenterID=129)
 		select @SNO=isnull(Max(SNO),0)+1  
 		from  REN_Quotation WITH(NOLOCK)   WHERE   CostCenterID = @CostCenterID  AND StatusID<>430    
@@ -40,5 +42,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION      
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH   
+END CATCH
 GO

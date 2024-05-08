@@ -13,8 +13,8 @@ AS
 BEGIN
 SET NOCOUNT ON;
 DECLARE @Year INT,@ALStartMonth INT,@ALStartMonthYear DATETIME,@ALEndMonthYear DATETIME,@strQuery NVARCHAR(MAX)
-CREATE TABLE #TAB (ID INT IDENTITY(1,1),dcID INT,EmployeeID BIGINT,GradeID BIGINT,LeaveTypeID BIGINT,
-				   PrevYearAlloted BIGINT,Leaves float,PrevYearBalanceOB INT,CurrYearConsumed DECIMAL(9,2),Balance DECIMAL(9,2),Location INT)	
+CREATE TABLE #TAB (ID INT IDENTITY(1,1),dcID INT,EmployeeID INT,GradeID INT,LeaveTypeID INT,
+				   PrevYearAlloted INT,Leaves float,PrevYearBalanceOB INT,CurrYearConsumed DECIMAL(9,2),Balance DECIMAL(9,2),Location INT)	
 				   
 --FOR START DATE AND END DATE OF LEAVE YEAR
 EXEC [spPAY_EXTGetLeaveyearDates] @Date,@ALStartMonthYear OUTPUT,@ALEndMonthYear OUTPUT
@@ -38,7 +38,7 @@ BEGIN
 		inner join COM_CCCCData cc WITH(NOLOCK) on cc.nodeid=c51.nodeid and cc.costcenterid=50051 and isnull(cc.ccnid53,'')<>''
 		inner JOIN COM_CC50053 C53 WITH(NOLOCK) on cc.ccnid53=c53.nodeid AND C53.ISGROUP=0
 		CROSS JOIN COM_CC50052 C52 WITH(NOLOCK) 
-		WHERE  C52.PARENTID=5 AND C52.ISGROUP=0 AND C51.ISGROUP=0 AND C51.StatusID=250 AND ISNULL(CONVERT(DATETIME,C51.DORelieve),'01-Jan-9000')='01-Jan-9000'
+		WHERE  C52.PARENTID=5 AND C52.ISGROUP=0 AND C51.ISGROUP=0 AND C51.StatusID in (250,302,303,304,305) --AND ISNULL(CONVERT(DATETIME,C51.DORelieve),'01-Jan-9000')='01-Jan-9000'
 		AND  C52.NodeID IN (Select ComponentID from Com_CC50054  with(nolock) where Type=4 And Convert(Datetime,Payrolldate)=(Select Max(Convert(Datetime,Payrolldate)) from Com_CC50054 with(nolock)))
 		AND ( CONVERT(DATETIME,C51.DOJ) <= @ALEndMonthYear AND ISNULL(CONVERT(DATETIME,C51.DORelieve),'01-Jan-9000') >=@ALStartMonthYear ) 
 	END
@@ -58,7 +58,7 @@ BEGIN
 		inner join COM_CCCCData cc WITH(NOLOCK) on cc.nodeid=c51.nodeid and cc.costcenterid=50051 and isnull(cc.ccnid53,'')<>''
 		inner JOIN COM_CC50053 C53 WITH(NOLOCK) on cc.ccnid53=c53.nodeid  AND C53.ISGROUP=0
 		CROSS JOIN COM_CC50052 C52 WITH(NOLOCK) 
-		WHERE  C52.PARENTID=5 AND C52.ISGROUP=0 AND C51.ISGROUP=0 AND C51.StatusID=250 AND ISNULL(CONVERT(DATETIME,C51.DORelieve),'01-Jan-9000')='01-Jan-9000'
+		WHERE  C52.PARENTID=5 AND C52.ISGROUP=0 AND C51.ISGROUP=0 AND C51.StatusID in (250,302,303,304,305) --AND ISNULL(CONVERT(DATETIME,C51.DORelieve),'01-Jan-9000')='01-Jan-9000'
 		AND  C52.NodeID IN (Select ComponentID from Com_CC50054  with(nolock) where Type=4 And Convert(Datetime,Payrolldate)=(Select Max(Convert(Datetime,Payrolldate)) from Com_CC50054 with(nolock)))
 		AND ( CONVERT(DATETIME,C51.DOJ) <= @ALEndMonthYear AND ISNULL(CONVERT(DATETIME,C51.DORelieve),'01-Jan-9000') >=@ALStartMonthYear ) 
 	END
@@ -72,7 +72,7 @@ BEGIN
 	SET @strQuery='DELETE FROM #TAB WHERE EmployeeID<>1 AND EmployeeID NOT IN (Select a.NodeID From COM_CC50051 a WITH(NOLOCK) WHERE '+ CONVERT(NVARCHAR(MAX),@EmpIDs) +')'
 	SET @strQuery=@strQuery + ' SELECT DISTINCT ISNULL(GradeID,0) as GradeID INTO #TGR FROM #TAB WHERE EmployeeID>1
 								DELETE FROM #TAB WHERE ISNULL(GRADEID,0) NOT IN (SELECT GRADEID FROM #TGR)'
-	EXEC (@strQuery)
+	EXEC sp_executesql @STRQUERY
 END
 
 IF((SELECT COUNT(*) FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=50051 and SysColumnName ='CCNID2' and IsColumnInUse=1 and UserProbableValues='H')>0)

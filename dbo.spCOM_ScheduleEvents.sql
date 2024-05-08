@@ -12,10 +12,10 @@ BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;
 
-	DECLARE @ScheduleID BIGINT, @FreqType INT, @FreqInterval INT, @FreqSubdayType INT, @FreqSubdayInterval INT, @FreqRelativeInterval INT, @FreqRecurrenceFactor INT, 
-			@StartDate NVARCHAR(20), @EndDate NVARCHAR(20), @StartTime NVARCHAR(20), @EndTime NVARCHAR(20), @Message NVARCHAR(MAX),@days int
+	DECLARE @ScheduleID INT, @FreqType INT, @FreqInterval INT, @FreqSubdayType INT, @FreqSubdayInterval INT, @FreqRelativeInterval INT, @FreqRecurrenceFactor INT, 
+			@StartDate NVARCHAR(20), @EndDate NVARCHAR(20), @StartTime NVARCHAR(20), @EndTime NVARCHAR(20), @Message NVARCHAR(MAX),@days int,@retVal int
 
-	DECLARE @Tbl AS TABLE(ID INT IDENTITY(1,1) NOT NULL,ScheduleID BIGINT, FreqType INT, FreqInterval INT, FreqSubdayType INT, FreqSubdayInterval INT, FreqRelativeInterval INT, FreqRecurrenceFactor INT,
+	DECLARE @Tbl AS TABLE(ID INT IDENTITY(1,1) NOT NULL,ScheduleID INT, FreqType INT, FreqInterval INT, FreqSubdayType INT, FreqSubdayInterval INT, FreqRelativeInterval INT, FreqRecurrenceFactor INT,
 			StartDate NVARCHAR(20), EndDate NVARCHAR(20), StartTime NVARCHAR(20), EndTime NVARCHAR(20), Message NVARCHAR(MAX))
 
 	DECLARE @Dt1 NVARCHAR(20),@Dt2 DATETIME
@@ -32,7 +32,8 @@ SET NOCOUNT ON;
 	
 	INSERT INTO @Tbl
 	SELECT ScheduleID, FreqType, FreqInterval, FreqSubdayType, FreqSubdayInterval, FreqRelativeInterval, FreqRecurrenceFactor, StartDate, 
-              EndDate, StartTime, EndTime, Message
+              EndDate,(CASE WHEN StartTime='NaN:NaN:NaN' THEN '00:00:00' ELSE StartTime END) StartTime,
+              (CASE WHEN EndTime='NaN:NaN:NaN' THEN '00:00:00' ELSE EndTime END) EndTime, Message
 	FROM COM_Schedules WITH(NOLOCK)
 	WHERE StatusID=1-- AND Scheduleid=254
 	--WHERE EndDate IS NULL OR CONVERT(DATETIME,EndDate)>=@DtFrom
@@ -152,7 +153,7 @@ SET NOCOUNT ON;
             BEGIN            
 				 
 				--SELECT @StDate, SUBSTRING(@STR, datepart(weekday,@StDate),1), datepart(weekday,@StDate)
-
+				
 				IF SUBSTRING(@STR, datepart(weekday,@StDate),1)='1' AND (@StDate BETWEEN @DtNextFrom AND @DtNextTo)
 				BEGIN
 					IF NOT EXISTS (SELECT ScheduleID FROM COM_SchEvents WITH(NOLOCK) WHERE @ScheduleID=ScheduleID AND EventTime=CONVERT(FLOAT,@StDate))
@@ -167,7 +168,6 @@ SET NOCOUNT ON;
 				BEGIN
 					SET @StDate=DATEADD(day,@FreqInterval*7,@StDate)
 				END
-
             END
 		END--End of Weekly
 		ELSE IF @FreqType=16--Monthly
@@ -176,7 +176,11 @@ SET NOCOUNT ON;
 			if @FreqInterval<DAY(@StDate)
 			begin
 				set @StDate=DATEADD(MONTH,1,@StDate)
-				SET @StDate=CONVERT(DATETIME, CONVERT(NVARCHAR,@FreqInterval)+' '+ { fn MONTHNAME(@StDate) }+' '+CONVERT(NVARCHAR,YEAR(@StDate)))
+				begin try
+					SET @StDate=CONVERT(DATETIME, CONVERT(NVARCHAR,@FreqInterval)+' '+ { fn MONTHNAME(@StDate) }+' '+CONVERT(NVARCHAR,YEAR(@StDate)))
+				end try
+				begin catch
+				end catch
             end
 			else
 			begin
@@ -347,16 +351,28 @@ SET NOCOUNT ON;
 
 COMMIT TRANSACTION  
 
+select distinct ACC.VoucherNo,E.GUID SchGUID,E.SchEventID,CS.CostCenterID,CS.NodeID,CONVERT(datetime,floor(E.EventTime)) EventTime,S.RecurMethod--,S.RecurAutoPost,ACC.WorkFlowID,ACC.PostRecurWithApproval
+from COM_SchEvents E WITH(NOLOCK) 
+join COM_CCSchedules CS with(nolock) on E.ScheduleID=CS.ScheduleID
+join COM_Schedules S with(nolock) on S.ScheduleID=E.ScheduleID
+join INV_DocDetails ACC with(nolock) on ACC.DocID=CS.NodeID -- ACC.PostRecurWithApproval=2
+where E.statusid=1 and ACC.CostCenterID=CS.CostCenterID
+and CS.CostCenterID>40000 and CS.CostCenterID<50000 and E.EventTime< getdate()
+and S.RecurAutoPost in(2,3) 
+--E.SchEventID=593 (ACC.WorkFlowID>0 and ACC.PostRecurWithApproval=2) or 
+order by EventTime
+
 BEGIN TRANSACTION  
-declare @TblAutoDocs as table(ID int identity(1,1),SchEventID bigint,CostCenterID int,docid bigint,EventTime datetime,RecurMethod tinyint)
-declare @SchEventID bigint,@CostCenterID int,@docid bigint,@EventTime datetime,@VoucherNo nvarchar(50),@RecurMethod tinyint
+declare @TblAutoDocs as table(ID int identity(1,1),SchEventID INT,CostCenterID int,docid INT,EventTime datetime,RecurMethod tinyint)
+declare @SchEventID INT,@CostCenterID int,@docid INT,@EventTime datetime,@VoucherNo nvarchar(50),@RecurMethod tinyint
 insert @TblAutoDocs
 select distinct E.SchEventID,CS.CostCenterID,CS.NodeID,CONVERT(datetime,floor(E.EventTime)) EventTime,S.RecurMethod--,S.RecurAutoPost,ACC.WorkFlowID,ACC.PostRecurWithApproval
-from COM_SchEvents E WITH(NOLOCK) inner join COM_CCSchedules CS with(nolock) on E.ScheduleID=CS.ScheduleID
-inner join COM_Schedules S with(nolock) on S.ScheduleID=E.ScheduleID
-left join Acc_DocDetails ACC with(nolock) on ACC.DocID=CS.NodeID 
-and ACC.CostCenterID=CS.CostCenterID-- ACC.PostRecurWithApproval=2
-where E.statusid=1 and CS.CostCenterID>40000 and CS.CostCenterID<50000 and E.EventTime<getdate()
+from COM_SchEvents E WITH(NOLOCK) 
+join COM_CCSchedules CS with(nolock) on E.ScheduleID=CS.ScheduleID
+join COM_Schedules S with(nolock) on S.ScheduleID=E.ScheduleID
+join Acc_DocDetails ACC with(nolock) on ACC.DocID=CS.NodeID -- ACC.PostRecurWithApproval=2
+where E.statusid=1 and ACC.CostCenterID=CS.CostCenterID
+and CS.CostCenterID>40000 and CS.CostCenterID<50000 and E.EventTime< getdate()
 and ((ACC.WorkFlowID>0 and ACC.PostRecurWithApproval=2) or (S.RecurAutoPost=2 and (ACC.WorkFlowID is null or ACC.WorkFlowID=0 or ACC.WorkFlowLevel is null)))
 --E.SchEventID=593
 order by EventTime
@@ -371,9 +387,11 @@ BEGIN
 	
 	--select @SchEventID,@CostCenterID,@docid,@EventTime
 	
-	EXEC [spDOC_SetRecurDocument] @CostCenterID,@docid,@EventTime,@RecurMethod,'CompanyGUID','AUTO-POST',@UserID,@LangID,@VoucherNo output
+	EXEC @retVal=[spDOC_SetRecurDocument] @CostCenterID,@docid,@EventTime,@RecurMethod,'CompanyGUID','AUTO-POST',@UserID,@LangID,@VoucherNo output
 	--select @VoucherNo
-
+	if(@retVal=-999)
+		return -999
+	
 	if @VoucherNo is not null and len(@VoucherNo)>0
 	begin
 		update COM_SchEvents
@@ -385,42 +403,13 @@ BEGIN
 END
 
 COMMIT TRANSACTION 
---ROLLBACK TRANSACTION
-/*
-BEGIN TRANSACTION  
-declare @servicecnt bigint
-select @servicecnt=COUNT(*) from SVC_ServiceTicket with(nolock)
-if(@servicecnt>0)
-BEGIN
-	declare @cnt bigint, @si int, @CCTICKETID BIGINT, @InvCCID bigint 
-	create table #t1 (id bigint identity(1,1), ccticketid bigint)
-	insert into #t1
-	select distinct(dcccnid42) from inv_docdetails i with(nolock)
-	left join com_docccdata s with(nolock) on i.invdocdetailsid=s.invdocdetailsid and i.costcenterid=40011
-	left join COM_CC50042 tkt with(nolock) on s.dcccnid42=tkt.nodeid
-	where   tkt.statusid<>156 and s.dcccnid42>1
-	set @si=1
-	select @cnt=count(*) from #t1
-	while @si<=@cnt
-	BEGIN
-		SELECT @CCTICKETID=ccticketid from #t1 where id=@si
-		if exists (select statusid from inv_docdetails i with(nolock)  
-		left join com_docccdata s with(nolock) on i.invdocdetailsid=s.invdocdetailsid and i.costcenterid=40011
-		where i.costcenterid=40011 and s.dcccnid42=@CCTICKETID AND  i.STATUSID IN (369,441)) 
-			--=select * from com_cc50042 where nodeid=@CCTICKETID
-			 UPDATE COM_CC50042 SET STATUSID=156 WHERE NODEID=@CCTICKETID 
-		set @si=@si+1
-		
-	END
-	DROP TABLE #t1 
-END 
-
-COMMIT TRANSACTION */
 SET NOCOUNT OFF;  
 
 RETURN 1  
 END TRY  
-BEGIN CATCH  
+BEGIN CATCH 
+	if(@retVal=-999)
+		return -999 
 	--Return exception info [Message,Number,ProcedureName,LineNumber]  
 	IF ERROR_NUMBER()=50000
 	BEGIN
@@ -436,4 +425,6 @@ BEGIN CATCH
 	SET NOCOUNT OFF  
 	RETURN -999   
 END CATCH
+
+
 GO

@@ -3,21 +3,21 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_ReconcileAvgValue]
-	@ProductID [bigint],
+	@ProductID [int],
 	@AvgWHERE [nvarchar](max),
 	@DocDate [datetime],
 	@DocQty [float],
-	@DocDetailsID [bigint] = 0,
+	@DocDetailsID [int] = 0,
 	@IsFromReconcile [bit],
-	@DocumentID [bigint] = 0,
+	@DocumentID [int] = 0,
 	@AvgRate [float] = 0 OUTPUT
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 SET NOCOUNT ON; 
  set @AvgRate=0
-	declare @valuation int,@SQL nvarchar(max),@STWHERE nvarchar(25),@I int,@TotalSaleQty float,@StockValue float,@RecQty FLOAT,@RecRate FLOAT,@RecValue FLOAT,@VoucherType INT,@docType int,@cd float,@dd float,@tempwher nvarchar(max),@tempsql nvarchar(max)
-	declare @Qty float,@tempQty float,@COUNT int,@Rate float,@Dtype int,@DocID bigint,@vtype int,@prefix nvarchar(50),@docno nvarchar(50),@SortAvgRate  nvarchar(10),@AvgRateBasedOn  nvarchar(100),@CloseDt nvarchar(20)
-	DECLARE @Tbl AS TABLE(ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,DocID BIGINT,Date FLOAT,cD float,Qty FLOAT,RecRate FLOAT,RecValue FLOAT,VoucherType INT,DocType int)        
+	declare @valuation int,@SQL nvarchar(max),@STWHERE nvarchar(MAX),@I int,@TotalSaleQty float,@StockValue float,@RecQty FLOAT,@RecRate FLOAT,@RecValue FLOAT,@VoucherType INT,@docType int,@cd float,@dd float,@tempwher nvarchar(max),@tempsql nvarchar(max)
+	declare @Qty float,@tempQty float,@COUNT int,@Rate float,@Dtype int,@DocID INT,@vtype int,@prefix nvarchar(50),@docno nvarchar(50),@SortAvgRate  nvarchar(10),@AvgRateBasedOn  nvarchar(100),@CloseDt nvarchar(20)
+	DECLARE @Tbl AS TABLE(ID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,DocID INT,Date FLOAT,cD float,Qty FLOAT,RecRate FLOAT,RecValue FLOAT,VoucherType INT,DocType int)        
 	
 	if not (@IsFromReconcile=1 and @valuation=3)
 		SELECT @CloseDt=convert(nvarchar(20), max(ToDate)+1) FROM ADM_FinancialYears with(nolock) where InvClose=1 and ToDate<convert(int,@DocDate)
@@ -37,11 +37,26 @@ SET NOCOUNT ON;
 	else
 		set @AvgRateBasedOn=''
 	
-	if exists(select Value from ADM_GlobalPreferences with(nolock)
-	where Name='ExcludeSTAvgRate' and Value='True')
-		set @STWHERE=' and DocumentType<>5 '
-	else
+	DECLARE @STVal NVARCHAR(max),@STValDocs NVARCHAR(MAX)
+	SELECT @STVal=Value From ADM_GlobalPreferences with(nolock) where Name='ExcludeSTAvgRate'
+	IF(@STVal='True')
+	BEGIN
+		SELECT @STValDocs=Value From ADM_GlobalPreferences with(nolock) where Name='ExcludeSTAvgRateDocs'
+		IF(LEN(@STValDocs)>0)
+			set @STWHERE=' and CostCenterID IN('+@STValDocs+') '
+		ELSE
+			set @STWHERE=' and DocumentType<>5 '
+	END
+	ELSE 
 		set @STWHERE=''
+
+
+	--if exists(select Value from ADM_GlobalPreferences with(nolock)
+	--where Name='ExcludeSTAvgRate' and Value='True')
+	--	set @STWHERE=' and DocumentType<>5 '
+	--else
+	--	set @STWHERE=''
+
 			
 	select @valuation=ValuationID from INV_Product with(nolock) where ProductID=@ProductID        
 
@@ -185,7 +200,7 @@ SET NOCOUNT ON;
 		begin
 			set @SQL=@SQL+' and D.DocDate>='+@CloseDt	
 		END
-
+		
 	set @SQL=@SQL+@AvgWHERE  +@tempwher+@STWHERE
     set @SQL=@SQL+' ) AS D ORDER BY isOP desc,'
     
@@ -225,10 +240,10 @@ SET NOCOUNT ON;
 			set @SQL=@SQL+' AND (D.DocDate<'+convert(nvarchar,CONVERT(float,@DocDate))        
 			 +' or (D.DocDate='+convert(nvarchar,CONVERT(float,@DocDate))   
 			if(@DocDetailsID>0)
-				set @SQL =@SQL+' and (D.DocPrefix<'''+@prefix +''' or (D.DocPrefix='''+@prefix +''' and convert(bigint,DocNumber)<convert(bigint,'+@docno+'))  
-				or (D.DocPrefix='''+@prefix +''' and convert(bigint,DocNumber)=convert(bigint,'+@docno+') and d.InvDocDetailsID <'+CONVERT(nvarchar,@DocDetailsID)+') )) )'  
+				set @SQL =@SQL+' and (D.DocPrefix<'''+@prefix +''' or (D.DocPrefix='''+@prefix +''' and convert(INT,DocNumber)<convert(INT,'+@docno+'))  
+				or (D.DocPrefix='''+@prefix +''' and convert(INT,DocNumber)=convert(INT,'+@docno+') and d.InvDocDetailsID <'+CONVERT(nvarchar,@DocDetailsID)+') )) )'  
 			else
-				set @SQL =@SQL+' and (D.DocPrefix<'''+@prefix +''' or (D.DocPrefix='''+@prefix +''' and convert(bigint,DocNumber)<=convert(bigint,'+@docno+')) )) )'  				
+				set @SQL =@SQL+' and (D.DocPrefix<'''+@prefix +''' or (D.DocPrefix='''+@prefix +''' and convert(INT,DocNumber)<=convert(INT,'+@docno+')) )) )'  				
 		end
 		ELSE
 			 set @SQL=@SQL+' AND D.DocDate<='+convert(nvarchar,CONVERT(float,@DocDate))  
@@ -356,7 +371,7 @@ SET NOCOUNT ON;
 					set @SQL=@SQL+'
 						else
 						BEGIN
-							declare @val bigint
+							declare @val INT
 							insert into INV_ProductAvgRate(AvgRate,ProductID,DocDate,CreatedDate)
 							values('+convert(nvarchar(max),@AvgRate)+','+convert(nvarchar(max),@ProductID)+','+convert(nvarchar(max),@dd)+','+convert(nvarchar(max),@cd)+')
 							set @val=@@identity '
@@ -421,4 +436,5 @@ SET NOCOUNT ON;
 		if(@Qty>0)         
 			set  @AvgRate=@StockValue/@Qty   
 	end
+
 GO

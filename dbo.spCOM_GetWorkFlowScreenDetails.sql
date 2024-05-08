@@ -5,7 +5,7 @@ GO
 CREATE PROCEDURE [dbo].[spCOM_GetWorkFlowScreenDetails]
 	@LocationWhere [nvarchar](max) = null,
 	@DivisionWhere [nvarchar](max) = null,
-	@UserID [bigint],
+	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1,
 	@IsCRM [bit] = 0
@@ -91,7 +91,7 @@ SET NOCOUNT ON;
 	order by GroupName
 	
 	--getting Worflow list
-	declare @Tbl as table(WorkFlowID bigint,WorkFlowName nvarchar(max))
+	declare @Tbl as table(WorkFlowID INT,WorkFlowName nvarchar(max))
 	if @UserID=1
 		insert into @Tbl
 		select  distinct WorkFlowID,WorkFlowName from COM_WorkFlow with(nolock)
@@ -104,7 +104,7 @@ SET NOCOUNT ON;
 	
 	SELECT FeatureID,Name FROM ADM_Features with(nolock)
 	WHERE ((IsEnabled=1  and FeatureID>50000 ) or (FeatureID between 40000 and 50000  )
-	or FeatureID IN (2,3,73,76,92,93,94,95,103,104,129)) and (@RoleID=1 or @UserID=1 or FeatureID IN( select FA.FeatureID from adm_featureactionrolemap FAR with(nolock)
+	or FeatureID IN (2,3,73,76,72,83,86,89,92,93,94,95,103,104,129)) and (@RoleID=1 or @UserID=1 or FeatureID IN( select FA.FeatureID from adm_featureactionrolemap FAR with(nolock)
 			inner join adm_featureaction FA with(nolock) on FAR.FeatureActionID=FA.FeatureActionID
 			where FAR.RoleID=@RoleID and (FA.FeatureActionTypeID=2 or FA.FeatureActionTypeID=3) 
 			))

@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetjobDetails]
-	@NodeID [bigint],
-	@DocID [bigint] = 0,
+	@NodeID [int],
+	@DocID [int] = 0,
 	@qtywhere [nvarchar](max),
 	@docDate [datetime],
-	@CostcenterID [bigint],
+	@CostcenterID [int],
 	@UserID [int] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -15,22 +15,24 @@ AS
 BEGIN TRY     
 SET NOCOUNT ON 
    
-	Declare @CCID BIGINT,@StageCCID BIGINT,@Sql nvarchar(max),@tableName nvarchar(200),@DocumentType int,@BomCCID int,@UnqCCID int
-	declare @VType int,@MachineDim BIGINT,@DbCol nvarchar(500),@CrCol nvarchar(500),@DrAccID BIGINT,@CrAccID BIGINT,@OnlySelected nvarchar(10)
+	Declare @CCID INT,@StageCCID INT,@Sql nvarchar(max),@tableName nvarchar(200),@DocumentType int,@BomCCID int,@UnqCCID int
+	declare @VType int,@MachineDim INT,@DbCol nvarchar(500),@CrCol nvarchar(500),@DrAccID INT,@CrAccID INT,@OnlySelected nvarchar(10)
 	
 
 	select @DocumentType=DocumentType from ADM_DocumentTypes WITH(NOLOCK) where CostCenterID=@CostcenterID
 	select @CCID=Value from COM_CostCenterPreferences WITH(NOLOCK)
 	where CostCenterID=76 and Name='JobDimension' and ISNUMERIC(Value)=1
 	
+	
 	if(@DocumentType=1 or @DocumentType=27 or @DocumentType=26 or @DocumentType=25 or @DocumentType=2  or @DocumentType=34 or @DocumentType=6 or @DocumentType=3 or @DocumentType=4 or @DocumentType=13)      
 		set @VType=1      
-	else if(@DocumentType=11 or @DocumentType=7 or @DocumentType=9 or @DocumentType=24 or @DocumentType=33 or @DocumentType=10 or @DocumentType=8 or @DocumentType=12)      
+	else if(@DocumentType=11 or @DocumentType=5 or @DocumentType=7 or @DocumentType=9 or @DocumentType=24 or @DocumentType=33 or @DocumentType=10 or @DocumentType=8 or @DocumentType=12)      
 		set @VType=-1      
 	       
 	set @StageCCID=0
 	set @MachineDim=0
 	set @UnqCCID=0
+	
 	
 	select @OnlySelected=Value from adm_globalPreferences WITH(NOLOCK)
 	where Name='ShowOnlySelectedStages'
@@ -270,7 +272,7 @@ SET NOCOUNT ON
 			 if(@BomCCID>0)
 				set @Sql=@Sql +' JOIN PRD_BillOfMaterial BOM WITH(NOLOCK) on a.BOMID=BOM.BOMID '
 		
-			 set @Sql=@Sql +'where (b.StatusID=0 or b.StatusID=5) and b.NodeID='+convert(nvarchar,@NodeID)+' and b.CostCenterID='+convert(nvarchar,@CCID)+') as a'
+			 set @Sql=@Sql +'where (b.StatusID=0 or b.StatusID=5) and b.NodeID='+convert(nvarchar,@NodeID)+' and b.CostCenterID='+convert(nvarchar,@CCID)+') as a ORDER BY BOMProductID'
 		print @Sql
 		exec(@Sql)
 	END
@@ -321,11 +323,16 @@ SET NOCOUNT ON
 		if(@UnqCCID>0)
 			set @Sql=@Sql +',DimID '
 		
-		set @Sql=@Sql+',sum(AMT) AMT from (select b.bomID,c.ProductID,sum(a.Gross) AMT '
+		set @Sql=@Sql+',sum(AMT) AMT from (select bt.bomID,bt.ProductID,sum(bt.Gross) AMT '
+		
+		if(@UnqCCID>0)
+			set @Sql=@Sql +',bt.DimID '
+			
+		set @Sql=@Sql+' from (select distinct b.bomID,c.ProductID,a.Gross,a.InvDocDetailsID '	
 		
 		if(@UnqCCID>0)
 			set @Sql=@Sql +',DimID '
-
+			
 		set @Sql=@Sql+' from inv_docdetails a WITH(NOLOCK)
 		join Com_DOCCCDATA CC  WITH(NOLOCK) on a.InvDocDetailsID=cc.InvDocDetailsID
 		join PRD_BOMProducts b WITH(NOLOCK) on a.ProductID=b.ProductID and b.IncInFinalCost=1
@@ -341,13 +348,12 @@ SET NOCOUNT ON
 			set @Sql=@Sql +' AND dcccnid'+convert(nvarchar,(@UnqCCID-50000))+'=j.DimID '	
 			
 		
-		set @Sql=@Sql+'
-		group by b.bomID,c.ProductID'
-		if(@UnqCCID>0)
-			set @Sql=@Sql +',DimID '
-			
+		set @Sql=@Sql+') as bt
+		group by bt.bomID,bt.ProductID'
 		
-
+		if(@UnqCCID>0)
+			set @Sql=@Sql +',bt.DimID '
+			
 		set @Sql=@Sql+' UNION ALL
 		select b.bomID,c.ProductID,sum(d.Amount) AMT '
 		
@@ -359,7 +365,7 @@ SET NOCOUNT ON
 		join PRD_Expenses b WITH(NOLOCK) on a.DebitAccount=b.DebitAccountID and a.CreditAccount=b.CreditAccountID and b.IncInFinalCost=1
 		join PRD_BillOfMaterial c WITH(NOLOCK) on c.bomID=b.bomID 
 		join PRD_JobOuputProducts j WITH(NOLOCK) on c.BOMID=j.BomID and j.NodeID='+convert(nvarchar,@NodeID)+' and j.CostCenterID='+convert(nvarchar,@CCID)+'		
-		join ACC_DocDetails d on a.InvDocDetailsID=d.InvDocDetailsID
+		join ACC_DocDetails d WITH(NOLOCK) on a.InvDocDetailsID=d.InvDocDetailsID
 		Where a.documenttype=37 and CC.DCCCNID'+convert(nvarchar,(@CCID-50000))+'='+convert(nvarchar,@NodeID)
 		if(@BomCCID>0)
 		BEGIN
@@ -386,7 +392,7 @@ SET NOCOUNT ON
 			join PRD_BOMResources b WITH(NOLOCK) on CC.dcccnid'+convert(nvarchar,(@MachineDim-50000))+'=b.ResourceID and b.IncInFinalCost=1
 			join PRD_BillOfMaterial c WITH(NOLOCK) on c.bomID=b.bomID 
 			join PRD_JobOuputProducts j WITH(NOLOCK) on c.BOMID=j.BomID and j.NodeID='+convert(nvarchar,@NodeID)+' and j.CostCenterID='+convert(nvarchar,@CCID)+'		
-			join ACC_DocDetails d on a.InvDocDetailsID=d.InvDocDetailsID
+			join ACC_DocDetails d WITH(NOLOCK) on a.InvDocDetailsID=d.InvDocDetailsID
 			Where a.documenttype=36  and CC.DCCCNID'+convert(nvarchar,(@CCID-50000))+'='+convert(nvarchar,@NodeID)
 			if(@BomCCID>0)
 			BEGIN
@@ -453,7 +459,7 @@ SET NOCOUNT ON
 		join PRD_Expenses b WITH(NOLOCK) on a.DebitAccount=b.DebitAccountID and a.CreditAccount=b.CreditAccountID and b.IncInStageCost=1
 		join PRD_BillOfMaterial c WITH(NOLOCK) on c.bomID=b.bomID 
 		join PRD_JobOuputProducts j WITH(NOLOCK) on c.BOMID=j.BomID and j.StageID=b.StageID and j.NodeID='+convert(nvarchar,@NodeID)+' and j.CostCenterID='+convert(nvarchar,@CCID)+'				
-		join ACC_DocDetails d on a.InvDocDetailsID=d.InvDocDetailsID
+		join ACC_DocDetails d WITH(NOLOCK) on a.InvDocDetailsID=d.InvDocDetailsID
 		Where a.documenttype=37 and CC.DCCCNID'+convert(nvarchar,(@CCID-50000))+'='+convert(nvarchar,@NodeID)
 		if(@BomCCID>0)
 		BEGIN
@@ -479,7 +485,7 @@ SET NOCOUNT ON
 			join PRD_BOMResources b WITH(NOLOCK) on CC.dcccnid'+convert(nvarchar,(@MachineDim-50000))+'=b.ResourceID and b.IncInStageCost=1	
 			join PRD_BillOfMaterial c WITH(NOLOCK) on c.bomID=b.bomID 
 			join PRD_JobOuputProducts j WITH(NOLOCK) on c.BOMID=j.BomID and j.StageID=b.StageID and j.NodeID='+convert(nvarchar,@NodeID)+' and j.CostCenterID='+convert(nvarchar,@CCID)+'		
-			join ACC_DocDetails d on a.InvDocDetailsID=d.InvDocDetailsID
+			join ACC_DocDetails d WITH(NOLOCK) on a.InvDocDetailsID=d.InvDocDetailsID
 			Where a.documenttype=36  and CC.DCCCNID'+convert(nvarchar,(@CCID-50000))+'='+convert(nvarchar,@NodeID)
 			if(@BomCCID>0)
 				set @Sql=@Sql +' AND dcccnid'+convert(nvarchar,(@BomCCID-50000))+'=c.CCNodeID '		
@@ -517,5 +523,7 @@ BEGIN CATCH
  END      
  SET NOCOUNT OFF        
 RETURN -999         
-END CATCH        
+END CATCH
+
+
 GO

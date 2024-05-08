@@ -35,11 +35,12 @@ SET NOCOUNT ON
 	
 	if(@UpdateQuery<>'')
 	BEGIN
-		SET @SQL=' Update Inv_DocDetails set '+@UpdateQuery+' from com_docccdata a where a.InvDocDetailsID=Inv_DocDetails.InvDocDetailsID'
+		SET @SQL=' Update Inv_DocDetails set '+@UpdateQuery+' from com_docccdata a with(nolock) where a.InvDocDetailsID=Inv_DocDetails.InvDocDetailsID'
 		
 		exec(@SQL)
 	
-		SET @SQL=' Update Acc_DocDetails set '+@UpdateQuery+' from com_docccdata a where a.AccDocDetailsID=Acc_DocDetails.AccDocDetailsID or a.InvDocDetailsID=Acc_DocDetails.InvDocDetailsID'
+		SET @SQL=' Update Acc_DocDetails set '+@UpdateQuery+' from com_docccdata a with(nolock) where a.AccDocDetailsID=Acc_DocDetails.AccDocDetailsID
+		Update Acc_DocDetails set '+@UpdateQuery+' from com_docccdata a with(nolock) where a.InvDocDetailsID=Acc_DocDetails.InvDocDetailsID'
 		exec(@SQL)
 	END
 	

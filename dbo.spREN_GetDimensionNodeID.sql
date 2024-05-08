@@ -6,7 +6,8 @@ CREATE PROCEDURE [dbo].[spREN_GetDimensionNodeID]
 	@NodeID [bigint] = 0,
 	@CostcenterID [bigint] = 0,
 	@UserID [bigint],
-	@LangID [int] = 1
+	@LangID [int] = 1,
+	@Dimesion [bigint] = 1 OUTPUT
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION      
@@ -14,7 +15,7 @@ BEGIN TRY
 SET NOCOUNT ON     
       
   DECLARE @TabName nvarchar(max)  , @Code nvarchar(max) , @Name nvarchar(max)  
-  DECLARE @Qry nvarchar(max) ,@ReturnValue bigint  ,@PrefValue NVARCHAR(500),@Dimesion bigint,@TEMPxml NVARCHAR(500)
+  DECLARE @Qry nvarchar(max) ,@ReturnValue bigint  ,@PrefValue NVARCHAR(500),@TEMPxml NVARCHAR(500)
     
   IF(@CostcenterID  = 92)  
   BEGIN  
@@ -32,16 +33,20 @@ SET NOCOUNT ON
  select @Code = TenantCode,@Name = FirstName from REN_Tenant with(nolock) where TenantID = @NodeID  
    
   END   
+  
+  select   @Dimesion = Value from COM_CostCenterPreferences with(nolock)
+  where CostCenterID= @CostcenterID  and  Name = 'LinkDocument'
+		
   select @TabName = TableName  from adm_features with(nolock) 
-  where FeatureID IN (Select Value from COM_CostCenterPreferences  with(nolock)       
-  where name like '%LinkDocument%' AND COSTCENTERID = @CostcenterID)  
+  where FeatureID =@Dimesion
    
   --select '1' , @TabName ,@Name  
     Declare @tempSearchValue nvarchar(max),@tempSql nvarchar(max)      
     set @tempSearchValue='@ReturnValue BIGINT OUTPUT,@Name nvarchar(max),@Code nvarchar(max)'      
     set @tempSql=' SELECT @ReturnValue = NODEID FROM ' + @TabName +' with(nolock) where   Name = @Name and Code=@Code'  
      
-       print @tempSql  
+       print @tempSql
+         
     EXEC sp_executesql @tempSql, @tempSearchValue, @ReturnValue OUTPUT,@Name,@Code  
     
  
@@ -105,8 +110,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION      
 SET NOCOUNT OFF        
 RETURN -999         
-END CATCH   
-  
-    
-     
+END CATCH
 GO

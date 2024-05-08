@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_BulkEditDetails]
 	@Type [int],
-	@ID [bigint],
+	@ID [int],
 	@CostCenterID [int],
 	@Name [nvarchar](100),
 	@FieldXML [nvarchar](max),
@@ -20,16 +20,17 @@ BEGIN TRANSACTION
 BEGIN TRY      
 SET NOCOUNT ON;    
 	
-	DECLARE @RETVALUE INT,@TblName NVARCHAR(50)
-	DECLARE @AuditTrial BIT,@return_value bigint,@DocID bigint,@isinv bit,@ModDate float
-
+	DECLARE @RETVALUE INT,@TblName NVARCHAR(50),@sql nvarchar(max)
+	DECLARE @AuditTrial BIT,@return_value INT,@DocID INT,@isinv bit,@ModDate float
+	SET @ModDate=CONVERT(FLOAT,GETDATE())
 	SET @RETVALUE=1
 	IF @Type=1
 	BEGIN
 		--Docs
 		SELECT CostCenterID,DocumentName Name,IsInventory FROM ADM_DocumentTypes with(nolock)
 		UNION ALL
-		SELECT FeatureID,Name,null IsInventory FROM ADM_Features with(nolock) WHERE (FeatureID in(2,3,47,48,95,92,93,94,16) or FeatureID>50000) and IsEnabled=1 
+		SELECT FeatureID,Name,null IsInventory FROM ADM_Features with(nolock) 
+		WHERE (FeatureID in(2,3,16,47,48,92,93,94,95,103,104,129) or FeatureID>50000) and IsEnabled=1 
 		order by Name
 	END
 	ELSE IF @Type=2
@@ -75,16 +76,16 @@ SET NOCOUNT ON;
 			 WHEN  C.SysColumnName like 'dcAlpha%' and (C.UserColumnType='Numeric' AND C.ColumnDataType='TEXT') THEN 'FLOAT' 
 			 ELSE upper(C.ColumnDataType) END ColumnDataType,
 			C.IsForeignKey,C.ParentCostCenterID,C.ParentCostCenterSysName,C.ParentCostCenterColSysName,C.ParentCCDefaultColID,
-			C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues,C.UserColumnType,C.IsColumnUserDefined,C.Decimal--,FC.SysColumnName
+			C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues,C.UserColumnType,C.IsColumnUserDefined,C.Decimal
 			FROM ADM_CostCenterDef C WITH(NOLOCK)
-			--LEFT JOIN ADM_CostCenterDef FC WITH(NOLOCK) ON FC.CostCenterColID=C.ParentCCDefaultColID
-			,COM_LanguageResources R WITH(NOLOCK)
-			WHERE C.CostCenterID=@CostCenterID AND C.ResourceID=R.ResourceID AND R.LanguageID=@LangID 
-				AND C.IsValidReportBuilderCol=1 AND C.IsColumnInUse=1 
+			JOIN COM_LanguageResources R WITH(NOLOCK) ON C.ResourceID=R.ResourceID AND R.LanguageID=@LangID 
+			WHERE C.CostCenterID=@CostCenterID AND C.IsValidReportBuilderCol=1 AND C.IsColumnInUse=1 
 			ORDER BY UserColumnName
 			
-			if(@CostCenterID=2 or @CostCenterID=3 or (@CostCenterID>=50001 and @CostCenterID<=50050))
+			if(@CostCenterID=2 or @CostCenterID=3 or @CostCenterID>=50001)
 				select StatusID ID,Status Name from COM_Status with(nolock) WHERE CostCenterID=@CostCenterID or featureid=1
+			else if(@CostCenterID=95 or @CostCenterID=103 or @CostCenterID=104 or @CostCenterID=129)
+				select StatusID ID,Status Name from COM_Status with(nolock) WHERE CostCenterID=@CostCenterID or CostCenterID=95  
 			else
 				select StatusID ID,Status Name from COM_Status with(nolock) WHERE CostCenterID=@CostCenterID
 
@@ -92,29 +93,28 @@ SET NOCOUNT ON;
 
 			if @CostCenterID=2
 			begin
-				SELECT Name,Value FROM COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID and Name='AccountCodeAutoGen'
+				SELECT Name,Value FROM COM_CostCenterPreferences with(nolock) 
+				WHERE CostCenterID=@CostCenterID and Name='AccountCodeAutoGen'
 
 				select AccountTypeID,AccountType from acc_accounttypes with(nolock)
 			end
 			else if @CostCenterID=3
 			begin
-				SELECT Name,Value FROM COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID and Name='ProductCodeAutoGen'
+				SELECT Name,Value FROM COM_CostCenterPreferences with(nolock) 
+				WHERE CostCenterID=@CostCenterID and Name='ProductCodeAutoGen'
 
 				select ProductTypeID,ProductType from inv_producttypes with(nolock)
 			end
 			else
-			begin
 				SELECT Name,Value FROM COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID and Name='CodeAutoGen'
-			end
 			
 		END
 	
 	END
 	ELSE IF @Type=3
 	BEGIN
-		SELECT B.*
-		FROM ADM_BulkEditTemplate B WITH(NOLOCK)
-		WHERE B.ID=@ID 
+		SELECT * FROM ADM_BulkEditTemplate WITH(NOLOCK)
+		WHERE ID=@ID 
 	END
 	ELSE IF @Type=4
 	BEGIN
@@ -126,8 +126,12 @@ SET NOCOUNT ON;
 		IF @ID=0
 		BEGIN
 			INSERT INTO ADM_BulkEditTemplate(Name,CostCenterID,FieldsXML,FilterXML,Options,GUID,CreatedDate,CreatedBy)
-			VALUES(@Name,@CostCenterID,@FieldXML,@FilterXML,@Options,newID(),convert(float,getdate()),@UserName)
-			SET @ID=SCOPE_IDENTITY()			
+			VALUES(@Name,@CostCenterID,@FieldXML,@FilterXML,@Options,newID(),@ModDate,@UserName)
+			SET @ID=SCOPE_IDENTITY()
+			
+			INSERT INTO ADM_Assign(CostCenterID,NodeID,GroupID,RoleID,UserID,CreatedBy,CreatedDate)
+			SELECT 49,@ID,0,0,@UserID,@UserName,@ModDate
+			 			
 		END
 		ELSE
 		BEGIN
@@ -136,7 +140,7 @@ SET NOCOUNT ON;
 				FieldsXML=@FieldXML,
 				FilterXML=@FilterXML,
 				Options=@Options,
-				ModifiedDate=convert(float,getdate()),
+				ModifiedDate=@ModDate,
 				ModifiedBy=@UserName
 			WHERE ID=@ID
 		END
@@ -149,20 +153,19 @@ SET NOCOUNT ON;
 	END
 	ELSE IF @Type=6
 	BEGIN
-		SELECT B.*
-		FROM ADM_BulkEditTemplate B WITH(NOLOCK)
-		WHERE B.ID=@ID 
+		SELECT * FROM ADM_BulkEditTemplate WITH(NOLOCK)
+		WHERE ID=@ID 
 		
 		SELECT @CostCenterID=CostCenterID
-		FROM ADM_BulkEditTemplate B WITH(NOLOCK)
-		WHERE B.ID=@ID
+		FROM ADM_BulkEditTemplate WITH(NOLOCK)
+		WHERE ID=@ID
 		
 		SELECT Name,TableName FROM ADM_Features F WITH(NOLOCK)
 		WHERE FeatureID=@CostCenterID
 		
 		if(@CostCenterID>4000 and @CostCenterID<50000)
-			SELECT top 1 convert(int,IsLineWise) IsLineWise FROM COM_WorkFlowDef a WITH(nolock) 
-			WHERE a.CostCenterID=@CostCenterId
+			SELECT top 1 convert(int,IsLineWise) IsLineWise FROM COM_WorkFlowDef  WITH(nolock) 
+			WHERE CostCenterID=@CostCenterId
 			order by IsLineWise desc
 		else
 			SELECT 0 IsLineWise WHERE 1<>1
@@ -210,7 +213,6 @@ SET NOCOUNT ON;
 			
 			IF (@AuditTrial=1)  
 			BEGIN				
-				set @ModDate=convert(float,getdate())
 				 EXEC @return_value = [spDOC_SaveHistory]      
 					@DocID =@DocID ,
 					@HistoryStatus='Bulk Edit',
@@ -224,7 +226,7 @@ SET NOCOUNT ON;
 	END
 	ELSE IF @Type=8
 	BEGIN
-		DECLARE @SQL NVARCHAR(MAX),@TableName NVARCHAR(30),@PrimaryKey NVARCHAR(30)
+		DECLARE @TableName NVARCHAR(30),@PrimaryKey NVARCHAR(30)
 		SELECT @TableName=TableName,@PrimaryKey=PrimaryKey FROM ADM_Features WITH(NOLOCK) 
 		WHERE FeatureID=@CostCenterID 
 		SET @SQL='SELECT GUID FROM '+@TableName +' WITH(NOLOCK) WHERE '+@PrimaryKey+'='+CONVERT(NVARCHAR,@ID)
@@ -242,7 +244,6 @@ SET NOCOUNT ON;
 		select @AuditTrial AuditTrial
 		IF (@AuditTrial=1)  
 		BEGIN
-			set @ModDate=convert(float,getdate())
 			 EXEC @return_value = [spDOC_SaveHistory]      
 				@DocID =@DocID ,
 				@HistoryStatus='Bulk Edit',
@@ -260,7 +261,50 @@ SET NOCOUNT ON;
 			GROUP BY R.ID)
 		order by Name
 	END
-	
+	ELSE IF @Type=11
+	BEGIN
+		
+		if(@CostCenterID=95 or @CostCenterID=104)
+			set @TblName ='REN_ContractExtended'
+		else
+			set @TblName ='REN_QuotationExtended'
+			
+		if @FieldXML<>'' and exists(select name from sys.tables where name=@TblName)
+		begin
+			set @sql='update '+@TblName+' set '+@FieldXML+' where '+CASE WHEN (@CostCenterID=95 or @CostCenterID=104) THEN 'NodeID' ELSE 'QuotationID' END+'='+convert(nvarchar(max),@ID)
+			EXEC(@sql)
+		end
+		
+		if(@FilterXML<>'')
+		BEGIN
+			set @sql='update COM_CCCCData set '+@FilterXML+' where CostCenterID='+convert(nvarchar,@CostCenterID)+' and NodeID='+convert(nvarchar(max),@ID)
+			 
+			set @sql=@sql+' update c set '+@Options+'
+			from ACC_DocDetails a WITH(nolocK)
+			join COM_DocCCData c WITH(nolocK) on a.AccDocDetailsID=c.AccDocDetailsID
+			 where RefCCID='+convert(nvarchar,@CostCenterID)+' and RefNodeid='+convert(nvarchar(max),@ID)
+			
+			set @sql=@sql+' update c set '+@Options+'
+			from INV_DocDetails a WITH(nolocK)
+			join COM_DocCCData c WITH(nolocK) on a.InvDocDetailsID=c.InvDocDetailsID
+			 where RefCCID='+convert(nvarchar,@CostCenterID)+' and RefNodeid='+convert(nvarchar(max),@ID)
+			EXEC(@sql)
+		END
+		      
+		SET @AuditTrial=0        
+		SELECT @AuditTrial= CONVERT(BIT,VALUE)  FROM [COM_COSTCENTERPreferences] with(nolock)     
+		WHERE CostCenterID=95  AND NAME='AllowAudit'   
+		IF (@AuditTrial=1)      
+		BEGIN 	
+			--INSERT INTO HISTROY   
+			EXEC [spCOM_SaveHistory]  
+				@CostCenterID =@CostCenterID,    
+				@NodeID =@ID,
+				@HistoryStatus ='Bulk Edit',
+				@UserName=@UserName,
+				@DT=@ModDate 
+		END
+	END
 	
 COMMIT TRANSACTION     
 SET NOCOUNT OFF;       
@@ -281,4 +325,5 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF      
 RETURN -999       
 END CATCH
+
 GO

@@ -3,11 +3,11 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_SetUnitQuick]
-	@UNITID [bigint] = 0,
-	@PROPERTYID [bigint] = 0,
+	@UNITID [int] = 0,
+	@PROPERTYID [int] = 0,
 	@CODE [nvarchar](300) = NULL,
 	@NAME [nvarchar](300) = NULL,
-	@STATUSID [bigint] = 0,
+	@STATUSID [int] = 0,
 	@CompanyGUID [varchar](50),
 	@GUID [varchar](50),
 	@UserName [nvarchar](50),
@@ -22,8 +22,7 @@ BEGIN TRY
 SET NOCOUNT ON;  
 	--Declaration Section  
 	DECLARE @Dt float,@TempGuid nvarchar(50),@HasAccess bit
-	DECLARE @IsDuplicateNameAllowed bit,@IsAccountCodeAutoGen bit,@IsIgnoreSpace bit  
-  
+	 
 	--User access check 
 	SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,93,3)
 	IF @HasAccess=0
@@ -57,7 +56,14 @@ SET NOCOUNT ON;
 		,[ModifiedDate] =@Dt
 		WHERE UnitID=@UNITID
 	END  
-  
+	
+	--INSERT INTO HISTROY   
+	EXEC [spCOM_SaveHistory]  
+		@CostCenterID =93,    
+		@NodeID =@UNITID,
+		@HistoryStatus ='Update',
+		@UserName=@UserName,
+		@Dt=@Dt
   
 COMMIT TRANSACTION    
  

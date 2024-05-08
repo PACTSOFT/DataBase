@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetDivisions]
-	@LocationID [bigint],
+	@LocationID [int],
 	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
@@ -28,17 +28,23 @@ SET NOCOUNT ON
 	 and  EXISTS(SELECT Value FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='Login' AND Value='True')
 	 BEGIN
 		---- if login with Employee
-		declare @isemp bit,@empseqno bigint,@empdivseqno bigint
+		declare @isemp bit,@empseqno INT,@empdivseqno INT,@SQL NVARCHAR(MAX)
 		
-		if exists(select nodeid from com_cc50051 with(nolock) where code=@username)
+
+		if exists (select * from sys.tables with(nolock) where name='com_cc50051')
+		SET @SQL='if exists(select nodeid from com_cc50051 with(nolock) where code='''+CONVERT(NVARCHAR,@username)+''')
 		begin
 			set @isemp=1
-			select @empseqno = nodeid from com_cc50051 with(nolock) where code=@username
-		end
+			select @empseqno = nodeid from com_cc50051 with(nolock) where code='''+CONVERT(NVARCHAR,@username)+'''
+			
+		end'
+		EXEC sp_executesql @SQL,N' @isemp int OUTPUT,@empseqno int OUTPUT',@isemp OUTPUT,@empseqno OUTPUT
 		
+
 		if(@isemp=1)
 		begin
-			select @empdivseqno= ISNULL(CCNID1,1) FROM COM_CCCCDATA WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID=@empseqno
+		SET @SQL='select @empdivseqno= ISNULL(CCNID1,1) FROM COM_CCCCDATA WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID='+CONVERT(NVARCHAR,@empseqno)
+		EXEC sp_executesql @SQL,N' @empdivseqno INT OUTPUT', @empdivseqno OUTPUT
 			select DISTINCT d.NodeID,d.Code,d.Name,d.IsGroup,d.lft from COM_Division d  WITH(NOLOCK)
 			where d.NodeID=@empdivseqno
 		end
@@ -106,6 +112,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION    
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH      
-    
+END CATCH
 GO

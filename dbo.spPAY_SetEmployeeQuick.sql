@@ -3,13 +3,13 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_SetEmployeeQuick]
-	@NodeID [bigint],
+	@NodeID [int],
 	@EmpCode [nvarchar](200),
 	@EmpName [nvarchar](500),
 	@IsGroup [bit],
 	@StatusID [int],
 	@CodePrefix [nvarchar](200),
-	@CodeNumber [bigint],
+	@CodeNumber [int],
 	@StaticFieldsQuery [nvarchar](max),
 	@CustomFieldsQuery [nvarchar](max),
 	@CustomCostCenterFieldsQuery [nvarchar](max),
@@ -149,7 +149,7 @@ SET NOCOUNT ON;
 		SET '+@StaticFieldsQuery+'[GUID]= NEWID(), [ModifiedBy] ='''+ @UserName
 		  +''',[ModifiedDate] =' + convert(NVARCHAR,@Dt) +' WHERE NodeID='+convert(NVARCHAR,@NodeID)
 		print (@SQL)
-		exec(@SQL)
+		EXEC sp_executesql @SQL
 	END
 	
 	
@@ -162,17 +162,17 @@ SET NOCOUNT ON;
 		  +''',[ModifiedDate] =' + convert(NVARCHAR,@Dt) +' WHERE NodeID='+convert(NVARCHAR,@NodeID)
 	
 		print (@SQL)
-			exec(@SQL)
+			EXEC sp_executesql @SQL
 	END
 
 	--Update CostCenter Extra Fields
 	set @SQL='update COM_CCCCDATA
 	SET '+@CustomCostCenterFieldsQuery+' [ModifiedBy] ='''+ @UserName+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID='+convert(nvarchar,@NodeID) + ' AND COSTCENTERID ='+convert(nvarchar,@CostCenterID)
 	print (@SQL)
-	exec(@SQL)
+	EXEC sp_executesql @SQL
  
 	set @SQL='update COM_CC50051 SET NAME=RTRIM(LTRIM(NAME)) WHERE NodeID='+convert(NVARCHAR,@NodeID)
-	exec(@SQL)
+	EXEC sp_executesql @SQL
 
 	declare @LoginUserID NVARCHAR(250)
 	SELECT @LoginUserID=LoginUserID FROM COM_CC50051 WITH(NOLOCK) WHERE NodeID=@NodeID
@@ -226,7 +226,14 @@ SET NOCOUNT ON;
    SET @EmpCode=@NodeID
   END  
   
-  
+  --validate Data External function
+  DECLARE @tempCCCode NVARCHAR(200)
+  set @tempCCCode=''
+  select @tempCCCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=9
+  if(@tempCCCode<>'')
+  begin
+	exec @tempCCCode @CostCenterID,@NODEID,@UserID,@LangID
+  end  
 
 	IF (@CCMapXML IS NOT NULL AND @CCMapXML <> '')  
 		EXEC [spCOM_SetCCCCMap] @CostCenterID,@NodeID,@CCMapXML,@UserName,@LangID
@@ -234,7 +241,7 @@ SET NOCOUNT ON;
 	--Duplicate Check
 	declare @NID NVARCHAR(20)
 	SET @NID=convert(nvarchar,@NodeID)
-	exec [spCOM_CheckUniqueCostCenter] 50051,@NID,@LangID	
+	exec [spCOM_CheckUniqueCostCenter] @CostCenterID=50051,@NodeID =@NID,@LangID=@LangID	
 	
 	--CREATE/UPDATE USER
 			DECLARE @ROLECODE INT,@CANCREATEUSER VARCHAR(5),@USRID INT

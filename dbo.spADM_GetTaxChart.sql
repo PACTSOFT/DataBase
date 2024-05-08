@@ -4,9 +4,9 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetTaxChart]
 	@Type [int],
-	@TaxChartID [bigint],
+	@TaxChartID [int],
 	@Param [nvarchar](max),
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -20,15 +20,12 @@ SET NOCOUNT ON;
 	IF @Type=0  /*TO GET SCREEN DETAILS*/
 	BEGIN
 		SELECT FEATUREID ID,NAME FROM ADM_FEATURES WITH(NOLOCK) 
-		WHERE (FEATUREID>50000 OR FEATUREID=2 OR FEATUREID=3 or FEATUREID=61) and IsEnabled=1
+		WHERE (FEATUREID>50000 OR FEATUREID=2 OR FEATUREID=3) and IsEnabled=1
 		ORDER BY FEATUREID
 
 		SELECT FEATUREID ID,NAME FROM ADM_FEATURES WITH(NOLOCK)
 		WHERE FEATUREID>40000 AND FEATUREID<50000  
-		UNION
-		SELECT 59,'Service Ticket'
-		ORDER BY NAME
-
+		
 		SELECT * FROM COM_CCTaxesDefn WITH(NOLOCK) WHERE ProfileID=@TaxChartID
 		
 		if @TaxChartID=-100
@@ -45,7 +42,7 @@ SET NOCOUNT ON;
 	ELSE IF @Type=1 /*TO GET COLUMNS OF DOCUMENT*/
 	BEGIN
 		if @TaxChartID=401
-			select convert(bigint,substring(name,6,10)) ID,'Field '+substring(name,6,10) ColumnName,convert(int,substring(name,6,10)) [Index]
+			select convert(INT,substring(name,6,10)) ID,'Field '+substring(name,6,10) ColumnName,convert(int,substring(name,6,10)) [Index]
 			from sys.columns with(nolock) where object_id=object_id('COM_DocNumData') and name like 'dcNum%'
 			order by [Index]
 		else
@@ -82,12 +79,6 @@ SET NOCOUNT ON;
 				set @Join=@Join+' left join '+@TblName+' P with(nolock) on '
 				set @Join=@Join+' P.ProductID=T.ProductID'
 				set @SQL=@SQL+',P.ProductName'
-			end
-			else if(@CCID=61)
-			begin
-				set @Join=@Join+' left join '+@TblName+' V with(nolock) on '
-				set @Join=@Join+' V.VehicleID=T.VehicleID'
-				set @SQL=@SQL+',V.Make+''-''+V.MOdel+''-''+V.Variant+''-(''+convert(nvarchar,V.startYear)+''-''+ case when (V.EndYear= ''0'') then convert(nvarchar,Datepart(YEAR,GETDATE()))+'')'' else convert(nvarchar,V.endYear)+'')'' end Vehicle'
 			end
 			else
 			begin
@@ -131,9 +122,7 @@ SET NOCOUNT ON;
 			SET @SQL=@SQL+@MessageSQL
 			SET @SQL=@SQL+' ORDER BY WEF DESC'
 		END
-		
-	PRINT(@SQL)
-		EXEC(@SQL)
+		Exec sp_executesql @SQL     
 	END
 	ELSE IF @Type=5 /*TO DELETE PROFILE*/
 	BEGIN
@@ -169,18 +158,6 @@ SET NOCOUNT ON;
 		inner join ADM_FEATURES F with(nolock) on T.CostCenterID=F.FeatureID
 		where T.DefType=@Param and T.ProfileID=@TaxChartID and T.CostCenterID!=11
 		
-		/*set @SQL=''
-		select  @Join=(case when CostCenterID=2 then 'AccountID' 
-			when CostCenterID=2 then 'AccountID' 
-			when CostCenterID=2 then 'AccountID' 
-			else 'CCNID'+CONVERT(NVARCHAR,(CostCenterID-50000)) end),
-		 @SQL=@SQL+'
-		select '+@Join +' from COM_CCTaxes with(nolock) where ProfileID='+convert(nvarchar,@TaxChartID)+' group by '+@Join+' having '+@Join+'>1'
-		from COM_CCPriceTaxCCDefn with(nolock) 
-		where DefType=2 and ProfileID=@TaxChartID
-		print(@SQL)
-		exec(@SQL)*/
-	
 		declare @Tbl1 as table(ID int IDENTITY(1,1),CCID int,TableName nvarchar(50))
 		insert into @Tbl1
 		select D.CostCenterID,F.TableName 
@@ -203,7 +180,7 @@ SET NOCOUNT ON;
 				set @SQL=' 
 				select T.AccountID PK,max(A.AccountName) Name,A.IsGroup from '+@Join+' T with(nolock) inner join acc_accounts A with(nolock) on A.AccountID=T.AccountID
 				where ProfileID='+convert(nvarchar,@TaxChartID)+' group by T.AccountID,A.IsGroup having T.AccountID>1'
-				exec(@SQL)
+				Exec sp_executesql @SQL 
 			end
 			else if(@CCID=3)
 			begin
@@ -214,7 +191,7 @@ SET NOCOUNT ON;
 					set @SQL='
 					select T.ProductID PK,max(A.ProductName) Name,A.IsGroup from '+@Join+'  T with(nolock) inner join inv_product A with(nolock) on A.ProductID=T.ProductID
 					where ProfileID='+convert(nvarchar,@TaxChartID)+' group by T.ProductID,A.IsGroup having T.ProductID>1'
-					exec(@SQL)
+					Exec sp_executesql @SQL 
 				end
 			end
 			else if(@CCID=12)
@@ -222,28 +199,18 @@ SET NOCOUNT ON;
 				set @SQL=' 
 				select T.CurrencyID PK,A.Name Name,0 IsGroup from '+@Join+' T with(nolock) inner join COM_Currency A with(nolock) on A.CurrencyID=T.CurrencyID
 				where ProfileID='+convert(nvarchar,@TaxChartID)+' group by T.CurrencyID,A.Name having T.CurrencyID>1'
-				exec(@SQL)
-			end
-			else if(@CCID=61)
-			begin
-				--UOM
-				--set @SQL=@SQL+'VehicleID'
-				select 1 where 1!=1
+				Exec sp_executesql @SQL 
 			end
 			else
 			begin
 				set @SQL='
 				select A.NodeID PK,max(A.Name) Name,A.IsGroup from '+@Join+'  T with(nolock) inner join '+@TblName+' A with(nolock) on A.NodeID=T.CCNID'+CONVERT(NVARCHAR,(@CCID-50000))+'
 				where ProfileID='+convert(nvarchar,@TaxChartID)+' group by A.NodeID,A.IsGroup having A.NodeID>1'
-				exec(@SQL)
-				--set @SQL=@SQL+',CCNID'+CONVERT(NVARCHAR,(@CCID-50000))
+				Exec sp_executesql @SQL 
 			end
 			set @i=@i+1
 		end
 
-	--	print(@SQL)
-		--set @SQL='select CCTaxID'+@SQL +' from COM_CCTaxes with(nolock)'
-		--exec(@SQL)
 	END
 	
 --COMMIT TRANSACTION 
@@ -264,5 +231,5 @@ BEGIN CATCH
 --ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

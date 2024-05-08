@@ -33,7 +33,7 @@ BEGIN TRY
 SET NOCOUNT ON;    
     
   --Declaration Section    
-  DECLARE @TempGuid nvarchar(50),@HasAccess bit    
+  DECLARE @TempGuid nvarchar(50),@HasAccess bit
   DECLARE @Dt float,@XML xml,@I int,@Cnt int,@CostCenterColID BIGINT    
     
   --Create temporary table to read xml data into table    
@@ -73,7 +73,8 @@ SET NOCOUNT ON;
       
 --ADDED CODE ON JUN 30 2011 BY HAFEEZ FOR BILLWISE VIEW    
 IF @CostCenterID=99    
-BEGIN    
+BEGIN 
+   
  DELETE FROM [ADM_GridViewColumns] WHERE [GridViewID] IN(    
  SELECT [GridViewID] FROM [ADM_GridView] with(nolock) WHERE [CostCenterID]=99)    
  DELETE FROM [ADM_GridView] WHERE [CostCenterID]=99    
@@ -203,9 +204,11 @@ BEGIN
 	 DELETE FROM [ADM_GridViewColumns]    
 	 WHERE [GridViewID]=@GridViewID and ColumnType =1    
 END
+
  DELETE FROM [ADM_GridViewColumns]    
- WHERE [GridViewID]=@GridViewID and ColumnType =2    
-     
+ WHERE [GridViewID]=@GridViewID and ColumnType =2 
+   
+    
     --Insert into GridView Columns From XML    
     INSERT INTO [ADM_GridViewColumns]    
     ([GridViewID]    
@@ -236,7 +239,7 @@ END
        FROM [ADM_GridViewColumns] U    
       INNER JOIN @XML.nodes('/XML/Row') AS DATA(A)    
        ON CONVERT(BIGINT,A.value('@CostCenterColID','BIGINT'))=U.CostCenterColID    
-    WHERE A.value('@MapAction','NVARCHAR(500)')='OLD' AND [GridViewID]=@GridViewID    
+    WHERE A.value('@MapAction','NVARCHAR(500)')='OLD' AND [GridViewID]=@GridViewID AND U.ColumnType=A.value('@ColumnType','INT')
     
     --DELETE RECORDS FROM MAPPING    
     --If MapAction is DELETE then delete        
@@ -261,9 +264,16 @@ END TRY
 BEGIN CATCH      
  --Return exception info [Message,Number,ProcedureName,LineNumber]      
  IF ERROR_NUMBER()=50000    
- BEGIN     
-  SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)     
-  WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID    
+ BEGIN  
+	 IF ISNUMERIC(ERROR_MESSAGE())<>1
+	 BEGIN
+		SELECT ERROR_MESSAGE() ErrorMessage
+	 END
+	 ELSE
+	 BEGIN     
+		SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)     
+		WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID  
+	 END 
  END    
  ELSE    
  BEGIN    

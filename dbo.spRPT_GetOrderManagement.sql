@@ -49,7 +49,7 @@ SET NOCOUNT ON
 		IF @LocationWHERE IS NOT NULL
 			SET @SubQry=@SubQry +' AND DCC.DCCCNID2 IN ('+@LocationWHERE+')'
 			
-		SET @Query='SELECT CONVERT(DATETIME, D.DocDate) AS DOCDATE, D.VoucherNo, PRO.ProductName, D.Quantity, D.Rate, D.StockValue AS VALUE, D.Gross AS NETVALUE, ACC.AccountName
+		SET @Query='SELECT CONVERT(DATETIME, D.DocDate) AS DocDate, D.VoucherNo, PRO.ProductName, D.Quantity, D.Rate, D.StockValue AS VALUE, D.Gross AS NETVALUE, ACC.AccountName
 		FROM INV_DocDetails D WITH(NOLOCK)
 			INNER JOIN INV_Product PRO WITH(NOLOCK) ON D.ProductID = PRO.ProductID
 			INNER JOIN ACC_Accounts ACC WITH(NOLOCK) ON D.DebitAccount = ACC.AccountID
@@ -84,18 +84,21 @@ SET NOCOUNT ON
 				WHILE(@J<=@CNTDOCS)
 				BEGIN
  					SELECT @CostCenterID=Document, @ColumnName=ColumnName, @lINKColumnName=LinkColumn FROM @TblMaps WHERE ID=@J
-
-					IF len(@SubQry)>0
-						SET @SubQry=@SubQry+' UNION ALL '
-
-				IF @lINKColumnName LIKE 'dcNum%'
-					SET @SubQry=@SubQry+'SELECT N.'+@lINKColumnName+' Qty FROM INV_DocDetails B WITH(NOLOCK) INNER JOIN COM_DocNumData N WITH(NOLOCK) ON N.InvDocdetailsID=B.InvDocdetailsID WHERE D.InvDocDetailsID =B.LinkedInvDocDetailsID AND D.costcenterid='+CONVERT(NVARCHAR,@Document)+' AND B.StatusID<>376 AND B.costcenterid='+CONVERT(NVARCHAR,@CostCenterID)
-				ELSE
-					SET @SubQry=@SubQry+'SELECT B.'+@lINKColumnName+' Qty FROM INV_DocDetails B WITH(NOLOCK) WHERE D.InvDocDetailsID =B.LinkedInvDocDetailsID AND D.costcenterid='+CONVERT(NVARCHAR,@Document)+' AND B.StatusID<>376 AND B.costcenterid='+CONVERT(NVARCHAR,@CostCenterID)
-					
-					--Holding Referenced Documents CostcenterID
-					INSERT INTO @TblRefDocs(CostCenterID) VALUES(@CostCenterID)
-
+					if(@lINKColumnName is not null)
+					BEGIN
+						IF len(@SubQry)>0
+							SET @SubQry=@SubQry+' UNION ALL '
+				
+						--IF @lINKColumnName LIKE 'dcNum%'
+						--	SET @SubQry=@SubQry+'SELECT N.'+@lINKColumnName+' Qty FROM INV_DocDetails B WITH(NOLOCK) INNER JOIN COM_DocNumData N WITH(NOLOCK) ON N.InvDocdetailsID=B.InvDocdetailsID WHERE D.InvDocDetailsID =B.LinkedInvDocDetailsID AND D.costcenterid='+CONVERT(NVARCHAR,@Document)+' AND B.StatusID<>376 AND B.costcenterid='+CONVERT(NVARCHAR,@CostCenterID)
+						--ELSE
+						--	SET @SubQry=@SubQry+'SELECT B.'+@lINKColumnName+' Qty FROM INV_DocDetails B WITH(NOLOCK) WHERE D.InvDocDetailsID =B.LinkedInvDocDetailsID AND D.costcenterid='+CONVERT(NVARCHAR,@Document)+' AND B.StatusID<>376 AND B.costcenterid='+CONVERT(NVARCHAR,@CostCenterID)
+						
+						SET @SubQry=@SubQry+'SELECT B.LinkedFieldValue Qty FROM INV_DocDetails B WITH(NOLOCK) WHERE D.InvDocDetailsID =B.LinkedInvDocDetailsID AND D.costcenterid='+CONVERT(NVARCHAR,@Document)+' AND B.StatusID<>376 AND B.costcenterid='+CONVERT(NVARCHAR,@CostCenterID)
+						
+						--Holding Referenced Documents CostcenterID
+						INSERT INTO @TblRefDocs(CostCenterID) VALUES(@CostCenterID)
+					END
 					SET @J=@J+1					
 				END
 			
@@ -114,8 +117,8 @@ SET NOCOUNT ON
 
 		SET @SubQry='case when D.LinkStatusID=445 then D.Quantity else (SELECT ISNULL(SUM(Qty),0) FROM ('+@SubQry+') AS T) end Executed'
 
-		SET @Query='SELECT D.InvDocDetailsID,D.ProductID,Convert(DATETIME,D.DOCDATE) DOCDATE, D.VoucherNo,PRO.PRODUCTNAME,   
-					D.QUANTITY,'+@SubQry+', D.RATE ,D.STOCKVALUE VALUE  ,D.GROSS NETVALUE ,ACC.ACCOUNTNAME'+@SELECTQUERY+'
+		SET @Query='SELECT D.InvDocDetailsID,D.ProductID,Convert(DATETIME,D.DocDate) DocDate, D.VoucherNo,PRO.PRODUCTNAME,   
+					D.Quantity,'+@SubQry+', D.RATE ,D.STOCKVALUE VALUE  ,D.GROSS NETVALUE ,ACC.ACCOUNTNAME'+@SELECTQUERY+'
 					FROM INV_DocDetails D WITH(NOLOCK) INNER JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID'+@FROMQUERY
 		SET @Query = @Query +' INNER JOIN INV_PRODUCT PRO ON D.PRODUCTID = PRO.PRODUCTID'
 		SET @Query = @Query +' INNER JOIN ACC_ACCOUNTS ACC ON D.DEBITACCOUNT  = ACC.ACCOUNTID'+@GTPQuery
@@ -129,10 +132,10 @@ SET NOCOUNT ON
 			SET @Query=@Query+@WHERE
 
 		IF @FromDate != -1
-			SET @Query=@Query+' AND  D.DOCDATE  >= '' ' + CONVERT(NVARCHAR(10), CONVERT(FLOAT,@FromDate)) +''''
+			SET @Query=@Query+' AND  D.DocDate  >= '' ' + CONVERT(NVARCHAR(10), CONVERT(FLOAT,@FromDate)) +''''
 	 
 		IF @ToDate != -1
-			SET @Query=@Query+' AND D.DOCDATE  <= '' ' +  CONVERT(NVARCHAR(10), CONVERT(FLOAT,@ToDate))+''''		
+			SET @Query=@Query+' AND D.DocDate  <= '' ' +  CONVERT(NVARCHAR(10), CONVERT(FLOAT,@ToDate))+''''		
 		
 
 		DECLARE @RefQuery NVARCHAR(MAX)
@@ -142,36 +145,36 @@ SET NOCOUNT ON
 
 			SET @RefQuery='SELECT InvDocDetailsID FROM ('+ @Query+') AS T WHERE Quantity-Executed>0'
 
-			SET @Query='SELECT DOCDATE, VoucherNo,D.InvDocDetailsID,D.ProductID ProductName_ID, ProductName,Quantity Act_Qty,Executed Exec_Qty,Quantity-Executed AS Bal_Qty,Rate,AccountName'+@SELECTQUERYALIAS+' FROM ('
+			SET @Query='SELECT DocDate, VoucherNo,D.InvDocDetailsID,D.ProductID ProductName_ID, ProductName,Quantity Act_Qty,Executed Exec_Qty,Quantity-Executed AS Bal_Qty,Rate,AccountName'+@SELECTQUERYALIAS+' FROM ('
 					+ @Query+') AS D WHERE Quantity-Executed>0'
 		END
 		ELSE IF @ReportType = 1--executed quotations
 		BEGIN
 			SET @RefQuery='SELECT InvDocDetailsID FROM ('+ @Query+') AS D WHERE Executed>0'
 
-			SET @Query='SELECT DOCDATE, VoucherNo,D.InvDocDetailsID,D.ProductID ProductName_ID, ProductName,Executed AS QUANTITY,Rate,AccountName'+@SELECTQUERYALIAS+' FROM ('
+			SET @Query='SELECT DocDate, VoucherNo,D.InvDocDetailsID,D.ProductID ProductName_ID, ProductName,Executed AS Quantity,Rate,AccountName'+@SELECTQUERYALIAS+' FROM ('
 					+ @Query+') AS D WHERE Executed>0'
 		END
 		ELSE--list of quotations
 		BEGIN
 			SET @RefQuery='SELECT InvDocDetailsID FROM ('+ @Query+') AS T'
 
-			SET @Query='SELECT DOCDATE, VoucherNo,D.InvDocDetailsID,D.ProductID ProductName_ID, ProductName,Quantity AS QUANTITY,Rate,Executed Exec_Qty,AccountName'+@SELECTQUERYALIAS+' FROM ('
+			SET @Query='SELECT DocDate, VoucherNo,D.InvDocDetailsID,D.ProductID ProductName_ID, ProductName,Quantity AS Quantity,Rate,Executed Exec_Qty,AccountName'+@SELECTQUERYALIAS+' FROM ('
 					+ @Query+') AS D'
 		END
 
-		set @Query=@Query+' order by DOCDATE,VoucherNo'
-		
+		set @Query=@Query+' order by DocDate,VoucherNo'
+		PRINT @Query
 		EXEC (@Query)
 		
 		IF @IsRefExists=1
 		BEGIN
-			DECLARE @TblRef AS TABLE(InvDocDetailsID BIGINT)
+			DECLARE @TblRef AS TABLE(InvDocDetailsID INT)
 
 			INSERT INTO @TblRef
 			EXEC (@RefQuery)
 			--VoucherNo , A.AccountName
-			SELECT LinkedInvDocDetailsID,Convert(DATETIME,DOCDATE) RefDocDate,VoucherNo RefDocNo,Quantity RefQty,Rate RefRate,A.AccountName RefAccount1
+			SELECT LinkedInvDocDetailsID,Convert(DATETIME,DocDate) RefDocDate,VoucherNo RefDocNo,Quantity RefQty,Rate RefRate,A.AccountName RefAccount1
 			FROM INV_DocDetails WITH(NOLOCK) INNER JOIN
 			ACC_Accounts A WITH(NOLOCK) ON DebitAccount=A.AccountID
 			WHERE LinkedInvDocDetailsID IN (SELECT InvDocDetailsID FROM @TblRef) AND CostCenterID IN (SELECT CostCenterID FROM @TblRefDocs)
@@ -196,5 +199,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

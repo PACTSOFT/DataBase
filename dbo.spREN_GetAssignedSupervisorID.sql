@@ -1,9 +1,7 @@
-﻿USE PACT2c253
+﻿USE PACT2C222
 GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
-
-
 CREATE PROCEDURE [dbo].[spREN_GetAssignedSupervisorID]
 	@p1 [nvarchar](max),
 	@p2 [nvarchar](max),
@@ -14,22 +12,30 @@ CREATE PROCEDURE [dbo].[spREN_GetAssignedSupervisorID]
 	@p8 [nvarchar](max),
 	@p9 [nvarchar](max),
 	@UserID [int] = 0,
-	@LangID [int] = 0
+	@LangID [int] = 1,
+	@DocID [int] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY
-
 SET NOCOUNT ON
 
-			if @LangID=0
-				set @p8=@p7
-select ParentNodeID SupervisorID from COM_CostCenterCostCenterMap with(nolock) 
-where ParentCostCenterID=50158 and CostCenterID=50009 and convert(nvarchar,NodeID)=@p3 and ParentNodeID in (
+			Declare @SQL nvarchar(max)
 
-select ParentNodeID from COM_CostCenterCostCenterMap with(nolock) 
-where ParentCostCenterID=50158 and CostCenterID=50156 and convert(nvarchar,NodeID)=@p8)
+			--Prepare query	
+			SET @SQL='SELECT SP.NodeID SupervisorID
+FROM REN_Contract C WITH(NOLOCK)
+JOIN REN_Property P WITH(NOLOCK) ON C.PropertyID=P.NodeID
+JOIN REN_Units U WITH(NOLOCK) ON C.UnitID=U.UnitID
+JOIN REN_Tenant T WITH(NOLOCK) ON C.TenantID=T.TenantID
+JOIN COM_CCCCData CCD WITH(NOLOCK) ON CCD.NodeID=U.UnitID AND CCD.CostCenterID=93
+JOIN COM_CC50158 SP WITH(NOLOCK) ON CCD.CCNID158=SP.NodeID
+WHERE C.CostCenterID=95 AND C.RefContractID=0 AND C.StatusID IN (426,427)
+AND (CONVERT(FLOAT,GETDATE()) BETWEEN C.StartDate AND ISNULL(ISNULL(C.TerminationDate,C.RefundDate),C.EndDate) or  (C.EndDate <CONVERT(FLOAT,GETDATE()) and  FMTAfterEndDate=1))
+AND T.CCNodeID= ' + @p1
 
-
+		 	--Execute statement
+			Exec sp_executesql @SQL
+			 
 
  
  SET NOCOUNT OFF;

@@ -20,7 +20,7 @@ SET NOCOUNT ON
 	SELECT a.UserID,a.UserName UserName,a.Password Password,a.StatusID,s.Status,a.DefaultLanguage,r.RoleID RoleID,      
 	r.Name RoleName,a.FirstName,a.MiddleName,a.LastName,a.Address1,a.Address2,a.Address3,      
 	a.City,a.State,a.Zip,a.Country,a.Phone1,a.Phone2,a.Fax,a.Email1,a.Email2,a.Website,a.Description,      
-	a.GUID ,a.Email1Password,a.Email2Password,a.DefaultScreenXML,a.IsPassEncr,ADMUSR.InstanceCount,a.LocationID,a.DivisionID
+	a.GUID ,a.Email1Password,a.Email2Password,a.DefaultScreenXML,a.IsPassEncr,ADMUSR.InstanceCount,a.LocationID,a.DivisionID,a.IsOffline,TwoStepVerMode
 	FROM dbo.ADM_Users a with(nolock)      
 	join dbo.COM_Status s with(nolock) on a.StatusID=s.StatusID        
 	join dbo.ADM_UserRoleMap u with(nolock) on u.IsDefault=1 and a.UserID=u.UserID        

@@ -51,15 +51,36 @@ SET NOCOUNT ON
 		SELECT QID,QName FROM ADM_QuickViewDefn WITH(NOLOCK) 
 		WHERE CostCenterID=@CostCenterID
 		GROUP BY  QID,QName
-	   
-		SELECT A.COSTCENTERCOLID,A.USERCOLUMNNAME,A.SYSCOLUMNNAME
-		FROM ADM_COSTCENTERDEF A WITH(NOLOCK)
-		WHERE A.CostCenterID=@CostCenterID and A.IsColumnInUse=1 AND A.SYSCOLUMNNAME<>'Balance' 
-		AND NOT (7=@CostCenterID AND (A.SYSCOLUMNNAME LIKE '%Password' OR A.SYSCOLUMNNAME='HistoryStatus'))
-		union all
-		SELECT CostCenterColID,'Address_'+UserColumnName,SysColumnName
-		FROM ADM_CostCenterDef WITH(NOLOCK) 		
-		WHERE  IsColumnInUse=1 and IsColumnUserDefined=0 and CostCenterID=110 and ColumnCostCenterID=0
+	    IF(@CostCenterID>50000)
+	    BEGIN
+			SELECT A.COSTCENTERCOLID,A.USERCOLUMNNAME,A.SYSCOLUMNNAME
+			FROM ADM_COSTCENTERDEF A WITH(NOLOCK)
+			WHERE A.CostCenterID=@CostCenterID and A.IsColumnInUse=1 AND A.SYSCOLUMNNAME<>'Balance' 
+			AND NOT (7=@CostCenterID AND (A.SYSCOLUMNNAME LIKE '%Password' OR A.SYSCOLUMNNAME='HistoryStatus'))
+			union all
+			SELECT CostCenterColID,'Address_'+UserColumnName,SysColumnName
+			FROM ADM_CostCenterDef WITH(NOLOCK) 		
+			WHERE  IsColumnInUse=1 and CostCenterID=110 and ColumnCostCenterID=0-- and IsColumnUserDefined=0
+			UNION ALL
+			SELECT A.COSTCENTERCOLID,A.USERCOLUMNNAME,A.SYSCOLUMNNAME
+			FROM ADM_COSTCENTERDEF A WITH(NOLOCK)
+			WHERE CostCenterID=404 AND SysColumnName IN ('ModifiedBy','ModifiedDate')
+		END	
+		ELSE
+		BEGIN
+			SELECT A.COSTCENTERCOLID,A.USERCOLUMNNAME,A.SYSCOLUMNNAME
+			FROM ADM_COSTCENTERDEF A WITH(NOLOCK)
+			WHERE A.CostCenterID=@CostCenterID and A.IsColumnInUse=1 AND A.SYSCOLUMNNAME<>'Balance' 
+			AND NOT (7=@CostCenterID AND (A.SYSCOLUMNNAME LIKE '%Password' OR A.SYSCOLUMNNAME='HistoryStatus'))
+			union all
+			SELECT CostCenterColID,'Address_'+UserColumnName,SysColumnName
+			FROM ADM_CostCenterDef WITH(NOLOCK) 		
+			WHERE  IsColumnInUse=1 and CostCenterID=110 and ColumnCostCenterID=0-- and IsColumnUserDefined=0
+			UNION ALL
+			SELECT A.COSTCENTERCOLID,A.USERCOLUMNNAME,A.SYSCOLUMNNAME
+			FROM ADM_COSTCENTERDEF A WITH(NOLOCK)
+			WHERE CostCenterID=3 AND 2=@CostCenterID AND SysColumnName IN ('CreatedDate','ModifiedDate')
+		END
 	END
 	ELSE IF @TypeID=3
 	BEGIN
@@ -74,7 +95,7 @@ SET NOCOUNT ON
 		order by Q.ColumnOrder
 		
 		--Show In
-		SELECT DISTINCT ShowCCID FROM ADM_QuickViewDefnUserMap WITH(NOLOCK) WHERE QID=@CostCenterID AND ShowCCID>0
+		SELECT DISTINCT ShowCCID FROM ADM_QuickViewDefnUserMap WITH(NOLOCK) WHERE QID=@CostCenterID AND ShowCCID!=0
 		
 		--Roles
 		SELECT UserID,RoleID,GroupID FROM ADM_QuickViewDefnUserMap WITH(NOLOCK) WHERE QID=@CostCenterID

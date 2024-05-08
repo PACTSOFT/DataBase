@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SetInvPosting]
 	@CostCenterID [int],
-	@DocID [bigint],
+	@DocID [int],
 	@DocDate [datetime],
 	@DueDate [datetime] = NULL,
 	@BillNo [nvarchar](500),
@@ -12,11 +12,14 @@ CREATE PROCEDURE [dbo].[spDOC_SetInvPosting]
 	@BillWiseXML [nvarchar](max),
 	@NotesXML [nvarchar](max),
 	@AttachmentsXML [nvarchar](max),
+	@ActivityXML [nvarchar](max),
 	@IsImport [bit],
-	@LocationID [bigint],
-	@DivisionID [bigint],
+	@LocationID [int],
+	@DivisionID [int],
 	@WID [int],
 	@CCID [int],
+	@sysinfo [nvarchar](max),
+	@AP [varchar](10),
 	@RoleID [int],
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
@@ -25,12 +28,12 @@ CREATE PROCEDURE [dbo].[spDOC_SetInvPosting]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION  
-DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE NVARCHAR(100) , @DocIDChild BIGINT  
+DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE NVARCHAR(100) , @DocIDChild INT,@ActXml nvarchar(max)
 
     
 BEGIN TRY      
 SET NOCOUNT ON;    
- DECLARE @VoucherNo NVARCHAR(500),@temp varchar(100),@StatusID INT ,@XML xml,@Prefix NVARCHAR(500),@tempDOc bigint,@Length int,@DocNumber nvarchar(50)
+ DECLARE @VoucherNo NVARCHAR(500),@temp varchar(100),@StatusID INT ,@XML xml,@Prefix NVARCHAR(500),@tempDOc INT,@Length int,@DocNumber nvarchar(50)
  DECLARE	@return_value int,  @CNT INT ,  @ICNT INT ,@AA XML , @DocXml nvarchar(max) ,@PrefValue nvarchar(50),@t int
  
  	if exists(SELECT prefValue FROM com_documentpreferences a with(nolock)  	
@@ -38,7 +41,7 @@ SET NOCOUNT ON;
  		set @DocDate=convert(date,getdate())
  		
 	SET @XML= @InvDocXML  
-	declare @prds table(prdID BIGINT)
+	declare @prds table(prdID INT)
 	  
 	declare @tblListEnq TABLE (ID int identity(1,1),TRANSXML NVARCHAR(MAX) )    
 	INSERT INTO @tblListEnq  
@@ -49,7 +52,7 @@ SET NOCOUNT ON;
 	SELECT @CNT = COUNT(ID) FROM @tblListEnq
 
 	SET @ICNT = 0
-	declare  @CAccTable table(ID bigint)
+	declare  @CAccTable table(ID INT)
 	WHILE(@ICNT < @CNT)
 	BEGIN
 		SET @ICNT =@ICNT+1
@@ -60,7 +63,7 @@ SET NOCOUNT ON;
 		Set @DocXml = convert(nvarchar(max), @AA)
 		delete from @prds
 		insert into @prds
-		SELECT X.value('@ProductID','BIGINT')      
+		SELECT X.value('@ProductID','INT')      
 		from @XML.nodes('/DocumentXML/Row/Transactions') as Data(X)
 				
 		set @Prefix=''
@@ -72,12 +75,12 @@ SET NOCOUNT ON;
 		if NOT EXISTS(SELECT CurrentCodeNumber FROM COM_CostCenterCodeDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND CodePrefix=@Prefix)      
 		begin      
 			if exists(SELECT prefValue FROM com_documentpreferences with(nolock) where 
-			costcenterid=@CostCenterID and prefName='StartNoForNewPrefix' and isnumeric(prefValue )=1 and convert(bigint,prefValue )>0)
+			costcenterid=@CostCenterID and prefName='StartNoForNewPrefix' and isnumeric(prefValue )=1 and convert(INT,prefValue )>0)
 				SELECT @DocNumber=prefValue FROM com_documentpreferences with(nolock)  where costcenterid=@CostCenterID and prefName='StartNoForNewPrefix'
 		end      
 		ELSE
 		BEGIN
-				SELECT  @tempDOc=ISNULL(CurrentCodeNumber,0)+1,@Length=isnull(CodeNumberLength,1)  FROM COM_CostCenterCodeDef--AS CurrentCodeNumber
+				SELECT  @tempDOc=ISNULL(CurrentCodeNumber,0)+1,@Length=isnull(CodeNumberLength,1)  FROM COM_CostCenterCodeDef WITH(NOLOCK)
 				WHERE CostCenterID=@CostCenterID
 			 	 
 				if(len(@tempDOc)<@Length)    
@@ -94,7 +97,9 @@ SET NOCOUNT ON;
 				ELSE    
 					SET @DocNumber=@tempDOc 
 		END
-				
+		
+			set @ActXml='<XML SysInfo="'+@sysinfo+'" AP="'+@AP+'" ></XML>'
+		
 			EXEC	@return_value = [dbo].[spDOC_SetTempInvDoc]
 					@CostCenterID = @CostCenterID,
 					@DocID = 0,
@@ -107,7 +112,7 @@ SET NOCOUNT ON;
 					@BillWiseXML = @BillWiseXML,
 					@NotesXML = @NotesXML,
 					@AttachmentsXML = @AttachmentsXML,
-					@ActivityXML='',
+					@ActivityXML=@ActivityXML,
 					@IsImport = 0,
 					@LocationID = @LocationID,
 					@DivisionID = @DivisionID,
@@ -138,7 +143,7 @@ SET NOCOUNT ON;
 				
 				insert into COM_Files(FilePath,ActualFileName,RelativeFileName,FileExtension,IsProductImage,FeatureID,FeaturePK,CompanyGUID,GUID,CreatedBy,CreatedDate)
 				select FilePath,ActualFileName,RelativeFileName,FileExtension,IsProductImage,@CostCenterID,@DocIDChild,@CompanyGUID,GUID,@UserName,CONVERT(float,getdate())
-				from COM_Files a
+				from COM_Files a WITH(NOLOCK)
 				join @prds b on a.FeaturePK=b.prdID
 				where IsProductImage=0 and FeatureID=3
 				      
@@ -148,6 +153,7 @@ SET NOCOUNT ON;
  
    END
 COMMIT TRANSACTION     
+--rollback TRANSACTION
     
    
 SELECT @VoucherNo=VoucherNo ,@StatusID = statusid   FROM INV_DocDetails WITH(nolock) WHERE DocID=@DocIDChild  
@@ -179,6 +185,6 @@ BEGIN CATCH
  ROLLBACK TRANSACTION    
  SET NOCOUNT OFF      
  RETURN -999       
-END CATCH 
- 
+END CATCH
+
 GO

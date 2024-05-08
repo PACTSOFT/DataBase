@@ -3,14 +3,14 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetCostCenterNodeNotes]
-	@NoteID [bigint] = 0,
+	@NoteID [int] = 0,
 	@Note [nvarchar](max) = '',
 	@FeatureID [int] = 0,
-	@FeaturePK [bigint] = 0,
+	@FeaturePK [int] = 0,
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@RoleID [bigint],
+	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -33,7 +33,7 @@ SET NOCOUNT ON;
 		END  
 		ELSE  
 		BEGIN  
-			SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,@FeatureID,10)  
+			SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,@FeatureID,8)  
 		END  
 
 		IF @HasAccess=0  
@@ -105,8 +105,6 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH  
-
-
+END CATCH
 
 GO

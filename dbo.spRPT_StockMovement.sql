@@ -25,17 +25,17 @@ WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY  
 SET NOCOUNT ON;  
-	DECLARE @SQL NVARCHAR(MAX),@RecQty FLOAT,@OpQty FLOAT,@OpValue FLOAT,@RecRate FLOAT,@RecValue FLOAT,@ProductID BIGINT,@Valuation INT,@TagSQL NVARCHAR(MAX),@AvgDimWhere NVARCHAR(MAX),
+	DECLARE @SQL NVARCHAR(MAX),@RecQty FLOAT,@OpQty FLOAT,@OpValue FLOAT,@RecRate FLOAT,@RecValue FLOAT,@ProductID INT,@Valuation INT,@TagSQL NVARCHAR(MAX),@AvgDimWhere NVARCHAR(MAX),
 			@IssQty FLOAT,@IssValue FLOAT,@OpRate FLOAT,@AvgRate FLOAT,@BalQty FLOAT,@BalValue FLOAT,@COGS FLOAT,@VoucherType INT,@I INT,@COUNT INT,@UnAppSQL NVARCHAR(50),
-			@CurrWHERE nvarchar(30),@ValColumn nvarchar(20)
-	DECLARE @TblProducts AS TABLE(ID INT IDENTITY(1,1) NOT NULL,ProductID BIGINT)
+			@CurrWHERE nvarchar(30),@ValColumn nvarchar(20),@TagColumn NVARCHAR(50)
+	DECLARE @TblProducts AS TABLE(ID INT IDENTITY(1,1) NOT NULL,ProductID INT)
 	declare @PCRate float,@PCi INT,@PCCnt INT,@PCcol nvarchar(50),@PCxml nvarchar(max)
 	declare @TblPCRates AS TABLE(ID INT IDENTITY(1,1) NOT NULL,Rate NVARCHAR(50))
-	DECLARE @Tbl AS TABLE(ID INT IDENTITY(1,1) NOT NULL,ProductID BIGINT,OpQty FLOAT,OpValue FLOAT,
-		RecQty FLOAT,RecValue FLOAT,IssQty FLOAT,IssValue FLOAT,BalQty FLOAT,AvgRate FLOAT,BalValue FLOAT,TagID BIGINT,COGS FLOAT,PCxml NVARCHAR(max))
+	CREATE TABLE #STMTbl(ID INT IDENTITY(1,1) NOT NULL,ProductID INT,OpQty FLOAT,OpValue FLOAT,
+		RecQty FLOAT,RecValue FLOAT,IssQty FLOAT,IssValue FLOAT,BalQty FLOAT,AvgRate FLOAT,BalValue FLOAT,TagID INT,COGS FLOAT,PCxml NVARCHAR(max))
 	DECLARE @From NVARCHAR(20),@To NVARCHAR(20),@DateFilterCol nvarchar(60)
 	
-	create table #TblAvgMn(ID int identity(0,1), FromDate Float, ToDate Float, BalQty float,AvgRate float,BalValue float,IsDone bit)
+	create table #TblAvgMn(ID int identity(0,1), FromDate Float, ToDate Float, RecQty FLOAT,RecValue FLOAT,IssQty FLOAT,IssValue FLOAT,BalQty float,AvgRate float,BalValue float,IsDone bit)
 	
 	SET @From=CONVERT(FLOAT,@FromDate)
 	SET @To=CONVERT(FLOAT,@ToDate)
@@ -47,7 +47,8 @@ SET NOCOUNT ON;
 		EXEC SPSplitString @PCRates,','
 		select @PCCnt=count(*) from @TblPCRates
 	end
-
+	
+	SET @TagColumn=''
 	SET @TagSQL=''	
 	SET @AvgDimWhere=''
 	IF (@LocationWHERE IS NOT NULL AND @LocationWHERE<>'') OR (@DIMWHERE IS NOT NULL AND @DIMWHERE<>'')
@@ -62,7 +63,7 @@ SET NOCOUNT ON;
 	IF @IncludeUpPostedDocs=0
 		SET @UnAppSQL=' AND D.StatusID=369'
 	ELSE
-		SET @UnAppSQL=''
+		SET @UnAppSQL=' AND D.StatusID<>376'
 		
 	IF @CurrencyID>0
 	BEGIN
@@ -153,24 +154,43 @@ SET NOCOUNT ON;
 					
 					update T2
 					set FromDate=T1.ToDate -1
-					from #TblAvgMn T1
-					join #TblAvgMn T2 on T1.ID=T2.ID-1
+					from #TblAvgMn T1 with(nolock)
+					join #TblAvgMn T2 with(nolock) on T1.ID=T2.ID-1
 					
 					update #TblAvgMn set FromDate=0 where ID=0
 					
-					--select * from #TblAvgMn
-				end
+					--select * from #TblAvgMn with(nolock)
+					SET @SQL='UPDATE #TblAvgMn SET RecQty=(SELECT SUM(D.UOMConvertedQty)
+					FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
+					WHERE D.ProductID='+CONVERT(NVARCHAR,@ProductID)+' AND D.IsQtyIgnored=0 AND D.VoucherType=1 AND D.DocumentType<>3
+					AND FromDate>0 AND D.DocDate BETWEEN FromDate+2 AND ToDate '+@UnAppSQL+@CurrWHERE+@WHERE+')
+					,RecValue=(SELECT SUM('+@ValColumn+')
+					FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
+					WHERE D.ProductID='+CONVERT(NVARCHAR,@ProductID)+' AND D.IsQtyIgnored=0 AND D.VoucherType=1 AND D.DocumentType<>3
+					AND FromDate>0 AND D.DocDate BETWEEN FromDate+2 AND ToDate '+@UnAppSQL+@CurrWHERE+@WHERE+')
+					,IssQty=(SELECT SUM(D.UOMConvertedQty)
+					FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
+					WHERE D.ProductID='+CONVERT(NVARCHAR,@ProductID)+' AND D.IsQtyIgnored=0 AND D.VoucherType=-1 
+					AND FromDate>0 AND D.DocDate BETWEEN FromDate+2 AND ToDate '+@UnAppSQL+@CurrWHERE+@WHERE+')
+					,IssValue=(SELECT SUM('+@ValColumn+')
+					FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
+					WHERE D.ProductID='+CONVERT(NVARCHAR,@ProductID)+' AND D.IsQtyIgnored=0 AND D.VoucherType=-1 
+					AND FromDate>0 AND D.DocDate BETWEEN FromDate+2 AND ToDate '+@UnAppSQL+@CurrWHERE+@WHERE+')'
+					EXEC sp_executesql @SQL
 				
-				EXEC [spRPT_AvgRate] 0,@ProductID,@AvgDimWhere,@WHERE,@ToDate,@ToDate,@IncludeUpPostedDocs,@DefValuation,@CurrencyType,@CurrencyID,@SortTransactionsBy,1,@BalQty OUTPUT,@AvgRate OUTPUT,@BalValue OUTPUT,@COGS OUTPUT
+				end
 			
-				INSERT INTO @Tbl(ProductID,OpQty,OpValue,BalQty,AvgRate,BalValue,COGS,PCxml)
+				EXEC [spRPT_AvgRate] 0,@ProductID,@AvgDimWhere,@WHERE,@ToDate,@ToDate,@IncludeUpPostedDocs,@DefValuation,@CurrencyType,@CurrencyID,@SortTransactionsBy,1,@BalQty OUTPUT,@AvgRate OUTPUT,@BalValue OUTPUT,@COGS OUTPUT
+				
+				INSERT INTO #STMTbl(ProductID,OpQty,OpValue,BalQty,AvgRate,BalValue,COGS,PCxml)
 				SELECT @ProductID,@OpQty,@OpValue,@BalQty,@AvgRate,@BalValue,@COGS,@PCxml
 				WHERE @AvgRate IS NOT NULL
 
-				if (select count(*) from #TblAvgMn where BalQty IS NULL or BalQty=0)!=(select count(*) from #TblAvgMn)
-					INSERT INTO @Tbl(ProductID,TagID,OpQty,OpValue,BalQty,AvgRate,BalValue,COGS,PCxml)
-					SELECT @ProductID,ID,@OpQty,@OpValue,BalQty,AvgRate,BalValue,@COGS,@PCxml
-					FROM #TblAvgMn
+				if (select count(*) from #TblAvgMn with(nolock) where BalQty IS NULL or BalQty=0)!=(select count(*) from #TblAvgMn with(nolock))
+					INSERT INTO #STMTbl(ProductID,TagID,OpQty,OpValue,BalQty,AvgRate,BalValue,COGS,PCxml,RecQty,RecValue,IssQty,IssValue)
+					SELECT @ProductID,ID,@OpQty,@OpValue,BalQty,AvgRate,BalValue,@COGS,@PCxml,RecQty,RecValue,IssQty,IssValue
+					FROM #TblAvgMn with(nolock)
+					
 			end
 			else
 			begin
@@ -179,13 +199,13 @@ SET NOCOUNT ON;
 				
 				if @DefValuation=4 or @DefValuation=5
 				begin
-					INSERT INTO @Tbl(ProductID,OpQty,OpValue,BalQty,AvgRate,BalValue,COGS,PCxml)
+					INSERT INTO #STMTbl(ProductID,OpQty,OpValue,BalQty,AvgRate,BalValue,COGS,PCxml)
 					SELECT @ProductID,@OpQty,@OpQty*@AvgRate,@BalQty,@AvgRate,@BalValue,@COGS,@PCxml
 					WHERE @AvgRate IS NOT NULL
 				end
 				else
 				begin
-					INSERT INTO @Tbl(ProductID,OpQty,OpValue,BalQty,AvgRate,BalValue,COGS,PCxml)
+					INSERT INTO #STMTbl(ProductID,OpQty,OpValue,BalQty,AvgRate,BalValue,COGS,PCxml)
 					SELECT @ProductID,@OpQty,@OpValue,@BalQty,@AvgRate,@BalValue,@COGS,@PCxml
 					WHERE @AvgRate IS NOT NULL
 				end
@@ -195,52 +215,31 @@ SET NOCOUNT ON;
 		END
 		
 		--TO GET RECIEDVED DATA BETWEEN DATES
-		SET @SQL='SELECT D.ProductID,SUM(UOMConvertedQty),SUM('+@ValColumn+')
+		SET @SQL='SELECT D.ProductID,SUM(D.UOMConvertedQty),SUM('+@ValColumn+')
 			FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
-			WHERE D.ProductID IN ('+@ProductList+') AND IsQtyIgnored=0 AND D.VoucherType=1 AND D.DocumentType<>3
+			WHERE D.ProductID IN ('+@ProductList+') AND D.IsQtyIgnored=0 AND D.VoucherType=1 AND D.DocumentType<>3
 			'+@DateFilterCol+@UnAppSQL+@CurrWHERE+@WHERE+'
 			GROUP BY D.ProductID'
 		
-		INSERT INTO @Tbl(ProductID,RecQty,RecValue)
-		EXEC(@SQL)
+		INSERT INTO #STMTbl(ProductID,RecQty,RecValue)
+		EXEC sp_executesql @SQL
 		
 		--TO GET ISSUE DATA BETWEEN DATES
-		SET @SQL='SELECT D.ProductID,SUM(UOMConvertedQty),SUM('+@ValColumn+')
+		SET @SQL='SELECT D.ProductID,SUM(D.UOMConvertedQty),SUM('+@ValColumn+')
 			FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
-			WHERE D.ProductID IN ('+@ProductList+') AND IsQtyIgnored=0 AND D.VoucherType=-1 
+			WHERE D.ProductID IN ('+@ProductList+') AND D.IsQtyIgnored=0 AND D.VoucherType=-1 
 			'+@DateFilterCol+@UnAppSQL+@CurrWHERE+@WHERE+'
 			GROUP BY D.ProductID'
 
-		INSERT INTO @Tbl(ProductID,IssQty,IssValue)
-		EXEC(@SQL)
-		print(@SQL)
-
-		if @TagsList is not null and @TagsList like '<X>%'
-		begin
-			SELECT ProductID,TagID,OpQty,OpValue,RecQty,RecValue,IssQty,IssValue,BalQty,AvgRate,BalValue,case when IssQty>0 then COGS else null end COGS,PCXml
-			FROM (
-				SELECT ProductID,TagID,SUM(OpQty) OpQty,SUM(OpValue) OpValue,
-					SUM(RecQty) RecQty,SUM(RecValue) RecValue,SUM(IssQty) IssQty,SUM(IssValue) IssValue,
-					SUM(BalQty) BalQty,SUM(AvgRate) AvgRate,SUM(BalValue) BalValue,SUM(COGS) COGS,MAX(PCXml) PCXml
-			FROM @Tbl
-			GROUP BY ProductID,TagID) AS T
-		end
-		else
-		begin
-			SELECT ProductID,OpQty,OpValue,RecQty,RecValue,IssQty,IssValue,BalQty,AvgRate,BalValue,case when IssQty>0 then COGS else null end COGS,PCXml
-			FROM (
-				SELECT ProductID,SUM(OpQty) OpQty,SUM(OpValue) OpValue,
-					SUM(RecQty) RecQty,SUM(RecValue) RecValue,SUM(IssQty) IssQty,SUM(IssValue) IssValue,
-					SUM(BalQty) BalQty,SUM(AvgRate) AvgRate,SUM(BalValue) BalValue,SUM(COGS) COGS,MAX(PCXml) PCXml
-			FROM @Tbl
-			GROUP BY ProductID) AS T
-		end
+		INSERT INTO #STMTbl(ProductID,IssQty,IssValue)
+		EXEC sp_executesql @SQL
+		
 	END
 	ELSE
 	BEGIN
-		DECLARE @TI INT,@TCNT INT,@NodeID BIGINT,@SubTagSQL NVARCHAR(MAX),@Pos int,@Nodes NVARCHAR(30),@PIDCHAR NVARCHAR(15),@NIDCHAR NVARCHAR(35)
+		DECLARE @TI INT,@TCNT INT,@NodeID INT,@SubTagSQL NVARCHAR(MAX),@Pos int,@Nodes NVARCHAR(30),@PIDCHAR NVARCHAR(15),@NIDCHAR NVARCHAR(35)
 		DECLARE @TblTagProduct AS TABLE(ID INT IDENTITY(1,1) NOT NULL,Nodes NVARCHAR(30))
-		DECLARE @TblNodes AS TABLE(ProductID BIGINT,NodeID BIGINT)
+		DECLARE @TblNodes AS TABLE(ProductID INT,NodeID INT)
 
 		INSERT INTO @TblTagProduct(Nodes)
 		EXEC SPSplitString @TagsList,','
@@ -255,9 +254,9 @@ SET NOCOUNT ON;
 			SELECT @Nodes=Nodes FROM @TblTagProduct WHERE ID=@TI
 			set @Pos = CHARINDEX('~',@Nodes)
 			set @PIDCHAR=substring(@Nodes,1,@Pos-1)
-			set @ProductID=convert(bigint, @PIDCHAR)
+			set @ProductID=convert(INT, @PIDCHAR)
 			set @NIDCHAR=substring(@Nodes,@Pos+1,LEN(@Nodes)-@Pos)
-			set @NodeID=convert(bigint, @NIDCHAR)
+			set @NodeID=convert(INT, @NIDCHAR)
 			
 			if not exists(select ProductID from @TblNodes where ProductID=@ProductID)
 			begin
@@ -274,10 +273,13 @@ SET NOCOUNT ON;
 				set @TagsList=@TagsList+@NIDCHAR
 			end
 			
-			IF @TagSQL=''
-				SET @SubTagSQL=' AND DCC.DCCCNID'+CONVERT(NVARCHAR,@TagID-50000)+'='+CONVERT(NVARCHAR,@NodeID)
+			IF @TagID=2
+				SET @SubTagSQL=''
 			ELSE
-				SET @SubTagSQL=@AvgDimWhere + ' AND DCC.DCCCNID'+CONVERT(NVARCHAR,@TagID-50000)+'='+CONVERT(NVARCHAR,@NodeID)
+				SET @SubTagSQL=' AND DCC.DCCCNID'+CONVERT(NVARCHAR,@TagID-50000)+'='+CONVERT(NVARCHAR,@NodeID)
+			
+			IF @TagSQL<>''
+				SET @SubTagSQL=@AvgDimWhere + @SubTagSQL
 				
 			--Price chart Data			
 			if @PCCnt>0
@@ -307,52 +309,94 @@ SET NOCOUNT ON;
 			
 			EXEC [spRPT_AvgRate] 0,@ProductID,@SubTagSQL,@WHERE,@FromDate,@ToDate,@IncludeUpPostedDocs,@DefValuation,@CurrencyType,@CurrencyID,@SortTransactionsBy,0,@BalQty OUTPUT,@AvgRate OUTPUT,@BalValue OUTPUT,@COGS OUTPUT
 			
-			INSERT INTO @Tbl(ProductID,OpQty,OpValue,BalQty,AvgRate,BalValue,TagID,COGS)
+			INSERT INTO #STMTbl(ProductID,OpQty,OpValue,BalQty,AvgRate,BalValue,TagID,COGS)
 			SELECT @ProductID,@OpQty,@OpValue,@BalQty,@AvgRate,@BalValue,@NodeID,@COGS
 			WHERE @AvgRate IS NOT NULL
 			
 			SET @TI=@TI+1
 		END
 
-		DECLARE @TagColumn NVARCHAR(50)
-		SET @TagColumn=',DCC.DCCCNID'+CONVERT(NVARCHAR,@TagID-50000)
-		IF @TagSQL=''
-			SET @TagSQL=' INNER JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID AND DCC.DCCCNID'+CONVERT(NVARCHAR,@TagID-50000)+' IN('+@TagsList+')'
+		IF @TagID=2
+			SET @TagColumn=',PVG.AccountID'
 		ELSE
-			SET @TagSQL=@TagSQL + ' AND DCC.DCCCNID'+CONVERT(NVARCHAR,@TagID-50000)+' IN ('+@TagsList+')'
+			SET @TagColumn=',DCC.DCCCNID'+CONVERT(NVARCHAR,@TagID-50000)
+		
+		IF @TagID=2
+		BEGIN
+			SET @TagSQL=@TagSQL + ' INNER JOIN INV_ProductVendors PVG WITH(NOLOCK) ON PVG.ProductID=D.ProductID AND PVG.AccountID IN ('+@TagsList+')'
+		END
+		ELSE
+		BEGIN
+			IF @TagSQL=''
+				SET @TagSQL=' INNER JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID AND DCC.DCCCNID'+CONVERT(NVARCHAR,@TagID-50000)+' IN('+@TagsList+')'
+			ELSE
+				SET @TagSQL=@TagSQL + ' AND DCC.DCCCNID'+CONVERT(NVARCHAR,@TagID-50000)+' IN ('+@TagsList+')'
+		END
 	
 		--TO GET RECIEDVED DATA BETWEEN DATES
-		SET @SQL='SELECT D.ProductID'+@TagColumn+',SUM(UOMConvertedQty),SUM('+@ValColumn+')
+		SET @SQL='SELECT D.ProductID'+@TagColumn+',SUM(D.UOMConvertedQty),SUM('+@ValColumn+')
 			FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
-			WHERE D.ProductID IN ('+@ProductList+') AND IsQtyIgnored=0 AND D.VoucherType=1 AND D.DocumentType<>3
+			WHERE D.ProductID IN ('+@ProductList+') AND D.IsQtyIgnored=0 AND D.VoucherType=1 AND D.DocumentType<>3
 				'+@DateFilterCol+@UnAppSQL+@CurrWHERE+@WHERE+'
-			GROUP BY D.ProductID'+@TagColumn+''
+			GROUP BY D.ProductID'+@TagColumn
 
-		INSERT INTO @Tbl(ProductID,TagID,RecQty,RecValue)
-		EXEC(@SQL)
+		INSERT INTO #STMTbl(ProductID,TagID,RecQty,RecValue)
+		EXEC sp_executesql @SQL
 
 		--TO GET ISSUE DATA BETWEEN DATES
-		SET @SQL='SELECT D.ProductID'+@TagColumn+',SUM(UOMConvertedQty),SUM('+@ValColumn+')
+		SET @SQL='SELECT D.ProductID'+@TagColumn+',SUM(D.UOMConvertedQty),SUM('+@ValColumn+')
 			FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
-			WHERE D.ProductID IN ('+@ProductList+') AND IsQtyIgnored=0 AND D.VoucherType=-1 
+			WHERE D.ProductID IN ('+@ProductList+') AND D.IsQtyIgnored=0 AND D.VoucherType=-1 
 				'+@DateFilterCol+@UnAppSQL+@CurrWHERE+@WHERE+'
-			GROUP BY D.ProductID'+@TagColumn+''
+			GROUP BY D.ProductID'+@TagColumn
 			
 
-		INSERT INTO @Tbl(ProductID,TagID,IssQty,IssValue)
-		EXEC(@SQL)
-
-		SELECT ProductID,TagID,OpQty,OpValue,RecQty,RecValue,IssQty,IssValue,
-				BalQty,AvgRate,BalValue,case when IssQty>0 then COGS else null end COGS,PCXml
+		INSERT INTO #STMTbl(ProductID,TagID,IssQty,IssValue)
+		EXEC sp_executesql @SQL
+	END
+	
+	SET @SQL=''	
+	SELECT @SQL=@SQL+',SUM(CASE WHEN D.CostCenterID='+CONVERT(NVARCHAR,DT.CostCenterID)+' THEN D.UOMConvertedQty ELSE 0 END) ['+replace(DocumentName,' ','_')+'_Qty]
+	,SUM(CASE WHEN D.CostCenterID='+CONVERT(NVARCHAR,DT.CostCenterID)+' THEN '+@ValColumn+' ELSE 0 END) ['+replace(DocumentName,' ','_')+'_Value]' 
+	FROM ADM_DocumentTypes DT WITH(NOLOCK) 
+	WHERE IsInventory=1 AND DT.CostCenterID IN (SELECT DISTINCT CostCenterID FROM INV_DocDetails WITH(NOLOCK) WHERE IsQtyIgnored=0 AND DocumentType<>3)
+	
+	SET @SQL='SELECT D.ProductID PID'+CASE WHEN @TagColumn<>'' THEN @TagColumn+' TID' ELSE '' END+@SQL+'
+		INTO #CCTEMP
+		FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
+		WHERE D.ProductID IN ('+@ProductList+') AND D.IsQtyIgnored=0 AND (D.VoucherType=1 OR D.VoucherType=-1) AND D.DocumentType<>3
+			'+@DateFilterCol+@UnAppSQL+@CurrWHERE+@WHERE+'
+		GROUP BY D.ProductID'+@TagColumn
+		
+	if @TagID<>0 OR (@TagsList is not null and @TagsList like '<X>%')
+	begin
+		SET @SQL=@SQL+' SELECT ProductID,TagID,OpQty,OpValue,RecQty,RecValue,IssQty,IssValue,BalQty,AvgRate,BalValue,case when IssQty>0 then COGS else null end COGS,PCXml,CT.*
 		FROM (
 			SELECT ProductID,TagID,SUM(OpQty) OpQty,SUM(OpValue) OpValue,
 				SUM(RecQty) RecQty,SUM(RecValue) RecValue,SUM(IssQty) IssQty,SUM(IssValue) IssValue,
-				SUM(BalQty) BalQty,SUM(AvgRate) AvgRate,SUM(BalValue) BalValue,SUM(COGS) COGS,max(PCXml) PCXml
-			FROM @Tbl
-			GROUP BY ProductID,TagID) AS T
+				SUM(BalQty) BalQty,SUM(AvgRate) AvgRate,SUM(BalValue) BalValue,SUM(COGS) COGS,MAX(PCXml) PCXml
+		FROM #STMTbl WITH(NOLOCK)
+		GROUP BY ProductID,TagID) AS T
+		LEFT JOIN #CCTEMP CT WITH(NOLOCK) ON CT.PID=T.ProductID '+CASE WHEN @TagID<>0 THEN 'AND CT.TID=T.TagID' ELSE '' END
+	end
+	else
+	begin
+		SET @SQL=@SQL+' SELECT ProductID,OpQty,OpValue,RecQty,RecValue,IssQty,IssValue,BalQty,AvgRate,BalValue,case when IssQty>0 then COGS else null end COGS,PCXml,CT.*
+		FROM (
+			SELECT ProductID,SUM(OpQty) OpQty,SUM(OpValue) OpValue,
+				SUM(RecQty) RecQty,SUM(RecValue) RecValue,SUM(IssQty) IssQty,SUM(IssValue) IssValue,
+				SUM(BalQty) BalQty,SUM(AvgRate) AvgRate,SUM(BalValue) BalValue,SUM(COGS) COGS,MAX(PCXml) PCXml
+		FROM #STMTbl WITH(NOLOCK)
+		GROUP BY ProductID) AS T
+		LEFT JOIN #CCTEMP CT WITH(NOLOCK) ON CT.PID=T.ProductID'
+	end
 	
-	END
+	SET @SQL=@SQL+' DROP TABLE #CCTEMP'		
 	
+	EXEC sp_executesql @SQL
+	
+	DROP TABLE #TblAvgMn
+	DROP TABLE #STMTbl
 	
 SET NOCOUNT OFF;  
 RETURN 1
@@ -369,5 +413,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

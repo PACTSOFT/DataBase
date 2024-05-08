@@ -3,12 +3,14 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetAccountByRef]
-	@RefID [bigint],
-	@RefColID [bigint],
-	@NodeID [bigint],
+	@RefID [int],
+	@RefColID [int],
+	@NodeID [nvarchar](max),
 	@NodeName [nvarchar](500),
 	@IsCode [bit],
-	@UserID [bigint],
+	@Costcenterid [int],
+	@DType [int],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -18,20 +20,39 @@ SET NOCOUNT ON
 		
 		if(@RefID=-98)
 		BEGIN
-				SELECT DrAccount from ADM_CrossDimension WITH(NOLOCK) 
-				where DimIn=@RefColID  and DimFor=@NodeID and Document=3
+				if exists(SELECT DrAccount from ADM_CrossDimension WITH(NOLOCK) 
+				where DimIn=@RefColID  and DimFor=@NodeID and Document=@Costcenterid)
+				BEGIN
+					SELECT DrAccount from ADM_CrossDimension WITH(NOLOCK) 
+					where DimIn=@RefColID  and DimFor=@NodeID and Document=@Costcenterid
+				END
+				ELSE if(@DType=5)
+				BEGIN
+					SELECT DrAccount from ADM_CrossDimension WITH(NOLOCK) 
+					where DimIn=@RefColID  and DimFor=@NodeID and Document=3
+				END	
 				return 1
 		END
 		ELSE if(@RefID=-99)
 		BEGIN
-			SELECT CrAccount from ADM_CrossDimension WITH(NOLOCK) 
-			where DimIn=@RefColID  and DimFor=@NodeID and Document=3
+			if exists(SELECT DrAccount from ADM_CrossDimension WITH(NOLOCK) 
+			where DimIn=@RefColID  and DimFor=@NodeID and Document=@Costcenterid)
+			BEGIN
+				SELECT CrAccount from ADM_CrossDimension WITH(NOLOCK) 
+				where DimIn=@RefColID  and DimFor=@NodeID and Document=@Costcenterid
+			END
+			ELSE if(@DType=5)
+			BEGIN
+				SELECT CrAccount from ADM_CrossDimension WITH(NOLOCK) 
+				where DimIn=@RefColID  and DimFor=@NodeID and Document=3
+			END	
+				
 			return 1
 		END
 		
 		--Declaration Section
-		DECLARE @HasAccess BIT,@Sql NVARCHAR(MAX),@TABLE NVARCHAR(max),@CostCCID BIGINT
-		DECLARE @ColumnName  NVARCHAR(200),@CCID BIGINT
+		DECLARE @HasAccess BIT,@Sql NVARCHAR(MAX),@TABLE NVARCHAR(max),@CostCCID INT
+		DECLARE @ColumnName  NVARCHAR(200),@CCID INT
 		--SP Required Parameters Check
 		IF (@NodeID<=0 and @NodeName='') or @RefID<=0 OR @RefColID=0
 		BEGIN
@@ -58,7 +79,7 @@ SET NOCOUNT ON
 		BEGIN	
 			if(@CostCCID=72)
 			BEGIN
-				DECLARE @PID BIGINT,@isGrp BIT,@parent BIGINT
+				DECLARE @PID INT,@isGrp BIT,@parent INT
 				select @PID=ASSETGROUPID,@isGrp=IsGroup,@parent=ParentID from INV_Product WITH(NOLOCK)	
 				where ProductID=@NodeID
 				
@@ -101,22 +122,22 @@ SET NOCOUNT ON
 					SET @Sql=@Sql+'AccountName='''
 			END	
 			ELSE
-				SET @Sql=@Sql+'AccountID='
+				SET @Sql=@Sql+'AccountID in('
 		END	
 		else IF(@CCID=3)
 		BEGIN
 			if(@RefColID<0)
-				SET @Sql=@Sql+'b.ProductID='
+				SET @Sql=@Sql+'b.ProductID in('
 			else
-				SET @Sql=@Sql+'ProductID='			
+				SET @Sql=@Sql+'ProductID in('			
 		END	
 		ELSE
-			SET @Sql=@Sql+'NodeID='
+			SET @Sql=@Sql+'NodeID in('
 		 
 		 if(@NodeID=0 and @NodeName<>'')
 			SET @Sql=@Sql+@NodeName+''''
 		ELSE	
-			SET @Sql=@Sql+CONVERT(NVARCHAR,@NodeID)
+			SET @Sql=@Sql+@NodeID+')'
 		 print @Sql
 		 EXEC(@Sql)
 			
@@ -138,5 +159,5 @@ BEGIN CATCH
 
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH 
+END CATCH
 GO

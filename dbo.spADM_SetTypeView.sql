@@ -4,7 +4,8 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_SetTypeView]
 	@CallType [int],
-	@COSTCENTERID [bigint],
+	@COSTCENTERID [int],
+	@TypeCCID [int],
 	@TypeID [int],
 	@StrXml [nvarchar](max),
 	@LangID [int] = 1
@@ -25,7 +26,7 @@ BEGIN TRY
 		END
 		ELSE
 			select TypeID,CostCenterColID,Hide,Mandatory,IsTab from ADM_TypeRestrictions with(nolock)
-			where CostCenterID=@CostCenterID and TypeID=@TypeID
+			where CostCenterID=@CostCenterID and TypeID=@TypeID and TypeCCID=@TypeCCID
 			
 	end
 	else if @CallType=2
@@ -39,7 +40,7 @@ BEGIN TRY
 			set @sql=' delete from ADM_TypeRestrictions
 			where CostCenterID='+convert(nvarchar(max),@CostCenterID)+' and TypeID='+convert(nvarchar(max),@TypeID)+@where+'
 			insert into ADM_TypeRestrictions(CostCenterID,TypeID,CostCenterColID,Hide,Mandatory,IsTab'+@cols+')
-			select '+convert(nvarchar(max),@CostCenterID)+','+convert(nvarchar(max),@TypeID)+',X.value(''@ColID'',''bigint''),X.value(''@Hide'',''smallint''),X.value(''@Mand'',''smallint''),X.value(''@IsTab'',''smallint'')'+@vals+'
+			select '+convert(nvarchar(max),@CostCenterID)+','+convert(nvarchar(max),@TypeID)+',X.value(''@ColID'',''INT''),X.value(''@Hide'',''smallint''),X.value(''@Mand'',''smallint''),X.value(''@IsTab'',''smallint'')'+@vals+'
 			from @XML.nodes(''/XML/R'') as Data(X)'
 			
 			EXEC sp_executesql @sql,N'@XML xml',@XML
@@ -48,10 +49,10 @@ BEGIN TRY
 		ELSE
 		BEGIN
 			delete from ADM_TypeRestrictions
-			where CostCenterID=@CostCenterID and TypeID=@TypeID
+			where CostCenterID=@CostCenterID and TypeID=@TypeID and TypeCCID=@TypeCCID
 
-			insert into ADM_TypeRestrictions(CostCenterID,TypeID,CostCenterColID,Hide,Mandatory,IsTab)
-			select @CostCenterID,@TypeID,X.value('@ColID','bigint'),X.value('@Hide','smallint'),X.value('@Mand','smallint'),X.value('@IsTab','smallint')
+			insert into ADM_TypeRestrictions(CostCenterID,TypeCCID,TypeID,CostCenterColID,Hide,Mandatory,IsTab)
+			select @CostCenterID,@TypeCCID,@TypeID,X.value('@ColID','INT'),X.value('@Hide','smallint'),X.value('@Mand','smallint'),X.value('@IsTab','smallint')
 			from @XML.nodes('/XML/R') as Data(X)  
 		END	
 	end
@@ -79,12 +80,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION    
  SET NOCOUNT OFF      
  RETURN -999       
-END CATCH     
-
-
-    
-    
-    
-    
-    
+END CATCH
 GO

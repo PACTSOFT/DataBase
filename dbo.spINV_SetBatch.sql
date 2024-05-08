@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spINV_SetBatch]
-	@BatchID [bigint],
+	@BatchID [int],
 	@IsBatchSeqNoExists [bit],
 	@BatchNumber [nvarchar](200),
 	@ManufactureDateFormat [nvarchar](50) = NULL,
@@ -12,19 +12,19 @@ CREATE PROCEDURE [dbo].[spINV_SetBatch]
 	@ExpiryDate [datetime] = NULL,
 	@StatusID [int],
 	@MRPRate [float],
-	@MRPCurrID [bigint] = NULL,
+	@MRPCurrID [int] = NULL,
 	@MRPExchRT [float],
 	@RetailRate [float],
-	@RRCurrID [bigint] = NULL,
+	@RRCurrID [int] = NULL,
 	@RRExchRT [float],
 	@StockistRate [float],
-	@SRCurrID [bigint] = NULL,
+	@SRCurrID [int] = NULL,
 	@SRExchRT [float],
-	@ProductID [bigint] = NULL,
-	@VendorAccountID [bigint],
+	@ProductID [int] = NULL,
+	@VendorAccountID [int],
 	@AlertDays [int],
 	@PreExpiryDays [int],
-	@SelectedNodeID [bigint],
+	@SelectedNodeID [int],
 	@RetestDate [datetime] = NULL,
 	@IsGroup [bit],
 	@CustomFieldsQuery [nvarchar](max) = NULL,
@@ -50,11 +50,11 @@ CREATE PROCEDURE [dbo].[spINV_SetBatch]
 	@URL [nvarchar](50) = NULL,
 	@BatchCode [nvarchar](200) = null,
 	@CodePrefix [nvarchar](200) = null,
-	@CodeNumber [bigint] = 0,
+	@CodeNumber [int] = 0,
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [bigint],
+	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -63,10 +63,10 @@ BEGIN TRANSACTION
 BEGIN TRY      
 SET NOCOUNT ON;    
 	--Declaration Section      
-	DECLARE @Dt FLOAT,@XML xml ,@Dimesion bigint,@HasAccess bit,@TempGuid NVARCHAR(50)           
-	DECLARE @lft BIGINT,@rgt BIGINT,@Selectedlft BIGINT,@Selectedrgt BIGINT,@Depth INT,@ParentID BIGINT      
+	DECLARE @Dt FLOAT,@XML xml ,@Dimesion INT,@HasAccess bit,@TempGuid NVARCHAR(50)           
+	DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth INT,@ParentID INT      
 	DECLARE @SelectedIsGroup BIT, @ParentCode NVARCHAR(MAX),@UpdateSql NVARCHAR(MAX)    
-	declare @NID bigint, @CCStatusID bigint,  @PrefValue nvarchar(50), @Gid nvarchar(50) , @Table nvarchar(100)
+	declare @NID INT, @CCStatusID INT,  @PrefValue nvarchar(50), @Gid nvarchar(50) , @Table nvarchar(100)
 
 	--User acces check    
 	IF @BatchID=0    
@@ -91,7 +91,7 @@ SET NOCOUNT ON;
 	if(@ExpiryDate='1/JAN/1900')
 		set @ExpiryDate=NULL		
 		
-    DECLARE @AllowDuplicateBatches BIT, @AllowDupBatchesforDiffProducts bit,@IsBatchCodeAutoGen bit 
+    DECLARE @AllowDuplicateBatches BIT, @AllowDupBatchesforDiffProducts bit,@IsBatchCodeAutoGen bit,@BatchNumSameAsCode bit 
 	select @AllowDuplicateBatches=CONVERT(bit,value) from COM_CostCenterPreferences with(nolock) 
 	where CostCenterID=16 and Name='AllowDuplicateBatches'
  	select @AllowDupBatchesforDiffProducts=CONVERT(bit,value) from COM_CostCenterPreferences with(nolock) 
@@ -99,12 +99,16 @@ SET NOCOUNT ON;
  	select @IsBatchCodeAutoGen=CONVERT(bit,value) from COM_CostCenterPreferences with(nolock)
  	where CostCenterID=16 and Name='BatchCodeAutoGen'
  	select @PrefValue=Value from COM_CostCenterPreferences with(nolock) where CostCenterID=16 and Name='BatchDimension'
+
+	select @BatchNumSameAsCode=CONVERT(bit,value) from COM_CostCenterPreferences with(nolock)
+ 	where CostCenterID=16 and Name='BatchNumSameAsCode'
+
 	
 	if(@PrefValue is not null and @PrefValue<>'')  
 	begin     
 		set @Dimesion=0  
 		begin try  
-			select @Dimesion=convert(BIGINT,@PrefValue)  
+			select @Dimesion=convert(INT,@PrefValue)  
 		end try  
 		begin catch  
 			set @Dimesion=0   
@@ -139,7 +143,7 @@ SET NOCOUNT ON;
 		IF @IsBatchCodeAutoGen IS NOT NULL AND @IsBatchCodeAutoGen=1 AND @BatchID=0 and @CodePrefix=''  
 		BEGIN 
 			--CALL AUTOCODEGEN 
-			create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+			create table #temp1(prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
 			if(@SelectedNodeID is null)
 			insert into #temp1
 			EXEC [spCOM_GetCodeData] 16,1,''  
@@ -150,6 +154,11 @@ SET NOCOUNT ON;
 			select @BatchCode=code,@CodePrefix= prefix, @CodeNumber=number from #temp1
 			--select @BatchCode,@ParentID
 		END	
+	END
+
+	if((@BatchNumSameAsCode is null or @BatchNumSameAsCode='') AND @BatchNumSameAsCode=1)  
+	BEGIN
+		SET @BatchNumber=@BatchCode
 	END
 	
 	--To SET Left,Right And Depth of Record      
@@ -190,7 +199,7 @@ SET NOCOUNT ON;
    
 	SET @Dt=CONVERT(FLOAT,GETDATE())--Setting Current Date 
 	
-	IF (@BatchID=0)--BatchID will be 0 in Create Process--      
+	IF (@BatchID=0)--BatchID will be 0 in ALTER procedureess--      
 	BEGIN--CREATE --      
 		INSERT intO [INV_Batches]      
 		([BatchNumber]      
@@ -401,25 +410,27 @@ SET NOCOUNT ON;
 		--If Action is NEW then insert new Notes    
 		INSERT INTO COM_Notes(FeatureID,FeaturePK,Note,       
 		GUID,CreatedBy,CreatedDate)    
-		SELECT 16,@BatchID,Replace(X.value('@Note','NVARCHAR(max)'),'@~',''),  
+		SELECT 16,@BatchID,Replace(X.value('@Note','NVARCHAR(max)'),'@~','
+'),  
 		newid(),@UserName,@Dt    
 		FROM @XML.nodes('/NotesXML/Row') as Data(X)    
 		WHERE X.value('@Action','NVARCHAR(10)')='NEW'    
 
 		--If Action is MODIFY then update Notes    
 		UPDATE COM_Notes    
-		SET Note=Replace(X.value('@Note','NVARCHAR(max)'),'@~',''),  
+		SET Note=Replace(X.value('@Note','NVARCHAR(max)'),'@~','
+'),  
 		GUID=newid(),    
 		ModifiedBy=@UserName,    
 		ModifiedDate=@Dt    
 		FROM COM_Notes C     
 		INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X)      
-		ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID    
+		ON convert(INT,X.value('@NoteID','INT'))=C.NoteID    
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'    
 
 		--If Action is DELETE then delete Notes    
 		DELETE FROM COM_Notes    
-		WHERE NoteID IN(SELECT X.value('@NoteID','bigint')    
+		WHERE NoteID IN(SELECT X.value('@NoteID','INT')    
 		FROM @XML.nodes('/NotesXML/Row') as Data(X)    
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')    
 
@@ -451,12 +462,12 @@ SET NOCOUNT ON;
 		ModifiedDate=@Dt    
 		FROM COM_Files C     
 		INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)      
-		ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID    
+		ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID    
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'    
 
 		--If Action is DELETE then delete Attachments    
 		DELETE FROM COM_Files    
-		WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')    
+		WHERE FileID IN(SELECT X.value('@AttachmentID','INT')    
 		FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')    
 	END  
@@ -538,9 +549,5 @@ BEGIN CATCH
 	ROLLBACK TRANSACTION    
 	SET NOCOUNT OFF      
 	RETURN -999       
-END CATCH       
-    
-    
-    
-    
+END CATCH
 GO

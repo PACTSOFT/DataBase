@@ -3,9 +3,10 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_GetAssetManagementDetails]
-	@AssetManagementID [bigint] = 0,
-	@UserID [bigint],
-	@LangID [int] = 1
+	@AssetManagementID [int] = 0,
+	@UserID [int],
+	@LangID [int] = 1,
+	@RoleID [int] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY     
@@ -99,7 +100,7 @@ SET NOCOUNT ON
      A.TotalQtyPurchase,A.UOM,A.IncludeSalvageInDepr,
      A.AcqnCostACCID,A.AccumDeprACCID,A.AcqnCostDispACCID,A.AccumDeprDispACCID,
 	 A.GainsDispACCID,A.LossDispACCID,A.MaintExpenseACCID,A.DeprExpenseACCID,
-	 A.CodePrefix,A.CodeNumber,A.Depth
+	 A.CodePrefix,A.CodeNumber,A.Depth,A.WorkFlowID,A.WorkFlowLevel
      from ACC_Assets A with(nolock)
      LEFT JOIN ACC_AssetChanges with(nolock) on A.AssetID=ACC_AssetChanges.AssetID  
      where A.AssetID=@AssetManagementID 
@@ -108,7 +109,7 @@ SET NOCOUNT ON
     --Asset Location Name
 	if @AssetManagementID!=0
 	begin
-		declare @AssLocation bigint,@AssEmp bigint,@AssetLoc nvarchar(200),@AssetOwner nvarchar(200)
+		declare @AssLocation INT,@AssEmp INT,@AssetLoc nvarchar(200),@AssetOwner nvarchar(200)
 		select @AssLocation=LocationID,@AssEmp=EmployeeID from ACC_Assets with(nolock) where AssetID=@AssetManagementID 
 		if @AssetLocDim!='' and @AssetLocDim is not null
 		begin
@@ -130,7 +131,7 @@ SET NOCOUNT ON
    
    -- select A.*,convert(datetime,A.ChangeDate) as Date,L.Name as Location  from ACC_AssetChanges A,COM_Location L where A.AssetID=@AssetManagementID and convert(nvarchar(50),A.LocationID)=L.Code    
       
-	select A.*,convert(datetime,A.ChangeDate) as Date  from ACC_AssetChanges A with(nolock) 
+	select A.*,convert(datetime,A.ChangeDate) as Date,convert(datetime,A.CreatedDate) as CreatedDt  from ACC_AssetChanges A with(nolock) 
 	where A.AssetID=@AssetManagementID order by A.ChangeDate
       
 	if @AssetManagementID!=0 and @AssetLocDim is not null and @AssetLocDim!=''
@@ -206,16 +207,134 @@ SET NOCOUNT ON
 	WHERE FeatureID=72 and  FeaturePK=@AssetManagementID  
 
 	--Getting Files  
-	SELECT * FROM  COM_Files WITH(NOLOCK)   
+	SELECT CONVERT(DATETIME,CreatedDate) CreatedDate,* FROM  COM_Files WITH(NOLOCK)   
 	WHERE FeatureID=72 and  FeaturePK=@AssetManagementID  
 
 	--Extra Fields  
 	SELECT * FROM  ACC_AssetsExtended WITH(NOLOCK)   
 	WHERE AssetID=@AssetManagementID  
+	
 
 	--Getting CostCenterMap  
 	SELECT * FROM COM_CCCCDATA with(nolock)
 	WHERE NodeID = @AssetManagementID AND CostCenterID  = 72  
+
+	
+	Declare @WID INT,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@Type int,@escDays int,@CreatedDate datetime
+		SELECT @StatusID=StatusID,@WID=WorkFlowID,@Level=WorkFlowLevel,@CreatedDate=CONVERT(datetime,createdDate)
+		FROM ACC_Assets WITH(NOLOCK) where AssetID=@AssetManagementID
+		if(@WID is not null and @WID>0)  
+		BEGIN  
+			SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]   WITH(NOLOCK)   
+			where WorkFlowID=@WID and  UserID =@UserID
+
+			if(@Userlevel is null)  
+				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]  WITH(NOLOCK)    
+				where WorkFlowID=@WID and  RoleID =@RoleID
+
+			if(@Userlevel is null)       
+				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
+				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
+				where g.UserID=@UserID and WorkFlowID=@WID
+
+			if(@Userlevel is null)  
+				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
+				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
+				where g.RoleID =@RoleID and WorkFlowID=@WID
+			
+			if(@Userlevel is null )  	
+				SELECT @Type=[type] FROM [COM_WorkFlow] WITH(NOLOCK) where WorkFlowID=@WID
+
+
+		set @canEdit=1  
+       print 'StatusID'
+	   print @StatusID
+	   print '@Level'
+	   print @Level
+	    print  @Userlevel
+		print '@WID'
+		print @WID
+		if(@StatusID =1002)  
+		begin  
+			if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
+			begin  
+				set @canEdit=0   
+			end    
+		end
+		ELSE if(@StatusID=1003)
+		BEGIN
+		    if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
+			begin  
+				set @canEdit=1
+			end
+			ELSE
+				set @canEdit=0
+		END
+			print '@Userlevel'
+		
+		if(@StatusID=1001 or @StatusID=1002)  
+		begin    
+			if(@Userlevel is not null and  @Level is not null and @Userlevel>@level)  
+			begin
+				if(@Type=1 or @Level+1=@Userlevel)
+					set @canApprove=1   
+				ELSE
+				BEGIN
+					if exists(select EscDays FROM [COM_WorkFlow]
+					where workflowid=@WID and ApprovalMandatory=1 and LevelID<@Userlevel and LevelID>@Level)
+						set @canApprove=0
+					ELSE
+					BEGIN	
+						select @escDays=sum(escdays) from (select max(escdays) escdays from [COM_WorkFlow] WITH(NOLOCK) 
+						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
+						group by LevelID) as t
+						 
+						set @CreatedDate=dateadd("d",@escDays,@CreatedDate)
+						
+						select @escDays=sum(escdays) from (select max(eschours) escdays from [COM_WorkFlow] WITH(NOLOCK) 
+						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
+						group by LevelID) as t
+						
+						set @CreatedDate=dateadd("HH",@escDays,@CreatedDate)
+						
+						if (@CreatedDate<getdate())
+							set @canApprove=1   
+						ELSE
+							set @canApprove=0
+					END	
+				END	
+			end   
+			--else if(@Userlevel is not null and  @Level is not null and @Level=@Userlevel and @StatusID=1001)  
+			--begin
+			--	set @canApprove=1  
+			--end
+			else  
+				set @canApprove= 0   
+		end  		
+		else  
+			set @canApprove= 0   
+
+		IF @WID is not null and @WID>0
+		begin
+
+			
+			select @canEdit canEdit,@canApprove canApprove
+
+			SELECT CONVERT(DATETIME, A.CreatedDate) Date,A.WorkFlowLevel,
+			(SELECT TOP 1 LevelName FROM COM_WorkFlow L with(nolock) WHERE L.WorkFlowID=@WID AND L.LevelID=A.WorkFlowLevel) LevelName,
+			A.CreatedBy,A.StatusID,S.Status,A.Remarks,U.FirstName,U.LastName
+			FROM COM_Approvals A with(nolock),COM_Status S with(nolock),ADM_Users U 
+			with(nolock)
+			WHERE A.RowType=1 AND S.StatusID=A.StatusID AND CCID=72
+			AND CCNodeID=@AssetManagementID AND A.USERID=U.USERID
+			ORDER BY A.CreatedDate
+			
+			select @WID WID,levelID,LevelName from COM_WorkFlow with(nolock) 
+			where WorkFlowID=@WID
+			group by levelID,LevelName
+		end
+		
+		end 
       
    
 SET NOCOUNT OFF;    
@@ -233,5 +352,5 @@ BEGIN CATCH
  END    
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH      
+END CATCH
 GO

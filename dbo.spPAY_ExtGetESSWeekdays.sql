@@ -5,9 +5,9 @@ GO
 CREATE PROCEDURE [dbo].[spPAY_ExtGetESSWeekdays]
 	@STARTDATE1 [nvarchar](max),
 	@ToDate1 [nvarchar](max),
-	@EmployeeID [bigint] = 0,
-	@userid [bigint] = 1,
-	@langid [bigint] = 1
+	@EmployeeID [int] = 0,
+	@userid [int] = 1,
+	@langid [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY
@@ -66,15 +66,15 @@ BEGIN
 			BEGIN
 			print @WhereCond
 				SET @WhereCond=@WhereCond+' 
-											AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as CCNID UNION ALL Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+CONVERT(NVARCHAR,@EmployeeID)+') ) '
+											AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN ( Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+CONVERT(NVARCHAR,@EmployeeID)+') )) '
 			END
 			ELSE
 			BEGIN
-				SET @WhereCond=@WhereCond+' AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as HistoryNodeID UNION ALL SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
+				SET @WhereCond=@WhereCond+' AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN ( SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
 											WHERE NodeID IN('+convert(nvarchar,@EmployeeID)+') AND CostCenterID=50051 AND HistoryCCID='+CONVERT(NVARCHAR,@HCCID)+'   
 											AND (CONVERT(DATETIME,FromDate)<=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR 
 												CONVERT(DATETIME,FromDate) BETWEEN CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@STARTDATE)+''') AND CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@ToDate)+''')) 
-											AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL) ) ORDER BY     CONVERT(DATETIME,ID.DUEDATE) DESC '
+											AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL) )) ORDER BY     CONVERT(DATETIME,ID.DUEDATE) DESC '
 									
 			END
 		END
@@ -83,6 +83,7 @@ BEGIN
 	CLOSE CUR
 	DEALLOCATE CUR	
 END
+
 SET @SQL='
 SELECT TOP 1 TD.dcAlpha2 WK11,TD.dcAlpha3 WK12,TD.dcAlpha4 WK21,TD.dcAlpha5 WK22,TD.dcAlpha6 WK31,TD.dcAlpha7 WK32,TD.dcAlpha8 WK41,TD.dcAlpha9 WK42,
 			         TD.dcAlpha10 WK51,TD.dcAlpha11 WK52	
@@ -99,7 +100,8 @@ END
 PRINT @SQL
 
 INSERT INTO @EMPWEEKLYOFF
-EXEC (@SQL)		
+EXEC sp_executesql @SQL		
+
 		--select * from @EMPWEEKLYOFF
 		--CHECKING FOR EMPLOYEE WEEKLY OFF COUNT FROM WEEKLYOFF MASTER IF NO DATA FOUND
 		--LOADING DATA FROM EMPLOYEE MASTER
@@ -116,25 +118,25 @@ EXEC (@SQL)
 		IF (SELECT COUNT(*) FROM @EMPWEEKLYOFF)<=0
 		BEGIN
 			INSERT INTO @WEEKLYOFF 
-			SELECT case isnull(VALUE,'') when '' then 0 else 1 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+			SELECT case isnull(VALUE,'') when '' then 0 else 1 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK)  WHERE NAME='WeeklyOff1'
 			UNION ALL
-			SELECT case isnull(VALUE,'') when '' then 0 else 1 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'
+			SELECT case isnull(VALUE,'') when '' then 0 else 1 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'
 			UNION ALL
-			SELECT case isnull(VALUE,'') when '' then 0 else 2 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+			SELECT case isnull(VALUE,'') when '' then 0 else 2 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff1'
 			UNION ALL
-			SELECT case isnull(VALUE,'') when '' then 0 else 2 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'					  
+			SELECT case isnull(VALUE,'') when '' then 0 else 2 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'					  
 			UNION ALL
-			SELECT case isnull(VALUE,'') when '' then 0 else 3 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+			SELECT case isnull(VALUE,'') when '' then 0 else 3 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff1'
 			UNION ALL
-			SELECT case isnull(VALUE,'') when '' then 0 else 3 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'					  
+			SELECT case isnull(VALUE,'') when '' then 0 else 3 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'					  
 			UNION ALL
-			SELECT case isnull(VALUE,'') when '' then 0 else 4 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+			SELECT case isnull(VALUE,'') when '' then 0 else 4 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff1'
 			UNION ALL
-			SELECT case isnull(VALUE,'') when '' then 0 else 4 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'					  
+			SELECT case isnull(VALUE,'') when '' then 0 else 4 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'					  
 			UNION ALL
-			SELECT case isnull(VALUE,'') when '' then 0 else 5 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+			SELECT case isnull(VALUE,'') when '' then 0 else 5 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff1'
 			UNION ALL
-			SELECT case isnull(VALUE,'') when '' then 0 else 5 end,VALUE	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'		
+			SELECT case isnull(VALUE,'') when '' then 0 else 5 end,VALUE	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'		
 		END
 		--LOADING WEEKNO AND DAYNAME INTO ROWS FROM @EMPWEEKLYOFF TABLE (WEEKLYOFF AND EMPLOYEE MASTER)
 		IF (SELECT COUNT(*) FROM @WEEKLYOFF)<=0
@@ -161,7 +163,7 @@ EXEC (@SQL)
 				select case isnull(WK52,'') when '' then 0 else 5 end,case isnull(WK52,'') when '' then '' else WK52 end FROM @EMPWEEKLYOFF
 		END
 		--START : LOADING WEEKDATE,DAYNAME AND WEEKNO FOR SELECTED DATERANGE
-		DECLARE @WEEKOFFCOUNT TABLE (ID BIGINT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,ISVALIDDAY INT,REMARKS VARCHAR(1000))
+		DECLARE @WEEKOFFCOUNT TABLE (ID INT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,ISVALIDDAY INT,REMARKS VARCHAR(1000))
 		
 			;WITH DATERANGE AS
 			(
@@ -209,16 +211,16 @@ BEGIN
 			IF(@CCType='')
 			BEGIN
 				SET @WhereCond=@WhereCond+' 
-											AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as CCNID UNION ALL Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+@EmployeeID+')) '
+											AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+CONVERT(NVARCHAR,@EmployeeID)+'))) '
 			END
 			ELSE
 			BEGIN
 				SET @WhereCond=@WhereCond+' 
-											AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as HistoryNodeID UNION ALL SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
+											AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
 											WHERE NodeID IN('+convert(nvarchar,@EmployeeID)+') AND CostCenterID=50051 AND HistoryCCID='+CONVERT(NVARCHAR,@HCCID)+'   
 											AND (CONVERT(DATETIME,FromDate)<=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR 
 												CONVERT(DATETIME,FromDate) BETWEEN CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@STARTDATE)+''') AND CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@ToDate)+''')) 
-											AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL) ) '
+											AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL) )) '
 			END
 		END
 	FETCH NEXT FROM CUR INTO @HCCID
@@ -242,7 +244,7 @@ PRINT @SQL
 
 Declare @TEmp table (ID int Identity(1,1),WEEKDATE Nvarchar(max),Remarks nvarchar(max))
 insert into @TEmp
-exec(@SQL)
+EXEC sp_executesql @SQL
 
 insert into @WEEKOFFCOUNT 
 select ID,convert(datetime,WEEKDATE),DATENAME(DW,WEEKDATE) as day,((datepart(day,WEEKDATE)-1)/7)+1,2,Remarks from @TEmp  
@@ -265,5 +267,6 @@ BEGIN CATCH
 SET NOCOUNT OFF    
 RETURN -999     
 END CATCH
+
 
 GO

@@ -13,12 +13,12 @@ BEGIN TRANSACTION
 BEGIN TRY      
 SET NOCOUNT ON;    
 	--Declaration Section    
-	DECLARE @HasAccess bit,@DocID BIGINT,@PrefValue NVARCHAR(500)
-	DECLARE @sql nvarchar(max),@tablename nvarchar(200),@CurrentNo bigint,@return_value int
-	declare @AccDocID bigint,@DELETECCID BIGINT    
+	DECLARE @HasAccess bit,@DocID INT,@PrefValue NVARCHAR(500)
+	DECLARE @sql nvarchar(max),@tablename nvarchar(200),@CurrentNo INT,@return_value int
+	declare @AccDocID INT,@DELETECCID INT    
 
   
-	DECLARE @CostCenterID INT,@I INT,@CNT INT,@Dimesion bigint,@VoucherNo NVARCHAR(80),@J INT,@JCNT INT,@NodeID bigint
+	DECLARE @CostCenterID INT,@I INT,@CNT INT,@Dimesion INT,@VoucherNo NVARCHAR(80),@J INT,@JCNT INT,@NodeID INT
 	DECLARE @TblLink As TABLE(ID INT IDENTITY(1,1),CostCenterID INT,LinkDimension INT)
 	DECLARE @TblLinkData As TABLE(ID INT IDENTITY(1,1),VoucherNo NVARCHAR(50))
 	
@@ -37,12 +37,12 @@ SET NOCOUNT ON;
 		select @tablename=tablename from ADM_Features with(nolock) where FeatureID=@CostCenterID
 		
 		INSERT INTO @TblLinkData
-		select VoucherNo FROM INV_DocDetails WHERE CostCenterID=@CostCenterID GROUP BY VoucherNo
+		select VoucherNo FROM INV_DocDetails with(nolock) WHERE CostCenterID=@CostCenterID GROUP BY VoucherNo
 		
 		--select * from @TblLinkData
 		
-		SET @sql='UPDATE COM_DocCCData SET dcCCNID'+CONVERT(NVARCHAR,(@Dimesion-50000))+'=1'
-		EXEC(@sql)
+		SET @sql='UPDATE a SET dcCCNID'+CONVERT(NVARCHAR,(@Dimesion-50000))+'=1 FROM COM_DocCCData a WITH(NOLOCK) '
+		EXEC sp_executesql @sql
 		
 		select @tablename=tablename from ADM_Features with(nolock) where FeatureID=@Dimesion
 		
@@ -54,7 +54,7 @@ SET NOCOUNT ON;
 			set @sql='select @NodeID=NodeID from '+@tablename+' with(nolock) where Name='''+@VoucherNo+''''
 			--print(@sql)
 			SET @NodeID=NULL
-			EXEC sp_executesql @sql,N'@NodeID bigint OUTPUT',@NodeID output			 
+			EXEC sp_executesql @sql,N'@NodeID INT OUTPUT',@NodeID output			 
 			--select @Dimesion,@NodeID
 			--select @VoucherNo
 			if(@NodeID IS NOT NULL AND @NodeID>1)
@@ -74,50 +74,69 @@ SET NOCOUNT ON;
 		set @I=@I+1
 	end
 	
-	DELETE FROM COM_Notes WHERE FeatureID between 40000 and 50000
-	DELETE FROM COM_Files WHERE FeatureID between 40000 and 50000
-	DELETE FROM CRM_Activities WHERE CostCenterID between 40000 and 50000
+	DELETE a FROM COM_Notes a WITH(NOLOCK) WHERE FeatureID between 40000 and 50000
+	DELETE a FROM COM_Files a WITH(NOLOCK) WHERE FeatureID between 40000 and 50000
 	
-	--select * from COM_Address_History
-	TRUNCATE TABLE COM_DocAddressData
-	TRUNCATE TABLE COM_LCBills
-	TRUNCATE TABLE COM_DocDenominations
-	TRUNCATE TABLE COM_ChequeReturn
-	TRUNCATE TABLE REN_ContractDocMapping
+	if exists (select * from sys.tables with(nolock) where name='CRM_Activities')
+	begin
+		SET @sql='DELETE a FROM CRM_Activities a WITH(NOLOCK) WHERE CostCenterID between 40000 and 50000' 
+		EXEC sp_executesql @sql
+	end
 	
-	--select * from ACC_ChequeBooks
-	--select * from ACC_ChequeCancelled
-	--select * from COM_ChequeReturn
-	--select * from REN_ContractDocMapping
+	--TRUNCATE TABLE COM_DocAddressData
+	--TRUNCATE TABLE COM_LCBills
+	--TRUNCATE TABLE COM_DocDenominations
+	--TRUNCATE TABLE COM_ChequeReturn
 
+	exec sp_MSforeachtable
+	@command1='TRUNCATE TABLE ?',
+	@whereand=' and object_id IN(Select object_Id from sys.Tables where Name IN(
+	''COM_DocAddressData'',''COM_LCBills'',''COM_DocDenominations'',''COM_ChequeReturn'',''REN_ContractDocMapping''))'
+
+
+	--if exists (select * from sys.tables with(nolock) where name='REN_ContractDocMapping')
+	--begin
+	--	SET @sql='TRUNCATE TABLE REN_ContractDocMapping' 
+	--	EXEC sp_executesql @sql
+	--end
+	
 	--CASE DELETE
-	declare @Tblcase table(ID int identity(1,1),CaseID BIGINT)
-	INSERT INTO @Tblcase(CaseID)
-	select CaseID FROM CRM_Cases with(nolock) where SvcContractID IS NOT NULL AND SvcContractID>0
-	select @I=MIN(ID),@CNT=MAX(ID) FROM @Tblcase
-	WHILE(@I<=@CNT)
-	BEGIN
-		SELECT @NodeID=CaseID FROM @Tblcase WHERE ID=@I
-		exec spCRM_DeleteCase @CASEID=@NodeID,@USERID=1,@LangID=@LangID,@RoleID=@RoleID
-		SET @I=@I+1
-	END
-
+	if exists (select * from sys.tables with(nolock) where name='CRM_Cases')
+	begin
+		SET @sql='declare @Tblcase table(ID int identity(1,1),CaseID INT)
+		INSERT INTO @Tblcase(CaseID)
+		select CaseID FROM CRM_Cases with(nolock) where SvcContractID IS NOT NULL AND SvcContractID>0
+		declare @I int,@CNT int,@NodeID int
+		select @I=1,@CNT=count(*) FROM @Tblcase
+		WHILE(@I<=@CNT)
+		BEGIN
+			SELECT @NodeID=CaseID FROM @Tblcase WHERE ID=@I
+			exec spCRM_DeleteCase @CASEID=@NodeID,@USERID=1,@LangID=1,@RoleID=1
+			SET @I=@I+1
+		END'
+		EXEC sp_executesql @sql
+	end
+	
 	if (@DeletePrefix is not null and @DeletePrefix=1)	
 	BEGIN
-		update COM_CostCenterCodeDef 
+		update a 
 		set CurrentCodeNumber= (case when CodeNumberRoot>0 then CodeNumberRoot-1 else 0 end)
+		FROM COM_CostCenterCodeDef  a WITH(NOLOCK)
 		where CostCenterID between 40000 and 50000
 		
-		delete from COM_CostCenterCodeDef
+		delete a 
+		from COM_CostCenterCodeDef a WITH(NOLOCK)
 		where CostCenterID between 40000 and 50000 and codeprefix<>''
 	END
 	
+	/*
+
 	TRUNCATE TABLE COM_DocCCData
 	TRUNCATE TABLE COM_DocNumData
 	if exists(select * from sys.tables where name='PAY_DocNumData')
 	BEGIN
 		set @sql=' TRUNCATE TABLE PAY_DocNumData '
-		exec(@sql)
+		EXEC sp_executesql @sql
 	END	
 	TRUNCATE TABLE COM_DocTextData
 	TRUNCATE TABLE COM_DocPayTerms
@@ -126,8 +145,10 @@ SET NOCOUNT ON;
 	TRUNCATE TABLE INV_SerialStockProduct
 	DELETE FROM INV_BatchDetails WHERE InvDocDetailsID>0
 	TRUNCATE TABLE INV_TempInfo  
-	
-	TRUNCATE TABLE COM_Billwise 
+	TRUNCATE TABLE INV_BinDetails   
+	TRUNCATE TABLE INV_DocExtraDetails  
+	TRUNCATE TABLE COM_Billwise
+	TRUNCATE TABLE COM_BillWiseNonAcc  
 
 
 	--AUDTI DATA
@@ -152,7 +173,19 @@ SET NOCOUNT ON;
 	
 	DELETE FROM INV_DocDetails
 	--TRUNCATE TABLE INV_DocDetails 
-		
+
+	*/
+
+	exec sp_MSforeachtable
+	@command1='TRUNCATE TABLE ?',
+	@whereand=' and object_id IN(Select object_Id from sys.Tables where Name IN(
+	''COM_DocCCData'',''COM_DocNumData'',''PAY_DocNumData'',''COM_DocTextData'',''COM_DocPayTerms''
+	,''COM_Approvals'',''com_pospaymodes'',''INV_SerialStockProduct'',''INV_TempInfo'',''INV_BinDetails'',''INV_DocExtraDetails'',''COM_Billwise'',''COM_BillWiseNonAcc''
+	,''ACC_DocDetails_History_ATUser'',''INV_DocDetails_History_ATUser'',''COM_DocCCData_History'',''COM_DocNumData_History''
+	,''COM_DocTextData_History'',''ACC_DocDetails_History'',''INV_DocDetails_History'',''COM_BillwiseHistory''
+	,''COM_DocID'',''ACC_DocDetails'',''INV_DocDetails''))'
+
+	DELETE a FROM INV_BatchDetails a WITH(NOLOCK) WHERE InvDocDetailsID>0
 		 
 COMMIT TRANSACTION
 --ROLLBACK TRANSACTION

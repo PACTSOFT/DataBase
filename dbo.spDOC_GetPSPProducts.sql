@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetPSPProducts]
 	@mode [int],
-	@DocID [bigint],
+	@DocID [int],
 	@QohWhere [nvarchar](max),
 	@CntFld [nvarchar](max),
 	@DocDate [datetime],
@@ -32,7 +32,7 @@ SET NOCOUNT ON;
 		
 		if(@StkCodeFld<>'')
 		BEGIN
-			create table #tabPSPSTK(invid bigint,PrdID bigint,BatID BIGINT,DID BIGINT,StkCode bigint)
+			create table #tabPSPSTK(invid INT,PrdID INT,BatID INT,DID INT,StkCode INT)
 	
 			set @Sql='select d.invdocdetailsid,ProductID,BatchID,docid,'+@StkCodeFld+'
 			from inv_docdetails D WITH(NOLOCK)
@@ -49,7 +49,7 @@ SET NOCOUNT ON;
 			WHERE D.ProductID=b.ProductID and DocDate<='+CONVERT(char,convert(float,@DocDate),2)+'
 			and D.StatusID=369 AND IsQtyIgnored=0 '+@QohWhere+' and DCC.'+@StkCodeFld+'=a.StkCode and (VoucherType=1 or VoucherType=-1)),0) QOH 
 			,a.StkCode,stk.Code
-			from #tabPSPSTK a
+			from #tabPSPSTK a WITH(NOLOCK)
 			join inv_docdetails b WITH(NOLOCK) on a.invid=b.invdocdetailsid
 			join '+@StkCodeTbl+' stk WITH(NOLOCK) on a.StkCode=stk.Nodeid '
 			
@@ -70,9 +70,9 @@ SET NOCOUNT ON;
 			from '+@StkCodeTbl+' stk WITH(NOLOCK)
 			join inv_product a WITH(NOLOCK) on stk.ProductID=a.ProductID
 			join com_UOM u WITH(NOLOCK) on u.UOMID=a.UOMID
-			left join #tabPSPSTK b on stk.Nodeid=b.StkCode
+			left join #tabPSPSTK b WITH(NOLOCK) on stk.Nodeid=b.StkCode
 			where a.ProductID>0 and b.StkCode is null and stk.isgroup=0) as t
-			where t.QOH>0'
+			where round(t.QOH,2)>0'
 			print @Sql
 			exec(@Sql)
 			
@@ -80,7 +80,7 @@ SET NOCOUNT ON;
 		ELSE
 		BEGIN
 		
-			create table #tabPSP(invid bigint,PrdID bigint,BatID BIGINT,DID BIGINT)
+			create table #tabPSP(invid INT,PrdID INT,BatID INT,DID INT)
 			set @Sql='select d.invdocdetailsid,ProductID,BatchID,docid
 			from inv_docdetails D WITH(NOLOCK)
 			INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.InvDocDetailsID=D.InvDocDetailsID   
@@ -96,7 +96,7 @@ SET NOCOUNT ON;
 			WHERE D.ProductID=b.ProductID and DocDate<='+CONVERT(char,convert(float,@DocDate),2)+'
 			and D.StatusID=369 AND IsQtyIgnored=0 '+@QohWhere+' and (VoucherType=1 or VoucherType=-1)),0) QOH 
 
-			from #tabPSP a
+			from #tabPSP a WITH(NOLOCK)
 			join inv_docdetails b WITH(NOLOCK) on a.invid=b.invdocdetailsid'
 			
 			if(@CntFld like 'dcnum%')
@@ -115,9 +115,9 @@ SET NOCOUNT ON;
 			
 			from inv_product a WITH(NOLOCK)
 			join com_UOM u WITH(NOLOCK) on u.UOMID=a.UOMID
-			left join #tabPSP b on a.ProductID=b.PrdID
+			left join #tabPSP b WITH(NOLOCK) on a.ProductID=b.PrdID
 			where a.ProductID>0 and b.PrdID is null and isgroup=0) as t
-			where t.QOH>0'
+			where round(t.QOH,2)>0'
 			print @Sql
 			exec(@Sql)
 		END	
@@ -140,5 +140,4 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
-	
 GO

@@ -16,6 +16,8 @@ CREATE PROCEDURE [dbo].[spADM_DefineCostCenterListView]
 	@ListViewDelaytime [int],
 	@SearchOldValue [bit],
 	@IgnoreSpecial [int],
+	@IgnoreUserWise [bit],
+	@FilterQOH [bit],
 	@GUID [varchar](50),
 	@CompanyGUID [varchar](50),
 	@UserName [nvarchar](50),
@@ -28,7 +30,7 @@ BEGIN TRANSACTION
 BEGIN TRY  
 SET NOCOUNT ON;
 	--Declaration Section
-	DECLARE @TempGuid nvarchar(50),@HasAccess bit,@ListViewID BIGINT
+	DECLARE @TempGuid nvarchar(50),@HasAccess bit,@ListViewID INT
 	DECLARE @Dt float,@XML xml
 
 	--SP Required Parameters Check
@@ -73,7 +75,7 @@ SET NOCOUNT ON;
 				   ,SearchOption
 				   	,ListViewPageSize
 					,ListViewDelaytime
-				   ,SearchOldValue,IgnoreSpecial
+				   ,SearchOldValue,IgnoreUserWise,FilterQOH,IgnoreSpecial
 				   ,GroupSearchFilter
 				   ,GroupFilterXML)
 			 VALUES
@@ -93,7 +95,7 @@ SET NOCOUNT ON;
 				   ,@SearchOption
 				   ,@ListViewPageSize
 				   ,@ListViewDelaytime
-				   ,@SearchOldValue,@IgnoreSpecial
+				   ,@SearchOldValue,@IgnoreUserWise,@FilterQOH,@IgnoreSpecial
 				   ,@GroupSearchFilter
 				   ,@GroupFilterXML)
 
@@ -124,6 +126,8 @@ SET NOCOUNT ON;
 		,ListViewName=@ListViewName
 		,SearchOption=@SearchOption
 		,SearchOldValue=@SearchOldValue
+		,IgnoreUserWise=@IgnoreUserWise
+		,FilterQOH=@FilterQOH
 		,ListViewPageSize=@ListViewPageSize
 		,ListViewDelaytime=@ListViewDelaytime
 		,IgnoreSpecial=@IgnoreSpecial
@@ -158,7 +162,7 @@ SET NOCOUNT ON;
 		   ,@UserName,convert(float,getdate())
 		   ,X.value('@ColumnType','int')
 		   ,X.value('@IsParent','BIT') ,X.value('@IsCode','BIT')
-		   ,X.value('@SearchColID','bigint')
+		   ,X.value('@SearchColID','INT')
 		   ,X.value('@SearchColName','nvarchar(max)')
 	from @XML.nodes('/XML/Row') as Data(X)
 
@@ -184,17 +188,4 @@ BEGIN CATCH
 	SET NOCOUNT OFF  
 	RETURN -999   
 END CATCH
-
-
-
-
-
-
-
-
-
-
-
-
-
 GO

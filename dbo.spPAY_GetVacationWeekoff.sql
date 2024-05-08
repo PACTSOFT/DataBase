@@ -99,15 +99,15 @@ BEGIN
 				BEGIN
 				print @WhereCond
 					SET @WhereCond=@WhereCond+' 
-												AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as CCNID UNION ALL Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+CONVERT(NVARCHAR,@EmployeeID)+') ) '
+												AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN ( Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+CONVERT(NVARCHAR,@EmployeeID)+') )) '
 				END
 				ELSE
 				BEGIN
-					SET @WhereCond=@WhereCond+' AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as HistoryNodeID UNION ALL SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
+					SET @WhereCond=@WhereCond+' AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN ( SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
 												WHERE NodeID IN('+convert(nvarchar,@EmployeeID)+') AND CostCenterID=50051 AND HistoryCCID='+CONVERT(NVARCHAR,@HCCID)+'   
 												AND (CONVERT(DATETIME,FromDate)<=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR 
 													CONVERT(DATETIME,FromDate) BETWEEN CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') AND CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')) 
-												AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL) ) '
+												AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL) )) '
 									
 				END
 			END
@@ -164,7 +164,7 @@ BEGIN
 		SET @SQL=@SQL+ @WhereCond
 	END
 	SET @SQL=@SQL+' ORDER BY     CONVERT(DATETIME,ID.DUEDATE) DESC'
-	--PRINT @SQL
+	PRINT @SQL
 		
 	EXEC sp_executesql @SQL
 
@@ -175,7 +175,7 @@ BEGIN
 
 			--CHECKING FOR EMPLOYEE WEEKLY OFF COUNT FROM WEEKLYOFF MASTER IF NO DATA FOUND
 			--LOADING DATA FROM EMPLOYEE MASTER
-			IF (SELECT COUNT(*) FROM #EMPWEEKLYOFF)<=0
+			IF (SELECT COUNT(*) FROM #EMPWEEKLYOFF WITH(NOLOCK))<=0
 			BEGIN
 				INSERT INTO #EMPWEEKLYOFF 
 				SELECT WeeklyOff1,WeeklyOff2,WeeklyOff1,WeeklyOff2,WeeklyOff1,WeeklyOff2,WeeklyOff1,WeeklyOff2,
@@ -202,9 +202,9 @@ BEGIN
 			END
 			ELSE
 			BEGIN
-				INSERT INTO #EMPWEEKLYOFF1  SELECT * FROM #EMPWEEKLYOFF
+				INSERT INTO #EMPWEEKLYOFF1  SELECT * FROM #EMPWEEKLYOFF WITH(NOLOCK)
 				--SET NULL
-				IF (SELECT COUNT(*) FROM #EMPWEEKLYOFF1)>0
+				IF (SELECT COUNT(*) FROM #EMPWEEKLYOFF1 WITH(NOLOCK))>0
 				BEGIN
 					SET @I=1
 					SET @STRQUERY=''
@@ -224,7 +224,7 @@ BEGIN
 					EXEC sp_executesql @STRQUERY
 				END
 				--EMPLOYEE MASTER
-				IF((SELECT COUNT(*) FROM COM_CC50051 WHERE NODEID=@EmployeeID AND (ISNULL(WeeklyOff1,'')<>'' AND ISNULL(WeeklyOff1,'None')<>'None') AND (ISNULL(WeeklyOff2,'')<>'' AND ISNULL(WeeklyOff2,'None')<>'None'))>0)
+				IF((SELECT COUNT(*) FROM COM_CC50051 WITH(NOLOCK) WHERE NODEID=@EmployeeID AND (ISNULL(WeeklyOff1,'')<>'' AND ISNULL(WeeklyOff1,'None')<>'None') AND (ISNULL(WeeklyOff2,'')<>'' AND ISNULL(WeeklyOff2,'None')<>'None'))>0)
 				BEGIN
 					SET @I=1
 					SET @STRQUERY=''
@@ -266,77 +266,77 @@ BEGIN
 			--CHECKING FOR EMPLOYEE WEEKLY OFF COUNT FROM EMPLOYEE MASTER IF NO DATA FOUND
 			--LOADING DATA FROM PREFERENCES
 			DECLARE @FROMWEEKOFDEF BIT
-			IF (SELECT COUNT(*) FROM #EMPWEEKLYOFF)<=0
+			IF (SELECT COUNT(*) FROM #EMPWEEKLYOFF WITH(NOLOCK))<=0
 			BEGIN
 				INSERT INTO #WEEKLYOFF 
-				SELECT case isnull(VALUE,'') when '' then 0 else 1 end,VALUE, 0, null,'01-01-1900' FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+				SELECT case isnull(VALUE,'') when '' then 0 else 1 end,VALUE, 0, null,'01-01-1900' FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff1'
 				UNION ALL
-				SELECT case isnull(VALUE,'') when '' then 0 else 1 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'
+				SELECT case isnull(VALUE,'') when '' then 0 else 1 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'
 				UNION ALL
-				SELECT case isnull(VALUE,'') when '' then 0 else 2 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+				SELECT case isnull(VALUE,'') when '' then 0 else 2 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff1'
 				UNION ALL
-				SELECT case isnull(VALUE,'') when '' then 0 else 2 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'					  
+				SELECT case isnull(VALUE,'') when '' then 0 else 2 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'					  
 				UNION ALL
-				SELECT case isnull(VALUE,'') when '' then 0 else 3 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+				SELECT case isnull(VALUE,'') when '' then 0 else 3 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff1'
 				UNION ALL
-				SELECT case isnull(VALUE,'') when '' then 0 else 3 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'					  
+				SELECT case isnull(VALUE,'') when '' then 0 else 3 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'					  
 				UNION ALL
-				SELECT case isnull(VALUE,'') when '' then 0 else 4 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+				SELECT case isnull(VALUE,'') when '' then 0 else 4 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff1'
 				UNION ALL
-				SELECT case isnull(VALUE,'') when '' then 0 else 4 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'					  
+				SELECT case isnull(VALUE,'') when '' then 0 else 4 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'					  
 				UNION ALL
-				SELECT case isnull(VALUE,'') when '' then 0 else 5 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff1'
+				SELECT case isnull(VALUE,'') when '' then 0 else 5 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff1'
 				UNION ALL
-				SELECT case isnull(VALUE,'') when '' then 0 else 5 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences  WHERE NAME='WeeklyOff2'		
+				SELECT case isnull(VALUE,'') when '' then 0 else 5 end,VALUE, 0, null,'01-01-1900'	FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='WeeklyOff2'		
 			END
 						
 			--LOADING WEEKNO AND DAYNAME INTO ROWS FROM #EMPWEEKLYOFF TABLE (WEEKLYOFF AND EMPLOYEE MASTER)
-			IF (SELECT COUNT(*) FROM #WEEKLYOFF)<=0
+			IF (SELECT COUNT(*) FROM #WEEKLYOFF WITH(NOLOCK))<=0
 			BEGIN
 				INSERT INTO #WEEKLYOFF
-					select case isnull(WK11,'') when '' then 0 else 1 end,case isnull(WK11,'') when '' then '' else WK11 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK11,'') when '' then 0 else 1 end,case isnull(WK11,'') when '' then '' else WK11 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK12,'') when '' then 0 else 1 end,case isnull(WK12,'') when '' then '' else WK12 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK12,'') when '' then 0 else 1 end,case isnull(WK12,'') when '' then '' else WK12 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF  WITH(NOLOCK)
 				UNION ALL
-					select case isnull(WK21,'') when '' then 0 else 2 end,case isnull(WK21,'') when '' then '' else WK21 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK21,'') when '' then 0 else 2 end,case isnull(WK21,'') when '' then '' else WK21 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF WITH(NOLOCK)
 				UNION ALL
-					select case isnull(WK22,'') when '' then 0 else 2 end,case isnull(WK22,'') when '' then '' else WK22 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK22,'') when '' then 0 else 2 end,case isnull(WK22,'') when '' then '' else WK22 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK31,'') when '' then 0 else 3 end,case isnull(WK31,'') when '' then '' else WK31 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK31,'') when '' then 0 else 3 end,case isnull(WK31,'') when '' then '' else WK31 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF  WITH(NOLOCK)
 				UNION ALL
-					select case isnull(WK32,'') when '' then 0 else 3 end,case isnull(WK32,'') when '' then '' else WK32 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK32,'') when '' then 0 else 3 end,case isnull(WK32,'') when '' then '' else WK32 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK41,'') when '' then 0 else 4 end,case isnull(WK41,'') when '' then '' else WK41 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK41,'') when '' then 0 else 4 end,case isnull(WK41,'') when '' then '' else WK41 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF  WITH(NOLOCK)
 				UNION ALL
-					select case isnull(WK42,'') when '' then 0 else 4 end,case isnull(WK42,'') when '' then '' else WK42 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK42,'') when '' then 0 else 4 end,case isnull(WK42,'') when '' then '' else WK42 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK51,'') when '' then 0 else 5 end,case isnull(WK51,'') when '' then '' else WK51 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK51,'') when '' then 0 else 5 end,case isnull(WK51,'') when '' then '' else WK51 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK52,'') when '' then 0 else 5 end,case isnull(WK52,'') when '' then '' else WK52 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF 
+					select case isnull(WK52,'') when '' then 0 else 5 end,case isnull(WK52,'') when '' then '' else WK52 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF WITH(NOLOCK) 
 			END
-			IF((SELECT COUNT(*) FROM #EMPWEEKLYOFF1)>0)
+			IF((SELECT COUNT(*) FROM #EMPWEEKLYOFF1 WITH(NOLOCK))>0)
 			BEGIN	
 			SET @FROMWEEKOFDEF=1
 				INSERT INTO #WEEKLYOFF1
-					select case isnull(WK11,'') when '' then 0 else 1 end,case isnull(WK11,'') when '' then '' else WK11 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 
+					select case isnull(WK11,'') when '' then 0 else 1 end,case isnull(WK11,'') when '' then '' else WK11 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK12,'') when '' then 0 else 1 end,case isnull(WK12,'') when '' then '' else WK12 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1
+					select case isnull(WK12,'') when '' then 0 else 1 end,case isnull(WK12,'') when '' then '' else WK12 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK)
 				UNION ALL
-					select case isnull(WK21,'') when '' then 0 else 2 end,case isnull(WK21,'') when '' then '' else WK21 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 
+					select case isnull(WK21,'') when '' then 0 else 2 end,case isnull(WK21,'') when '' then '' else WK21 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK22,'') when '' then 0 else 2 end,case isnull(WK22,'') when '' then '' else WK22 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 
+					select case isnull(WK22,'') when '' then 0 else 2 end,case isnull(WK22,'') when '' then '' else WK22 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK31,'') when '' then 0 else 3 end,case isnull(WK31,'') when '' then '' else WK31 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 
+					select case isnull(WK31,'') when '' then 0 else 3 end,case isnull(WK31,'') when '' then '' else WK31 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK32,'') when '' then 0 else 3 end,case isnull(WK32,'') when '' then '' else WK32 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 
+					select case isnull(WK32,'') when '' then 0 else 3 end,case isnull(WK32,'') when '' then '' else WK32 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK41,'') when '' then 0 else 4 end,case isnull(WK41,'') when '' then '' else WK41 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 
+					select case isnull(WK41,'') when '' then 0 else 4 end,case isnull(WK41,'') when '' then '' else WK41 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK42,'') when '' then 0 else 4 end,case isnull(WK42,'') when '' then '' else WK42 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 
+					select case isnull(WK42,'') when '' then 0 else 4 end,case isnull(WK42,'') when '' then '' else WK42 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK51,'') when '' then 0 else 5 end,case isnull(WK51,'') when '' then '' else WK51 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 
+					select case isnull(WK51,'') when '' then 0 else 5 end,case isnull(WK51,'') when '' then '' else WK51 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK) 
 				UNION ALL
-					select case isnull(WK52,'') when '' then 0 else 5 end,case isnull(WK52,'') when '' then '' else WK52 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 
+					select case isnull(WK52,'') when '' then 0 else 5 end,case isnull(WK52,'') when '' then '' else WK52 end, 0, null,convert(Datetime,WEFDATE) FROM #EMPWEEKLYOFF1 WITH(NOLOCK) 
 			END
 			--LOADING WEEKDATE,DAYNAME AND WEEKNO FOR SELECTED DATERANGE
 			CREATE TABLE #WEEKOFFCOUNT (ID INT ,WEEKDATE DateTime,DAYNAME Varchar(50),WEEKNO Int,COUNT Int,WEEKNOMANUAL Int)
@@ -364,14 +364,14 @@ BEGIN
 			--UPDATE #WEEKOFFCOUNT SET WEEKNO=((datepart(day,WEEKDATE)-1)/7)+1
 			--------------------
 							declare @PMS int,@PME int
-							select @PMS=Value From ADM_GlobalPreferences where name='PayDayStart'
-							select @PME=Value From ADM_GlobalPreferences where name='PayDayEnd'
+							select @PMS=Value From ADM_GlobalPreferences WITH(NOLOCK) where name='PayDayStart'
+							select @PME=Value From ADM_GlobalPreferences WITH(NOLOCK) where name='PayDayEnd'
 
 							declare @PS INT,@PE INT
 							declare @wd datetime,@TSwd datetime,@TEwd datetime,@dme datetime
 							declare @wno int
 							set @wno=0
-							select @TSwd=MIN(Weekdate),@TEwd=MAX(Weekdate) FROM #WEEKOFFCOUNT
+							select @TSwd=MIN(Weekdate),@TEwd=MAX(Weekdate) FROM #WEEKOFFCOUNT WITH(NOLOCK)
 							--SET @TSwd='01-Nov-2019' SET @TEwd='01-Dec-2019'
 							WHILE(@TSwd<=@TEwd)
 							BEGIN
@@ -426,8 +426,8 @@ BEGIN
 			IF(@FROMWEEKOFDEF=1)
 			BEGIN
 				SET @SQL=''
-				SET @SQL='UPDATE WEEKOFFCOUNT SET WEEKOFFCOUNT.count=1 FROM #WEEKOFFCOUNT WEEKOFFCOUNT 
-				inner join #WEEKLYOFF WEEKLYOFF on WEEKLYOFF.WEEKLYWEEKOFFNO=WEEKOFFCOUNT.WEEKNO  
+				SET @SQL='UPDATE WEEKOFFCOUNT SET WEEKOFFCOUNT.count=1 FROM #WEEKOFFCOUNT WEEKOFFCOUNT  WITH(NOLOCK)
+				inner join #WEEKLYOFF WEEKLYOFF WITH(NOLOCK) on WEEKLYOFF.WEEKLYWEEKOFFNO=WEEKOFFCOUNT.WEEKNO  
 				AND upper(WEEKLYOFF.DAYNAME)=upper(WEEKOFFCOUNT.DAYNAME) 
 				AND WeekDate Between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@FromDate)+''') AND CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@ToDate)+''') AND WEEKLYOFF.WEFDate=(
 				SELECT TOP 1  CONVERT(DATETIME,ID.DUEDATE)
@@ -446,12 +446,12 @@ BEGIN
 			END
 			ELSE
 			BEGIN
-				UPDATE WEEKOFFCOUNT SET WEEKOFFCOUNT.count=1 FROM #WEEKOFFCOUNT WEEKOFFCOUNT inner join #WEEKLYOFF WEEKLYOFF on WEEKLYOFF.WEEKLYWEEKOFFNO=WEEKOFFCOUNT.WEEKNO  AND upper(WEEKLYOFF.DAYNAME)=upper(WEEKOFFCOUNT.DAYNAME) 
+				UPDATE WEEKOFFCOUNT SET WEEKOFFCOUNT.count=1 FROM #WEEKOFFCOUNT WEEKOFFCOUNT WITH(NOLOCK) inner join #WEEKLYOFF WEEKLYOFF WITH(NOLOCK) on WEEKLYOFF.WEEKLYWEEKOFFNO=WEEKOFFCOUNT.WEEKNO  AND upper(WEEKLYOFF.DAYNAME)=upper(WEEKOFFCOUNT.DAYNAME) 
 			END
 				----------------------- 
 	--END WEEKLYOFF COUNT
 
-	SELECT * FROM #WEEKOFFCOUNT
+	SELECT * FROM #WEEKOFFCOUNT WITH(NOLOCK)
 END
 ELSE IF (ISNULL(@Flag,0)=1)--HOLIDAY
 BEGIN
@@ -495,16 +495,16 @@ BEGIN
 				IF(@CCType='')
 				BEGIN
 					SET @WhereCond=@WhereCond+' 
-												AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as CCNID UNION ALL Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+convert(nvarchar,@EmployeeID)+')) '
+												AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN ( Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+convert(nvarchar,@EmployeeID)+'))) '
 				END
 				ELSE
 				BEGIN
 					SET @WhereCond=@WhereCond+' 
-												AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as HistoryNodeID UNION ALL SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
+												AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN ( SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
 												WHERE NodeID IN('+convert(nvarchar,@EmployeeID)+') AND CostCenterID=50051 AND HistoryCCID='+CONVERT(NVARCHAR,@HCCID)+'   
 												AND (CONVERT(DATETIME,FromDate)<=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR 
 													CONVERT(DATETIME,FromDate) BETWEEN CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') AND CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')) 
-												AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL) ) '
+												AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL)) ) '
 				END
 			END
 		FETCH NEXT FROM CUR INTO @HCCID
@@ -524,8 +524,9 @@ BEGIN
 	BEGIN
 		SET @SQL=@SQL+ @WhereCond
 	END
+	--PRINT @SQL
 	EXEC sp_executesql @SQL
-	SELECT WEEKDATE,Remarks FROM #HOLIDAYCOUNT
+	SELECT WEEKDATE,Remarks FROM #HOLIDAYCOUNT WITH(NOLOCK)
 END
 SET NOCOUNT OFF;
 END

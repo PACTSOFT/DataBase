@@ -3,12 +3,13 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_BulkApprovals]
-	@CostCenterID [bigint],
+	@CostCenterID [int],
 	@isInv [bit],
 	@Remarks [nvarchar](500) = null,
 	@DocInfo [nvarchar](max),
 	@Status [int],
 	@AppRejDate [datetime],
+	@ApprisalXML [nvarchar](max) = null,
 	@UserID [int],
 	@RoleID [int],
 	@UserName [nvarchar](50),
@@ -19,21 +20,21 @@ BEGIN TRANSACTION
 BEGIN TRY      
 SET NOCOUNT ON;    
 
-	DECLARE @RETVALUE INT,@TblName NVARCHAR(50),@DocGUID nvarchar(100) --, @WID bigint, @level int, @maxlevel int, @StatusID int
+	DECLARE @RETVALUE INT,@TblName NVARCHAR(50),@DocGUID nvarchar(100) --, @WID INT, @level int, @maxlevel int, @StatusID int
 	SET @RETVALUE=1 
 		
-	declare @i int, @cnt int, @DocID bigint,@STATUSID int, @oldStatus int, @CompanyGUID nvarchar(50), @level int
+	declare @i int, @cnt int, @DocID INT,@STATUSID int, @oldStatus int, @CompanyGUID nvarchar(50), @level int
 	
-	declare @tbldoc table (id int identity(1,1),DocId bigint,CostCenterID int,IsInv bit)
+	declare @tbldoc table (id int identity(1,1),DocId INT,CostCenterID int,IsInv bit)
 	
-	if(@CostCenterID=2 or @CostCenterID=3 or @CostCenterID>50000)
+	if(@CostCenterID=2 or @CostCenterID=3 or @CostCenterID=92 or @CostCenterID=93 or @CostCenterID=94 or @CostCenterID>50000)
 	begin
 		insert into @tbldoc(DocId)
 		exec  SPSplitString @DocInfo,','
 		
 		declare @sql nvarchar(max),@sqlparm nvarchar(max)
-		set @sqlparm='@STATUSID int output,@DocID bigint'
-		select @sql='select @STATUSID=STATUSID from '+TableName+' with(nolock) where '+PrimaryKey+'=@DocID ' 
+		set @sqlparm='@STATUSID int output,@DocID INT'
+		select @sql='select @STATUSID='+case when @CostCenterID=93 then 'STATUS' else 'STATUSID' end+' from '+TableName+' with(nolock) where '+PrimaryKey+'=@DocID ' 
 		from ADM_Features with(nolock) 
 		where FeatureID=@CostCenterID
 		
@@ -60,7 +61,7 @@ SET NOCOUNT ON;
 			set @i=@i+1
 		end	
 	end
-	else if(@CostCenterID=95)
+	else if(@CostCenterID=95 or @CostCenterID=103 or @CostCenterID=104 or @CostCenterID=129)
 	begin
 		insert into @tbldoc(DocId)
 		exec  SPSplitString @DocInfo,','
@@ -71,7 +72,7 @@ SET NOCOUNT ON;
 			select @DocID=DocId from @tbldoc where id=@i
 			
 			exec [spREN_ApproveContractDocs]  
-			 @COSTCENTERID =95,
+			 @COSTCENTERID =@CostCenterID,
 			 @ContractID =@DocID,
 			 @IsApprove =@Status,
 			 @RejRemarks =@Remarks,
@@ -146,6 +147,31 @@ SET NOCOUNT ON;
 					exec [spDOC_SetStatus]	@STATUSID=@STATUSID,@REMARKS=@Remarks,@DATE=@AppRejDate,@ISINVENTORY=@isInv,@DOCID=@DocID,
 					@COSTCENTERID=@CostCenterID,@WId=0,@isFromDOc=0,@InvDocidS='',@CompanyGUID=@CompanyGUID,@UserName=@UserName,@DocGUID=@DocGUID,
 					@UserID=@UserID,@ROLEID=@RoleID,@LangID=@LangID   
+
+					if(@CostCenterID=40085)
+					BEGIN
+						DECLARE @XML1 XML,@VocNo NVARCHAR(500),@Q NVARCHAR(MAX),@UpdatedStatus int
+						SET @Q=''
+						DECLARE @TEMP TABLE(ID INT IDENTITY(1,1),EMPNODEID INT,VoucherNo NVARCHAR(500),QUERY NVARCHAR(MAX))
+						select @UpdatedStatus=statusid,@VocNo=VoucherNo from inv_docdetails WITH(NOLOCK) where docid=@DocID
+
+						if(@UpdatedStatus=369)
+						BEGIN
+							if(ISNULL(@ApprisalXML,'')<>'')
+							BEGIN
+								SET @XML1=@ApprisalXML
+								INSERT INTO @TEMP
+								SELECT x.value('@EmpNodeID','BIGINT'),x.value('@VoucherNo','NVARCHAR(500)'),x.value('@Query','NVARCHAR(MAX)') FROM @XML1.nodes('/Data/Row') as DATA(x)
+
+								SELECT @Q=QUERY FROM @TEMP WHERE VoucherNo=@VocNo
+								--SELECT @Q
+								EXEC(@Q)
+								DELETE FROM @TEMP
+							END
+						END
+
+
+					END
 				end
 		 
 				set @i=@i+1

@@ -3,15 +3,15 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[SPInsertDocumentatCostCenterDef]
-	@CostCenterId [bigint] = 0,
+	@CostCenterId [int] = 0,
 	@COSTCENTERNAME [nvarchar](300) = NULL,
-	@DocumentType [bigint] = 0,
+	@DocumentType [int] = 0,
 	@UserName [nvarchar](300)
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION
- DECLARE @sec int,@i int,@COUNT int,@TableName nvarchar(300),@ColumnName nvarchar(300),@RESOURCEMAX bigint,@Table varchar(max),@CreatedDt float
-Declare @ISUserDefinedCOl bit,@CCID bigint,@CostCenterColID bigint,@RID bigint,@IsColumnInUse bit
+ DECLARE @sec int,@i int,@COUNT int,@TableName nvarchar(300),@ColumnName nvarchar(300),@RESOURCEMAX INT,@Table varchar(max),@CreatedDt float
+Declare @ISUserDefinedCOl bit,@CCID INT,@CostCenterColID INT,@RID INT,@IsColumnInUse bit
 set @CreatedDt=convert(float,getdate()) 
 
 			set @CCID=(SELECT TOP 1 COSTCENTERID FROM ADM_DOCUMENTTYPES WHERE  DOCUMENTTYPE=@DocumentType)
@@ -77,6 +77,33 @@ set @CreatedDt=convert(float,getdate())
 			INSERT INTO ADM_FeatureAction(Name,FeatureID,ResourceID,FeatureActionTypeID,ApplicationID,Status,CreatedDate,CreatedBy)    
 			VALUES('Suspend',@CostCenterId,@RESOURCEMAX,141,1,1,@CreatedDt,@UserName) 				
 		
+		-------
+			EXEC spCOM_SetCostCenterLanguageData 'JV',@CostCenterName,@UserName,@RESOURCEMAX output
+			INSERT INTO ADM_FeatureAction(Name,FeatureID,ResourceID,FeatureActionTypeID,ApplicationID,Status,CreatedDate,CreatedBy)    
+			VALUES('JV',@CostCenterId,@RESOURCEMAX,516,1,1,@CreatedDt,@UserName) 
+
+			EXEC spCOM_SetCostCenterLanguageData 'Draft',@CostCenterName,@UserName,@RESOURCEMAX output
+			INSERT INTO ADM_FeatureAction(Name,FeatureID,ResourceID,FeatureActionTypeID,ApplicationID,Status,CreatedDate,CreatedBy)    
+			VALUES('Draft',@CostCenterId,@RESOURCEMAX,517,1,1,@CreatedDt,@UserName)
+
+			EXEC spCOM_SetCostCenterLanguageData 'AssignVPT',@CostCenterName,@UserName,@RESOURCEMAX output
+			INSERT INTO ADM_FeatureAction(Name,FeatureID,ResourceID,FeatureActionTypeID,ApplicationID,Status,CreatedDate,CreatedBy)    
+			VALUES('AssignVPT',@CostCenterId,@RESOURCEMAX,675,1,1,@CreatedDt,@UserName)
+
+			EXEC spCOM_SetCostCenterLanguageData 'ContinuousPrint',@CostCenterName,@UserName,@RESOURCEMAX output
+			INSERT INTO ADM_FeatureAction(Name,FeatureID,ResourceID,FeatureActionTypeID,ApplicationID,Status,CreatedDate,CreatedBy)    
+			VALUES('ContinuousPrint',@CostCenterId,@RESOURCEMAX,514,1,1,@CreatedDt,@UserName)
+
+			EXEC spCOM_SetCostCenterLanguageData 'AssignUsers',@CostCenterName,@UserName,@RESOURCEMAX output
+			INSERT INTO ADM_FeatureAction(Name,FeatureID,ResourceID,FeatureActionTypeID,ApplicationID,Status,CreatedDate,CreatedBy)    
+			VALUES('AssignUsers',@CostCenterId,@RESOURCEMAX,515,1,1,@CreatedDt,@UserName)
+
+			EXEC spCOM_SetCostCenterLanguageData 'HoldDoc',@CostCenterName,@UserName,@RESOURCEMAX output
+			INSERT INTO ADM_FeatureAction(Name,FeatureID,ResourceID,FeatureActionTypeID,ApplicationID,Status,CreatedDate,CreatedBy)    
+			VALUES('HoldDoc',@CostCenterId,@RESOURCEMAX,518,1,1,@CreatedDt,@UserName)
+
+		-------
+
 			INSERT INTO ADM_FeatureAction(Name,FeatureID,ResourceID,FeatureActionTypeID,ApplicationID,Status,CreatedDate,CreatedBy)    
 			VALUES('Revise',@CostCenterId,81477,146,1,1,@CreatedDt,@UserName) 				
 			
@@ -111,7 +138,7 @@ set @CreatedDt=convert(float,getdate())
 			VALUES('Import',72794,@CostCenterId,218,1,NULL,NULL,1,4003,'ADMIN')
 			
 			INSERT INTO [adm_featureaction] ([Name],[ResourceID],[FeatureID],[FeatureActionTypeID],[ApplicationID],[GridShortCut],[Description],[Status],[CreatedDate],[CreatedBy])
-			VALUES('Edit Approved Documents',NULL,@CostCenterId,433,1,NULL,NULL,1,4003,'ADMIN')
+			VALUES('Edit Approved Docs',NULL,@CostCenterId,433,1,NULL,NULL,1,4003,'ADMIN')
 
 			INSERT INTO [adm_featureaction] ([Name],[ResourceID],[FeatureID],[FeatureActionTypeID],[ApplicationID],[GridShortCut],[Description],[Status],[CreatedDate],[CreatedBy])
 			VALUES('Edit Posted Docs',NULL,@CostCenterId,401,1,NULL,NULL,1,4003,'ADMIN')
@@ -175,7 +202,7 @@ set @CreatedDt=convert(float,getdate())
 			 WHERE FEATUREID=@CostCenterId and FeatureActionTypeID not in(673,672,221)
 			
 
-CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),COLID INT,SYSCOLUMN NVARCHAR(300),RID bigint)
+CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),COLID INT,SYSCOLUMN NVARCHAR(300),RID INT)
 INSERT INTO #TBLTEMP
 	SELECT COSTCENTERCOLID,SysTableName,ResourceID FROM adm_costCenterDef WHERE costCenteriD =@CCID
 SELECT @COUNT=COUNT(*) FROM #TBLTEMP

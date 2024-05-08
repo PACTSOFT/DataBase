@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spRPT_GetRevenUReport]
-	@ReportID [bigint],
-	@UserID [bigint],
+	@ReportID [int],
+	@UserID [int],
 	@LangID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -16,6 +16,9 @@ SET NOCOUNT ON;
 		
 		--Always Keep It Last DataTable
 		select ChildReportID from ADM_ReportsMap WITH(NOLOCK) WHERE ParentReportID=@ReportID
+		
+		SELECT * FROM [COM_APIFieldsMapping] WITH(NOLOCK) 
+		WHERE CostCenterID=50 AND Mode=@ReportID
 
 SET NOCOUNT OFF;  
 RETURN 1
@@ -33,8 +36,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
-
-
-
+END CATCH
 GO

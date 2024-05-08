@@ -4,8 +4,8 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_VPTTerminationDetails]
 	@CostCenterID [int] = 95,
-	@ContractID [bigint] = 0,
-	@UserID [bigint],
+	@ContractID [int] = 0,
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -13,7 +13,7 @@ BEGIN TRANSACTION
 BEGIN TRY                         
 SET NOCOUNT ON                        
 
-	declare @PendingVchrs nvarchar(max),@SQL nvarchar(max),@PartTableName nvarchar(50),@RenewRefID bigint,@AllContractID nvarchar(max)
+	declare @PendingVchrs nvarchar(max),@SQL nvarchar(max),@PartTableName nvarchar(50),@RenewRefID INT,@AllContractID nvarchar(max)
 	declare @tabvchrs table(vno nvarchar(50))
 	
 	select @PartTableName=TableName from adm_features with(nolock) where FeatureID in (select Value from adm_globalPreferences with(nolock) where Name='DepositLinkDimension')
@@ -37,10 +37,11 @@ SET NOCOUNT ON
 	exec(@SQL)
 
 
-	set @SQL='select P.Name,RP.Amount from REN_TerminationParticulars RP with(nolock)
+	set @SQL='select P.Name,RP.NetAmount Amount from REN_TerminationParticulars RP with(nolock)
     inner join '+@PartTableName+' P with(nolock) on P.NodeID=RP.CCNodeID where ContractID='+convert(nvarchar,@ContractID)
+    print @SQL
     exec(@SQL)
-
+	
 	SELECT Type,D.StatusID,D.ChequeNumber,convert(datetime,D.ChequeDate) ChequeDate,D.Amount FROM REN_ContractDocMapping C with(nolock)
 	inner join acc_docdetails D with(nolock) on D.DocID=C.DocID
 	where ContractID=@ContractID and Type=2 and D.StatusID IN (370,376,452)
@@ -80,5 +81,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION                        
 SET NOCOUNT OFF                          
 RETURN -999                           
-END CATCH             
+END CATCH
 GO

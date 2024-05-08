@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SetUpdateLink]
-	@LinkedInvDocDetailsID [bigint],
-	@InvDocDetailsID [bigint],
-	@CostCenterID [bigint] = 0,
+	@LinkedInvDocDetailsID [int],
+	@InvDocDetailsID [int],
+	@CostCenterID [int] = 0,
 	@UserID [int] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -15,16 +15,16 @@ BEGIN TRANSACTION
 SET NOCOUNT ON    
 
 
-		Declare @linkedCostcenterid bigint,@DocumentLinkDefID bigint,@Srccol nvarchar(50),@Descol nvarchar(50),@i int,@ctn int
+		Declare @linkedCostcenterid INT,@DocumentLinkDefID INT,@Srccol nvarchar(50),@Descol nvarchar(50),@i int,@ctn int
 		Declare @sql nvarchar(max),@Val nvarchar(max),@ActVal nvarchar(max),@VendorName nvarchar(max),@Qty Float,@linkQTY float
 		
-		select @linkedCostcenterid=Costcenterid from [INV_DocDetails] where [InvDocDetailsID]=@LinkedInvDocDetailsID
+		select @linkedCostcenterid=Costcenterid from [INV_DocDetails] with(nolock) where [InvDocDetailsID]=@LinkedInvDocDetailsID
 
-		SELECT @DocumentLinkDefID=[DocumentLinkDefID]  FROM [COM_DocumentLinkDef]    
+		SELECT @DocumentLinkDefID=[DocumentLinkDefID]  FROM [COM_DocumentLinkDef] with(nolock)    
 		where [CostCenterIDBase]=@CostCenterID and 
 		[CostCenterIDLinked]  =@linkedCostcenterid  
 
-		declare @tab table(id bigint identity(1,1),Srccol nvarchar(50), Descol nvarchar(50))   
+		declare @tab table(id INT identity(1,1),Srccol nvarchar(50), Descol nvarchar(50))   
 		insert into @tab
 		SELECT DisTINCT B.SysColumnName BASECOL,L.SysColumnName LINKCOL   FROM COM_DocumentLinkDetails A with(nolock)   
 		JOIN ADM_CostCenterDef B with(nolock) ON B.CostCenterColID=A.CostCenterColIDBase    
@@ -39,14 +39,14 @@ SET NOCOUNT ON
 			set @i=@i+1
 			SELECT @Srccol=Srccol,@Descol=Descol from @tab where id=@i
 			
-			if(@Srccol not in('VoucherNo','RefNO') and @Descol not in('VoucherNo','RefNO'))
+			if(@Srccol not in('VoucherNo','RefNO','IsScheme','SKU','') and @Descol not in('VoucherNo','RefNO','IsScheme','SKU'))
 			BEGIN
 				set @sql='select @Val='+@Srccol +' from '
 				if(@Srccol like 'dcnum%')			 
 					set @sql=@sql+' COM_DocNumData '			 
 				ELSE if(@Srccol like 'dcalpha%')
 					set @sql=@sql+' [COM_DocTextData] ' 
-				ELSE if(@Srccol like 'dcccnid%')
+				ELSE if(@Srccol like 'dcccnid%' or @Srccol in('ContactID','CustomerID'))
 					set @sql=@sql+' [COM_DocCCData] '
 				else
 					set @sql=@sql+' INV_DocDetails '
@@ -59,7 +59,7 @@ SET NOCOUNT ON
 					set @sql=@sql+' COM_DocNumData '			 
 				ELSE if(@Descol like 'dcalpha%')
 					set @sql=@sql+' [COM_DocTextData] ' 
-				ELSE if(@Descol like 'dcccnid%')
+				ELSE if(@Descol like 'dcccnid%' or @Descol in('ContactID','CustomerID'))
 					set @sql=@sql+' [COM_DocCCData] '
 				else
 					set @sql=@sql+' INV_DocDetails '
@@ -117,5 +117,5 @@ SET NOCOUNT ON
         END
     
 COMMIT TRANSACTION    
-SET NOCOUNT OFF;    
+SET NOCOUNT OFF;
 GO

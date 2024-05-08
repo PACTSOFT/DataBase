@@ -5,11 +5,12 @@ GO
 CREATE PROCEDURE [dbo].[spCOM_CheckUniqueCostCenter]
 	@CostCenterID [int],
 	@NodeID [nvarchar](20),
-	@LangID [int]
+	@LangID [int] = 1,
+	@RefCostCenterID [nvarchar](20) = ''
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
-declare @SQL nvarchar(max),@TableName nvarchar(200),@UNIQUECNT int,@I int,@PK nvarchar(50),@PKTemp nvarchar(50),@val nvarchar(max),@Exists bit,@IDTemp bigint
-		,@SysTableName nvarchar(50),@SysColumnName nvarchar(100),@UserColumnName nvarchar(100),@ISUNIQUE int,@ParentID bigint
+declare @SQL nvarchar(max),@TableName nvarchar(200),@UNIQUECNT int,@I int,@PK nvarchar(50),@PKTemp nvarchar(50),@val nvarchar(max),@Exists bit,@IDTemp INT
+		,@SysTableName nvarchar(50),@SysColumnName nvarchar(100),@UserColumnName nvarchar(100),@ISUNIQUE int,@ParentID INT
 	
 	Declare @TEMPUNIQUE TABLE(ID INT identity(1,1),SysTableName NVARCHAR(50),SysColumnName NVARCHAR(50),UserColumnName NVARCHAR(50),ISUNIQUE int)
 	
@@ -38,11 +39,11 @@ declare @SQL nvarchar(max),@TableName nvarchar(200),@UNIQUECNT int,@I int,@PK nv
 		if @ISUNIQUE=2
 		begin
 			set @SQL='select @ParentID=ParentID from '+@TableName+' with(nolock) where '+@PK+'='+@NodeID
-			exec sp_executesql @SQL,N'@ParentID bigint output',@ParentID output
+			exec sp_executesql @SQL,N'@ParentID INT output',@ParentID output
 
 			if @SysTableName='COM_CCCCData'
 			begin
-				set @SQL='declare @IDTemp bigint
+				set @SQL='declare @IDTemp INT
 				select @IDTemp='+@SysColumnName+' from COM_CCCCData with(nolock) where CostCenterID='+convert(nvarchar,@CostCenterID)+' and NodeID='+@NodeID+'
 				if @IDTemp is not null and exists(select top 1 C.'+@SysColumnName+' from COM_CCCCData C with(nolock) inner join '+@TableName+' G with(nolock) ON G.'+@PK+'=C.NodeID where G.ParentID='+convert(nvarchar,@ParentID)+' and C.CostCenterID='+convert(nvarchar,@CostCenterID)+' and C.NodeID!='+@NodeID+' and C.'+@SysColumnName+'=@IDTemp)
 					set @Exists=1
@@ -66,7 +67,7 @@ else
 		begin
 			if @SysTableName='COM_CCCCData'
 			begin
-				set @SQL='declare @IDTemp bigint
+				set @SQL='declare @IDTemp INT
 				select @IDTemp='+@SysColumnName+' from COM_CCCCData with(nolock) where CostCenterID='+convert(nvarchar,@CostCenterID)+' and NodeID='+@NodeID+'
 				if @IDTemp is not null and exists(select top 1 '+@SysColumnName+' from COM_CCCCData with(nolock) where CostCenterID='+convert(nvarchar,@CostCenterID)+' and NodeID!='+@NodeID+' and '+@SysColumnName+'=@IDTemp)
 					set @Exists=1
@@ -88,7 +89,7 @@ else
 			else
 			begin		
 				set @SQL='if exists (select '+@SysColumnName+' from '+@SysTableName+' with(nolock) where '+@PKTemp+'='+@NodeID+' and '+@SysColumnName+' is not null and (isnumeric('+@SysColumnName+')=1 or '+@SysColumnName+'!=''''))
-				and exists (select top 1 '+@SysColumnName+' from '+@SysTableName+' with(nolock) where '+@PKTemp+'!='+@NodeID+' and '+@SysColumnName+'=(select '+@SysColumnName+' from '+@SysTableName+' with(nolock) where '+@PKTemp+'='+@NodeID+') )
+				and exists (select top 1 '+@SysColumnName+' from '+@SysTableName+' with(nolock) where '+@PKTemp+'!='+@NodeID+(case when isnull(@RefCostCenterID,'')<>'' then ' and FeatureID='+@RefCostCenterID  else '' end)+' and '+@SysColumnName+'=(select '+@SysColumnName+' from '+@SysTableName+' with(nolock) where '+@PKTemp+'='+@NodeID+') )
 					set @Exists=1
 				else
 					set @Exists=0'
@@ -98,13 +99,13 @@ else
 		end
 		else if @ISUNIQUE>50000--Dimension Wise
 		begin
-			set @SQL='declare @CurrDim bigint
+			set @SQL='declare @CurrDim INT
 select @CurrDim=CCNID'+convert(nvarchar,@ISUNIQUE-50000)+' from COM_CCCCData with(nolock) where CostCenterID='+convert(nvarchar,@CostCenterID)+' and NodeID='+@NodeID
 
 			if @SysTableName='COM_CCCCData'
 			begin
 				set @SQL=@SQL+'
-declare @IDTemp bigint
+declare @IDTemp INT
 select @IDTemp='+@SysColumnName+' from COM_CCCCData with(nolock) where CostCenterID='+convert(nvarchar,@CostCenterID)+' and NodeID='+@NodeID+'
 if @IDTemp is not null and exists(select top 1 '+@SysColumnName+' from COM_CCCCData with(nolock) where CostCenterID='+convert(nvarchar,@CostCenterID)+' and NodeID!='+@NodeID+' and '+@SysColumnName+'=@IDTemp and CCNID'+convert(nvarchar,@ISUNIQUE-50000)+'=@CurrDim)
 	set @Exists=1
@@ -131,10 +132,15 @@ else
 
 		if @Exists=1
 		begin
-			set @SQL='Duplicate data'
-			SELECT @SQL=ErrorMessage+''''+isnull(@UserColumnName,'')+'''' FROM COM_ErrorMessages WITH(nolock) 
-			WHERE ErrorNumber=-142 AND LanguageID=@LangID    
+			SELECT @SQL=isnull(@UserColumnName,'')+' '+ErrorMessage+' '+ISNULL((SELECT TOP 1 ResourceData 
+			from ADM_Features FA WiTh(NOLOCK) 
+			JOIN COM_LanguageResources LR WiTh(NOLOCK) ON LR.ResourceID=FA.ResourceID AND LR.LanguageID=@LangID  
+			where FA.FeatureID=@CostCenterID),'') 
+			FROM COM_ErrorMessages EM WITH(nolock)
+			WHERE EM.ErrorNumber=-142 AND EM.LanguageID=@LangID    
 			RAISERROR(@SQL,16,1)
 		end
 	END
+
+
 GO

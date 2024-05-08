@@ -371,6 +371,12 @@ BEGIN TRY
 
 			if(@DetailsXML is not null AND @DetailsXML<>'' AND @TabdetailsXML is not null AND @TabdetailsXML<>'')
 			begin
+				
+				if not exists (select * from CRM_CONTACTS with(nolock) where FeaturePK=@LeadID and Featureid=86 )
+				begin
+					insert into CRM_CONTACTS (FeaturePK,Featureid,guid,createdby,createddate) values(@LeadID,86,newid(),@UserName,@Dt)
+				end
+				
 				Update CRM_CONTACTS set Company=@Company,
 				   StatusID=@StatusID,
 				   FirstName=T1.FirstName,

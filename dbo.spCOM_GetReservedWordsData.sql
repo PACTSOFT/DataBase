@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetReservedWordsData]
-	@CCID [bigint],
-	@CCNODEID [bigint],
-	@UserID [bigint],
+	@CCID [int],
+	@CCNODEID [int],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -13,9 +13,10 @@ BEGIN TRY
 SET NOCOUNT ON;    
     --Declaration Section    
 DECLARE @Sql nvarchar(max),@EmailDisplayCol nvarchar(400)
-declare @AssignEmail nvarchar(300),@AssignPhone nvarchar(300)
+declare @AssignEmail nvarchar(300),@AssignPhone nvarchar(300),@OwnerEmail nvarchar(300)
  set @AssignEmail=''
  set @AssignPhone=''
+ set @OwnerEmail=''
  
  --Get AssignUser Email Address
 	select @AssignEmail= @AssignEmail + Email1 + ','   from ADM_Users with(nolock) where 
@@ -67,7 +68,12 @@ declare @AssignEmail nvarchar(300),@AssignPhone nvarchar(300)
 		BEGIN
 			 SET @AssignPhone=SUBSTRING(@AssignPhone,1,LEN(@AssignPhone)-1)	 
 		END 
-				 
+	
+	--Get Owner Email
+	IF(@CCID=86)
+	BEGIN
+		SELECT @OwnerEmail=Email1 FROM ADM_Users WITH(NOLOCK) WHERE UserName IN( SELECT CreatedBy FROM CRM_Leads WITH(NOLOCK) WHERE LeadID=@CCNODEID)
+	END			 
 IF(@CCID=73)
 BEGIN
 	 SELECT top 1 contactid, CASE WHEN Email1<>'' AND Email1 IS not NULL THEN Email1 ELSE Email2 END AS '_Customer_Email',
@@ -75,8 +81,12 @@ BEGIN
 END
 ELSE IF(@CCID=86 or @CCID=89)
 BEGIN
-	 SELECT top 1 contactid, CASE WHEN Email1<>'' AND Email1 IS not NULL THEN Email1 ELSE Email2 END AS '_Customer_Email',
-	 CASE WHEN Phone1<>'' AND Phone1 IS not NULL THEN Phone1 ELSE Phone2 END AS '_Customer_Phone',@AssignPhone '_Assign_Phone',@AssignEmail '_Assign_Email'  FROM CRM_Contacts WITH(NOLOCK) WHERE FeatureID=@CCID AND FeaturePK=@CCNODEID
+	 SET @SQL='
+	 SELECT top 1 contactid, CASE WHEN Email1<>'''' AND Email1 IS not NULL THEN Email1 ELSE Email2 END AS _Customer_Email,
+	 CASE WHEN Phone1<>'''' AND Phone1 IS not NULL THEN Phone1 ELSE Phone2 END AS _Customer_Phone,'''+ @AssignPhone +''' _Assign_Phone,'''+ @AssignEmail +''' _Assign_Email,'''+@OwnerEmail+''' _Owner_Email  
+	 FROM CRM_Contacts WITH(NOLOCK) WHERE FeatureID='+CONVERT(NVARCHAR,@CCID)+' AND FeaturePK='+CONVERT(NVARCHAR,@CCNODEID)
+	 --print @SQL
+	EXEC (@SQL)
 	 
 END
   
@@ -101,5 +111,5 @@ BEGIN CATCH
 
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH    
+END CATCH
 GO

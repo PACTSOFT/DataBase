@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_GetEmpAsOnStatus]
-	@EmpSeqNo [bigint],
+	@EmpSeqNo [int],
 	@AsOnDate [datetime],
 	@LangID [int] = 1,
 	@AsOnStatus [nvarchar](500) OUTPUT
@@ -12,16 +12,16 @@ AS
 BEGIN TRY    
 SET NOCOUNT ON;
 --------------------------------------------------------------------------------
-DECLARE @TEmpSeqNo BIGINT,@TAsOnDate DATETIME,@LType NVARCHAR(200)
+DECLARE @TEmpSeqNo INT,@TAsOnDate DATETIME,@LType NVARCHAR(200)
 SET @TEmpSeqNo=@EmpSeqNo
 SET @TAsOnDate=CONVERT(DATETIME,CONVERT(VARCHAR(11),@AsOnDate,106))
 
 SET @AsOnStatus=''
 SET @LType=''
 
-IF EXISTS(Select DOResign From COM_CC50051 WHERE NodeID=@TEmpSeqNo AND DOResign IS NOT NULL)
+IF EXISTS(Select DOResign From COM_CC50051 WITH(NOLOCK) WHERE NodeID=@TEmpSeqNo AND DOResign IS NOT NULL)
 BEGIN
-	IF EXISTS(Select DORelieve From COM_CC50051 WHERE NodeID=@TEmpSeqNo AND DORelieve IS NULL)
+	IF EXISTS(Select DORelieve From COM_CC50051  WITH(NOLOCK) WHERE NodeID=@TEmpSeqNo AND DORelieve IS NULL)
 		SET @AsOnStatus='Pending Relieving'
 	ELSE
 		SET @AsOnStatus='Relieved'
@@ -35,14 +35,18 @@ BEGIN
 				WHERE a.CostCenterID=40072 and a.StatusID=369 AND ISDATE(ISNULL(dcAlpha3,''))=1  
 				AND b.dcCCNID51=@TEmpSeqNo AND CONVERT(DATETIME,dcAlpha3)< @TAsOnDate
 				AND ( d.dcAlpha1 IS NULL OR dcAlpha1='')
+				AND d.dcAlpha16<>'Yes'
 				ORDER BY CONVERT(DATETIME,dcAlpha3) DESC )
 				SET @AsOnStatus='On Vacation - Not Reported'
 	ELSE IF EXISTS(  SELECT TOP 1 *
 				FROM INV_DocDetails a WITH(NOLOCK) 
 				JOIN COM_DocCCData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
 				JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
-				WHERE a.CostCenterID=40072 and a.StatusID=369 AND ISDATE(ISNULL(dcAlpha2,''))=1 AND ISDATE(ISNULL(dcAlpha3,''))=1  
+				WHERE a.CostCenterID=40072 and a.StatusID=369 
+				AND LEN(dcAlpha2)<=15 AND LEN(dcAlpha3)<=15
+				AND ISDATE(ISNULL(dcAlpha2,''))=1 AND ISDATE(ISNULL(dcAlpha3,''))=1  
 				AND b.dcCCNID51=@TEmpSeqNo AND @TAsOnDate BETWEEN CONVERT(DATETIME,dcAlpha2) AND CONVERT(DATETIME,dcAlpha3)
+				AND d.dcAlpha16<>'Yes'
 				ORDER BY CONVERT(DATETIME,dcAlpha2) DESC )
 				SET @AsOnStatus='On Vacation'
 	ELSE IF EXISTS(  SELECT TOP 1 *
@@ -93,6 +97,4 @@ RETURN -999
 END CATCH
 
 ----spPAY_GetEmpAsOnStatus 626,'08-May-2019',1,''
-
- 
 GO

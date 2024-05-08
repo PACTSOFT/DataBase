@@ -3,16 +3,16 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetProductTypeDetails]
-	@ProductID [bigint] = 0,
+	@ProductID [int] = 0,
 	@StockCode [nvarchar](max) = null,
-	@UOMID [bigint] = 0,
+	@UOMID [int] = 0,
 	@CCXML [nvarchar](max),
-	@CostCenterID [bigint],
+	@CostCenterID [int],
 	@DocDate [datetime],
-	@CreditAccount [bigint],
+	@CreditAccount [int],
 	@DocQty [float],
 	@CalcAvgrate [bit] = 0,
-	@DocDetailsID [bigint] = 0,
+	@DocDetailsID [int] = 0,
 	@UserID [int] = 0,
 	@RoleID [int] = 0,
 	@LangID [int] = 1,
@@ -31,25 +31,25 @@ CREATE PROCEDURE [dbo].[spDOC_GetProductTypeDetails]
 	@CalcDivQOH [bit] = 0,
 	@IsTestCase [bit] = 0,
 	@IsLink [bit] = 0,
-	@ProfileID [bigint] = 0
+	@ProfileID [nvarchar](max) = ''
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY        
 SET NOCOUNT ON        
         
-    DECLARE @SQL NVARCHAR(MAX),@XML XML,@WHERE NVARCHAR(MAX),@I INT,@CNT INT,@NODEID BIGINT,@CcID BIGINT,@BalQOH FLOAT,@table   nvarchar(200),@TestCaseExists BIT
-    Declare @CC nvarchar(30),@CCWHERE NVARCHAR(MAX),@OrderBY NVARCHAR(MAX),@HOLDQTY FLOAT,@CommittedQTY FLOAT,@RESERVEQTY FLOAT,@stockID BIGINT,@IsPromo BIT,@StCCID int
-    DECLARE @AvgRate float,@LastPRate float,@PWLastPRate float,@iCNT INT,@ccCNTT INT,@QOH float,@PrefValue nvarchar(50),@NID BIGINT,@dp float,@rp float,@AvgPrice float,@DivQoh float
-    DECLARE @DrAccount BIGINT,@CrAccount BIGINT,@CrName NVARCHAR(200),@DrName NVARCHAR(200),@VendorQty float,@JOIN nvarchar(max),@ProductIDS nvarchar(max),@tmpccid int,@LocQOH Float
-   DECLARE @SIZE INT,@Cols NVARCHAR(1000),@ColsList NVARCHAR(1000) ,@DocumentType int,@uBarcode nvarchar(100),@VBarcode nvarchar(100),@CurrencyID bigint,@ptype int,@uBarcodeKey bigint
+    DECLARE @SQL NVARCHAR(MAX),@XML XML,@WHERE NVARCHAR(MAX),@I INT,@CNT INT,@NODEID INT,@CcID INT,@BalQOH FLOAT,@table   nvarchar(200),@TestCaseExists BIT
+    Declare @CC nvarchar(30),@CCWHERE NVARCHAR(MAX),@OrderBY NVARCHAR(MAX),@HOLDQTY FLOAT,@CommittedQTY FLOAT,@RESERVEQTY FLOAT,@stockID INT,@IsPromo BIT,@StCCID int
+    DECLARE @AvgRate float,@LastPRate float,@PWLastPRate float,@iCNT INT,@ccCNTT INT,@QOH float,@PrefValue nvarchar(50),@NID INT,@dp float,@rp float,@AvgPrice float,@DivQoh float
+    DECLARE @DrAccount INT,@CrAccount INT,@CrName NVARCHAR(200),@DrName NVARCHAR(200),@VendorQty float,@JOIN nvarchar(max),@ProductIDS nvarchar(max),@tmpccid int,@LocQOH Float
+   DECLARE @SIZE INT,@Cols NVARCHAR(1000),@ColsList NVARCHAR(1000) ,@DocumentType int,@uBarcode nvarchar(100),@VBarcode nvarchar(100),@CurrencyID INT,@ptype int,@uBarcodeKey INT
    DECLARE @UPDATESQL NVARCHAR(MAX),@CCJOINQUERY NVARCHAR(MAX),@LastPCost float ,@PWLastPCost float,@isGrp bit,@tblName NVARCHAR(200),@LastPRSNS Float,@TotRESERVE float
    SET @XML=@CCXML        
     
 
    declare @tblSplitcc table(CCIDS int)        
-   DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId BIGINT)        
+   DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId INT)        
    INSERT INTO @tblCC(CostCenterID,NodeId)        
-   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','BIGINT')        
+   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','INT')        
    FROM @XML.nodes('/XML/Row') as Data(X)  
    
 
@@ -64,20 +64,20 @@ SET NOCOUNT ON
 	
    if(@DocumentType=38 and @ProductID=0 and  @StockCode is not null and @StockCode<>'')
    BEGIN
-		select @table= b.TableName,@StCCID=FeatureID from adm_globalpreferences a
-		join adm_features b on a.value=b.featureid
+		select @table= b.TableName,@StCCID=FeatureID from adm_globalpreferences a with(nolock)
+		join adm_features b with(nolock) on a.value=b.featureid
 		where a.Name='POSItemCodeDimension' 
 
 		set @SQL='select @ProductID=ProductID,@stockID=NodeID,@DP=DealerPrice,@RP=RetailPrice,@AvgPrice=AvgPrice		
 		 from '+@table+' with(nolock)  where COde='''+@StockCode+''''
 
-		exec sp_executesql @SQL,N'@ProductID BIGINT OUTPUT,@stockID BIGINT OUTPUT,@DP float OUTPUT,@RP float OUTPUT,@AvgPrice float OUTPUT',@ProductID output,@stockID output,@dp output,@rp output,@AvgPrice output
+		exec sp_executesql @SQL,N'@ProductID INT OUTPUT,@stockID INT OUTPUT,@DP float OUTPUT,@RP float OUTPUT,@AvgPrice float OUTPUT',@ProductID output,@stockID output,@dp output,@rp output,@AvgPrice output
 		if(@ProductID is null or @ProductID=0)
 		BEGIN
 			set @SQL='select @ProductID=ProductID,@stockID=NodeID,@DP=DealerPrice,@RP=RetailPrice,@AvgPrice=AvgPrice
 			from '+@table+' with(nolock)  where EAN='''+@StockCode+''''
 
-			exec sp_executesql @SQL,N'@ProductID BIGINT OUTPUT,@stockID BIGINT OUTPUT,@DP float OUTPUT,@RP float OUTPUT,@AvgPrice float OUTPUT',@ProductID output,@stockID output,@dp output,@rp output,@AvgPrice output
+			exec sp_executesql @SQL,N'@ProductID INT OUTPUT,@stockID INT OUTPUT,@DP float OUTPUT,@RP float OUTPUT,@AvgPrice float OUTPUT',@ProductID output,@stockID output,@dp output,@rp output,@AvgPrice output
 
 			if(@ProductID is null or @ProductID=0)
 			BEGIN
@@ -421,12 +421,12 @@ SET NOCOUNT ON
 			BEGIN			
 				SELECT @DrName=SysColumnName FROM ADM_CostCenterDef with(nolock) WHERE CostCenterColID=@NODEID		
 				set @SQL='select  @DrAccount='+@DrName+' FROM INV_Product a WITH(NOLOCK) 
-				join INV_ProductExtended b on a.ProductID=b.ProductID WHERE a.ProductID='+convert(nvarchar,@ProductID)
+				join INV_ProductExtended b with(nolock) on a.ProductID=b.ProductID WHERE a.ProductID='+convert(nvarchar,@ProductID)
 			END	
 			print @SQL
-			exec sp_executesql @SQL,N'@DrAccount BIGINT OUTPUT',@DrAccount OUTPUT							
+			exec sp_executesql @SQL,N'@DrAccount INT OUTPUT',@DrAccount OUTPUT							
 			if(@DrAccount>0)
-				select 		@DrName=AccountName from ACC_Accounts  where AccountID= @DrAccount 	
+				select 		@DrName=AccountName from ACC_Accounts with(nolock)  where AccountID= @DrAccount 	
 	
 		END 
 		else
@@ -435,11 +435,11 @@ SET NOCOUNT ON
 		if exists (select prefvalue from [com_documentpreferences] WITH(NOLOCK) 
 		where costcenterid=@CostCenterID  and PrefName='ProductDefaultVendor' AND prefvalue='true')
 		BEGIN
-			set @CrAccount=isnull((select top 1 AccountID from INV_ProductVendors
+			set @CrAccount=isnull((select top 1 AccountID from INV_ProductVendors with(nolock)
 			where ProductID=@ProductID
 			order by Priority),0)
 			if(@CrAccount>0)
-				select @CrName=AccountName from ACC_Accounts  where  AccountID= @CrAccount	
+				select @CrName=AccountName from ACC_Accounts with(nolock)  where  AccountID= @CrAccount	
 		END       
 		else
 			set @CrAccount=0
@@ -457,7 +457,7 @@ SET NOCOUNT ON
 				if(@CrName like 'ptAlpha%')				
 					set @SQL='select  @CrAccount=b.'+@CrName+' FROM INV_Product   a WITH(NOLOCK) 
 					LEFT join INV_Product pa WITH(NOLOCK)  on a.ParentID=pa.ProductID
-					LEFT join INV_ProductExtended b on pa.ProductID=b.ProductID 
+					LEFT join INV_ProductExtended b with(nolock) on pa.ProductID=b.ProductID 
 					WHERE a.ProductID='+convert(nvarchar,@ProductID)
 				else
 					set @SQL='select  @CrAccount=pa.'+@CrName+' FROM INV_Product   a WITH(NOLOCK) 
@@ -468,10 +468,10 @@ SET NOCOUNT ON
 			BEGIN				
 				SELECT @CrName=SysColumnName FROM ADM_CostCenterDef with(nolock) WHERE CostCenterColID=@NODEID		
 				set @SQL='select  @CrAccount='+@CrName+' FROM INV_Product   a WITH(NOLOCK) 
-				join INV_ProductExtended b on a.ProductID=b.ProductID WHERE a.ProductID='+convert(nvarchar,@ProductID)
+				join INV_ProductExtended b with(nolock) on a.ProductID=b.ProductID WHERE a.ProductID='+convert(nvarchar,@ProductID)
 			END	
 			print @SQL
-			exec sp_executesql @SQL,N'@CrAccount BIGINT OUTPUT',@CrAccount OUTPUT	
+			exec sp_executesql @SQL,N'@CrAccount INT OUTPUT',@CrAccount OUTPUT	
 			if(@CrAccount>0)
 				select 		@CrName=AccountName from ACC_Accounts  where  AccountID= @CrAccount	
 		END       
@@ -549,7 +549,7 @@ SET NOCOUNT ON
         SELECT a.ProductID,a.ProductName,a.ProductCode,ProductTypeID,AttributeGroupID,@UOMID uomid,BaseName,UnitName,b.Conversion        
         ,reorderlevel,reorderqty,PurchaseRate,PurchaseRateA,PurchaseRateB,PurchaseRateC,PurchaseRateD,PurchaseRateE,PurchaseRateF,PurchaseRateG        
         ,SellingRate,SellingRateA,SellingRateB,SellingRateC,SellingRateD,SellingRateE,SellingRateF,SellingRateG,@TestCaseExists TestCaseExists
-        ,f.FileExtension,f.GUID FileGUID,@LastPCost LastPCost,@PWLastPCost  PWLastPCost,CreditDays,QtyAdjustType,IsPacking,IsBillOfEntry
+        ,f.FileExtension,f.GUID FileGUID,@LastPCost LastPCost,@PWLastPCost  PWLastPCost,CreditDays,QtyAdjustType,IsPacking,IsBillOfEntry,Packing
         ,@AvgRate AvgRate,@LastPRate LastPurchaseRate,@PWLastPRate PWLastPRate,@QOH QOH ,@HOLDQTY HOLDQTY,@RESERVEQTY RESERVEQTY,@CommittedQTY CommittedQTY    
         ,@uBarcode UnitProductCode,@uBarcodeKey Barcode_Key,@VBarcode VendorProductCode,@TotRESERVE TotalReserve,@BalQOH BalQOH,@DrAccount DrAccount,@DrName DrName,@CrAccount CrAccount,@CrName CrName
         ,@VendorQty VendorQty,@stockID stockID,@dp dp,@rp rp,@AvgPrice AvgPrice,isnull(BinWise,0) BinWise,a.UOMID ProdBaseUOM,@LastPRSNS LPRStockNonStock
@@ -562,7 +562,7 @@ SET NOCOUNT ON
 		if(@stockID is not null and @stockID>0 and @IsPromo is not null and @IsPromo=1)
 		BEGIN
 			set @SQL='select a.ProductID,b.ProductCode,b.ProductName,a.Quantity,u.UnitName,a.Unit,u.Conversion,b.ProductTypeID from INV_DocDetails a WITH(NOLOCK)
-			join INV_DocDetails I on a.DynamicInvDocDetailsID=I.InvDocDetailsID
+			join INV_DocDetails I with(nolock) on a.DynamicInvDocDetailsID=I.InvDocDetailsID
 			join COM_DocCCData c WITH(NOLOCK) on i.InvDocDetailsID=c.InvDocDetailsID			 
 			join INV_Product b WITH(NOLOCK) on a.ProductID=b.ProductID
 			join COM_UOM u WITH(NOLOCK) on a.Unit=u.UOMID
@@ -638,7 +638,7 @@ SET NOCOUNT ON
 		
 		if(@CC>0)      
 		begin      
-			EXEC sp_executesql @SQL, N'@NodeID BIGINT OUTPUT', @NodeID OUTPUT              
+			EXEC sp_executesql @SQL, N'@NodeID INT OUTPUT', @NodeID OUTPUT              
 		end      
 	end        
           
@@ -648,11 +648,11 @@ SET NOCOUNT ON
   where a.CostCenterID=@CC  and NodeID=@NodeID        
          
   
-	select @PrefValue=PrefValue from COM_DocumentPreferences
+	select @PrefValue=PrefValue from COM_DocumentPreferences with(nolock)
 	where PrefName ='EnableSubtitutes' and costcenterid=@CostCenterID
 	
 	set @CCWHERE=''
-	select @CCWHERE=PrefValue from COM_DocumentPreferences
+	select @CCWHERE=PrefValue from COM_DocumentPreferences with(nolock)
 	where PrefName ='SubstituteOnQty' and costcenterid=@CostCenterID
 
 	if(@IsLink=0 and @PrefValue is not null and @PrefValue='true' and not (@CCWHERE is not null and @CCWHERE='true'))
@@ -667,9 +667,9 @@ SET NOCOUNT ON
  
    
 	select @PrefValue= Value from com_costcenterpreferences WITH(NOLOCK) where name='BinsDimension' and costcenterid=3  
-	if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0 )        
+	if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0 )        
 	begin  
-		set @CcID=convert(bigint,@PrefValue)  
+		set @CcID=convert(INT,@PrefValue)  
 
 		set @SQL='select @NODEID=BinNodeID from INV_ProductBins WITH(NOLOCK)  where NodeID='+convert(nvarchar,@ProductID )  
 		set @SQL=@SQL+' and BinDimension='+convert(nvarchar,@CcID)+ ' and isdefault=1 '  
@@ -702,14 +702,14 @@ SET NOCOUNT ON
 		
 		set @PrefValue=''
 		select @PrefValue= Value from @TblPref  where Name='DimensionwiseBins' and isnumeric(Value)=1  
-		if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>50000)        
+		if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>50000)        
 		begin  		
-			select @NID=NodeId from @tblCC where CostCenterID=convert(bigint,@PrefValue)                  
+			select @NID=NodeId from @tblCC where CostCenterID=convert(INT,@PrefValue)                  
 			set @SQL=@SQL +' and DimNodeID='+CONVERT(nvarchar,@NID)         		   
 		end 
 
 		set @NODEID=0    
-		exec sp_executesql @SQL,N'@NODEID bigint OUTPUT',@NODEID output    
+		exec sp_executesql @SQL,N'@NODEID INT OUTPUT',@NODEID output    
 		if(@NODEID>0)  
 		begin  
 
@@ -733,12 +733,12 @@ SET NOCOUNT ON
 	BEGIN
 		set @NODEID=1
 		set @CcID=0
-		select @CcID=isnull(value,0) from ADM_GlobalPreferences 
-		where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>50000
+		select @CcID=isnull(value,0) from ADM_GlobalPreferences with(nolock) 
+		where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(INT,value)>50000
 		if(@CcID>0)
 			select @NODEID=NodeId from @tblCC where CostCenterID=@CcID
 		
-		SELECT CurrencyID,Name from COM_Currency where CurrencyID=@CurrencyID
+		SELECT CurrencyID,Name from COM_Currency  with(nolock)where CurrencyID=@CurrencyID
 		EXEC [spDoc_GetCurrencyExchangeRate] @CurrencyID,@DocDate,@NODEID,@LangID
 		
 	END
@@ -766,4 +766,6 @@ BEGIN CATCH
  SET NOCOUNT OFF
 RETURN -999
 END CATCH
+
+
 GO

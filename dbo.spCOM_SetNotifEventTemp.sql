@@ -4,10 +4,10 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetNotifEventTemp]
 	@TYPE [int] = 1,
-	@CostCenterID [bigint],
+	@CostCenterID [int],
 	@NodeID [nvarchar](max),
-	@SubCostCenterid [bigint],
-	@SubNodeID [bigint],
+	@SubCostCenterid [int],
+	@SubNodeID [int],
 	@TemplateType [int],
 	@From [nvarchar](max) = NULL,
 	@DisplayName [nvarchar](max) = NULL,
@@ -15,16 +15,17 @@ CREATE PROCEDURE [dbo].[spCOM_SetNotifEventTemp]
 	@CC [nvarchar](max) = NULL,
 	@BCC [nvarchar](max) = NULL,
 	@AttachmentType [nvarchar](50) = NULL,
-	@AttachmentID [bigint],
+	@AttachmentID [int],
 	@Subject [nvarchar](max) = NULL,
 	@Body [nvarchar](max) = NULL,
 	@FilterXML [nvarchar](max) = NULL,
 	@TempTemplateID [int] = null,
 	@LocationID [int],
+	@MapColumn [nvarchar](max) = NULL,
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -33,7 +34,7 @@ BEGIN TRY
 SET NOCOUNT ON; 
 select @AttachmentID
 	--Declaration Section    
-	DECLARE @Dt FLOAT,@ID Bigint
+	DECLARE @Dt FLOAT,@ID INT
 	SET @Dt=CONVERT(FLOAT,GETDATE())
 
 	IF @TYPE=1
@@ -49,13 +50,13 @@ select @AttachmentID
 				(ScheduleID,EventTime,StatusID,StartFlag,StartDate,EndDate
 				,[CostCenterID],[NodeID],[SubCostCenterid],[SubNodeID],TemplateID,[TemplateType]
 				,[From],[DisplayName],[To],[CC],[BCC],[AttachmentType],[AttachmentID]
-				,[Subject],[Body],FilterXML,TempTemplateID,LocationID
-      			,CompanyGUID,GUID,CreatedBy,CreatedDate)
+				,[Subject],[Body],FilterXML,TempTemplateID,LocationID,MapColumn
+      			,CompanyGUID,[GUID],CreatedBy,CreatedDate)
       			
 				SELECT 0,@Dt,1,0,@Dt,@Dt
 				,@CostCenterID,ID,@SubCostCenterid,@SubNodeID,0,@TemplateType
 				,@From,@DisplayName,@To,@CC,@BCC,@AttachmentType,@AttachmentID
-				,@Subject,@Body,@FilterXML,@TempTemplateID,@LocationID
+				,@Subject,@Body,@FilterXML,@TempTemplateID,@LocationID,@MapColumn
 				,@CompanyGUID,newid(),@UserName,@Dt FROM @TblNodes1
 		END
 		ELSE
@@ -64,13 +65,13 @@ select @AttachmentID
 				(ScheduleID,EventTime,StatusID,StartFlag,StartDate,EndDate
 				,[CostCenterID],[NodeID],[SubCostCenterid],[SubNodeID],TemplateID,[TemplateType]
 				,[From],[DisplayName],[To],[CC],[BCC],[AttachmentType],[AttachmentID]
-				,[Subject],[Body],FilterXML,TempTemplateID,LocationID
-      			,CompanyGUID,GUID,CreatedBy,CreatedDate)
+				,[Subject],[Body],FilterXML,TempTemplateID,LocationID,MapColumn
+      			,CompanyGUID,[GUID],CreatedBy,CreatedDate)
 			VALUES
 				(0,@Dt,1,0,@Dt,@Dt
-				,@CostCenterID,CONVERT(BIGINT,@NodeID),@SubCostCenterid,@SubNodeID,0,@TemplateType
+				,@CostCenterID,CONVERT(INT,@NodeID),@SubCostCenterid,@SubNodeID,0,@TemplateType
 				,@From,@DisplayName,@To,@CC,@BCC,@AttachmentType,@AttachmentID
-				,@Subject,@Body,@FilterXML,@TempTemplateID,@LocationID
+				,@Subject,@Body,@FilterXML,@TempTemplateID,@LocationID,@MapColumn
 				,@CompanyGUID,newid(),@UserName,@Dt)
 		END 
 
@@ -84,9 +85,9 @@ select @AttachmentID
 		exec SPSplitString @Body,','  
 
 		INSERT INTO COM_SchEvents(CostCenterID,NodeID,TemplateID,OtherDocsNos,StatusID,EventTime,ScheduleID,StartFlag,StartDate,EndDate,CompanyGUID,GUID,  
-			CreatedBy,CreatedDate,SUBCostCenterID,SUBNodeID,FilterXML,TempTemplateID,LocationID)
+			CreatedBy,CreatedDate,SUBCostCenterID,SUBNodeID,FilterXML,TempTemplateID,LocationID,MapColumn)
 		SELECT @CostCenterID,ID,@AttachmentID,@Subject,1,@Dt,0,0,@Dt,@Dt,@CompanyGUID,@GUID,
-			@UserName,@Dt,@SUBCostCenterID,@SUBNodeID,@FilterXML,@TempTemplateID,@LocationID
+			@UserName,@Dt,@SUBCostCenterID,@SUBNodeID,@FilterXML,@TempTemplateID,@LocationID,@MapColumn
 		FROM @TblNodes      
 
 		SET @ID=1
@@ -114,5 +115,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION    
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH    
+END CATCH
 GO

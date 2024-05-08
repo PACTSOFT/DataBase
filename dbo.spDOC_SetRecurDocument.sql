@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SetRecurDocument]
 	@CostCenterID [int],
-	@RecurDocID [bigint],
+	@RecurDocID [int],
 	@DocDate [datetime],
 	@RecurMethod [tinyint],
 	@CompanyGUID [nvarchar](50),
@@ -14,12 +14,14 @@ CREATE PROCEDURE [dbo].[spDOC_SetRecurDocument]
 	@VoucherNo [nvarchar](100) OUTPUT
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
---BEGIN TRANSACTION      
+BEGIN TRANSACTION  
+BEGIN TRY  
+SET NOCOUNT ON;    
   --Declaration Section    
-  DECLARE @Dt float,@DocID BIGINT,@DocumentTypeID INT,@DocumentType INT,@DocAbbr nvarchar(50),@tempDOc BIGINT,@guid nvarchar(50)
-  DECLARE @AccDocDetailsID BIGINT,@I int,@Cnt int,@HistoryStatus nvarchar(50),@PrefValue nvarchar(50),@CrAccount bigint,@BWSign int
+  DECLARE @Dt float,@DocID INT,@DocumentTypeID INT,@DocumentType INT,@DocAbbr nvarchar(50),@tempDOc INT,@guid nvarchar(50)
+  DECLARE @AccDocDetailsID INT,@I int,@Cnt int,@HistoryStatus nvarchar(50),@PrefValue nvarchar(50),@CrAccount INT,@BWSign int
   DECLARE @Length int,@temp varchar(100),@t int,@cctablename nvarchar(50),@DUPLICATECODE  NVARCHAR(MAX)     
-  declare  @Dimesion bigint,@DimesionNodeID bigint,@DocOrder int,@TEMPxml nvarchar(max),@NumCols nvarchar(max),@CCCols nvarchar(max),@TexCols nvarchar(max)
+  declare  @Dimesion INT,@DimesionNodeID INT,@DocOrder int,@TEMPxml nvarchar(max),@NumCols nvarchar(max),@CCCols nvarchar(max),@TexCols nvarchar(max),@CCBWCols nvarchar(max)
 		
 	set @TexCols=''
 	select @TexCols =@TexCols +','+a.name from sys.columns a
@@ -36,8 +38,12 @@ AS
 	join sys.tables b on a.object_id=b.object_id
 	where b.name='COM_DocNumData'  and a.name not in('AccDocDetailsID','DocNumDataID')
 
-    
-	declare @DocNumber nvarchar(200),@DocPrefix nvarchar(200),@RecurAccID bigint,@RecuVoucherNo nvarchar(200)
+	set @CCBWCols=''
+	select @CCBWCols =@CCBWCols +','+a.name from sys.columns a
+	join sys.tables b on a.object_id=b.object_id
+	where b.name='COM_Billwise'  and a.name LIKE 'dcCCNID%'
+
+	declare @DocNumber nvarchar(200),@DocPrefix nvarchar(200),@RecurAccID INT,@RecuVoucherNo nvarchar(200)
  	set @Dt=convert(float,getdate())
 
     if(@DocID=0)
@@ -52,7 +58,7 @@ AS
 	begin    		
 		set @Dimesion=0    
 		begin try    
-			select @Dimesion=convert(bigint,@PrefValue)    
+			select @Dimesion=convert(INT,@PrefValue)    
 		end try    
 		begin catch    
 			set @Dimesion=0    
@@ -67,7 +73,7 @@ AS
      
 	 
   --Create temporary table to read xml data into table    
-  declare @tblList TABLE (ID int identity(1,1),AccID BIGINT)      
+  declare @tblList TABLE (ID int identity(1,1),AccID INT)      
       
    --Read XML data into temporary table only to delete records    
   INSERT INTO @tblList    
@@ -119,11 +125,11 @@ AS
 		set @DocPrefix=''
     if  NOT EXISTS(SELECT CurrentCodeNumber FROM COM_CostCenterCodeDef  WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND CodePrefix=@DocPrefix)    
 	begin
-		select @DocNumber=PrefValue from com_documentpreferences with(nolock) where CostCenterID=40011 
+		select @DocNumber=PrefValue from com_documentpreferences with(nolock) where CostCenterID=@CostCenterID 
 		and PrefName='StartNoForNewPrefix' and PrefValue is not null and isnumeric(PrefValue)=1
 
 		INSERT INTO COM_CostCenterCodeDef(CostCenteriD,FeatureiD,CodePrefix,CodeNumberRoot,CodeNumberInc,CurrentCodeNumber,CodeNumberLength,GUID,CreatedBy,CreatedDate,Location,Division)    
-		VALUES(@CostCenterID,@CostCenterID,@DocPrefix,CONVERT(BIGINT,@DocNumber),1,CONVERT(BIGINT,@DocNumber),len(@DocNumber),Newid(),@UserName,convert(float,getdate()),1,1)    
+		VALUES(@CostCenterID,@CostCenterID,@DocPrefix,CONVERT(INT,@DocNumber),1,CONVERT(INT,@DocNumber),len(@DocNumber),Newid(),@UserName,convert(float,getdate()),1,1)    
 	end
 	else
 	begin
@@ -245,17 +251,21 @@ AS
        ([AccDocDetailsID]'+@CCCols+')
           SELECT '+convert(nvarchar(max),@AccDocDetailsID)+@CCCols+'
       from [COM_DocCCData] WITH(NOLOCK) where   AccDocDetailsID ='+convert(nvarchar(max),@RecurAccID) 
+	  
      exec(@DUPLICATECODE)
      
+	 
      	set @DUPLICATECODE=' INSERT INTO [COM_DocNumData]('+@NumCols+'[AccDocDetailsID])select  '+@NumCols+convert(nvarchar,@AccDocDetailsID)+'
 		 FROM [COM_DocNumData]  WITH(NOLOCK)
 		 WHERE  AccDocDetailsID='+convert(nvarchar,@RecurAccID)		
+		 
 		exec(@DUPLICATECODE)
 		
       set @DUPLICATECODE='INSERT INTO [COM_DocTextData]    
        ([AccDocDetailsID]'+@TexCols+')
           SELECT '+convert(nvarchar(max),@AccDocDetailsID)+@TexCols+'
       from [COM_DocTextData] WITH(NOLOCK) where   AccDocDetailsID ='+convert(nvarchar(max),@RecurAccID) 
+	  
      exec(@DUPLICATECODE)
     
    END
@@ -265,7 +275,7 @@ if @RecurMethod=2
 	set @BWSign=-1
 else
 	set @BWSign=1
-
+	
  set @DUPLICATECODE='INSERT INTO [COM_Billwise]    
        ([DocNo]    
        ,[DocDate]    
@@ -287,8 +297,8 @@ else
        ,[DiscCurrID]    
        ,[DiscExchRT]    
        ,[Narration]    
-       ,[IsDocPDC]'+@CCCols+')    
-     SELECT '+convert(nvarchar(max),@VoucherNo)+'    
+       ,[IsDocPDC]'+@CCBWCols+')    
+     SELECT '''+convert(nvarchar(max),@VoucherNo)+'''    
        , '+convert(nvarchar(max),CONVERT(FLOAT,@DocDate))+'
        , NULL
        , [DocSeqNo]   
@@ -309,10 +319,11 @@ else
        , DiscExchRT
        , Narration
        , IsDocPDC
-      '+@CCCols+'
+      '+@CCBWCols+'
      from [COM_Billwise]   WITH(NOLOCK) 
-     WHERe DOCNO='+convert(nvarchar(max),@RecuVoucherNo)
-     exec(@DUPLICATECODE)
+     WHERe DOCNO='''+convert(nvarchar(max),@RecuVoucherNo)+''''
+     
+	 exec(@DUPLICATECODE)
      
      
 --CHECK AUDIT TRIAL ALLOWED AND INSERTING AUDIT TRIAL DATA
@@ -357,7 +368,7 @@ END
 				set @DimesionNodeID=0						
 				select @cctablename=tablename from ADM_Features where FeatureID=@Dimesion
 				set @DUPLICATECODE='select @NodeID=NodeID from '+@cctablename+' WITH(NOLOCK) where Name='''+@VoucherNo+''''				
-				EXEC sp_executesql @DUPLICATECODE,N'@NodeID bigint OUTPUT',@DimesionNodeID output
+				EXEC sp_executesql @DUPLICATECODE,N'@NodeID INT OUTPUT',@DimesionNodeID output
 		END
 		
 		if(@DimesionNodeID>0)
@@ -372,7 +383,7 @@ END
  
 	set @Dimesion=0
 	select @Dimesion=isnull(value,0) from Adm_globalPreferences with(nolock)
-	where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(bigint,value)>50000
+	where Name='DimensionwiseCurrency' and ISNUMERIC(value)=1 and CONVERT(INT,value)>50000
 	
 	if(@Dimesion>0)
 	BEGIN
@@ -402,7 +413,24 @@ END
 	END
   
 	
---COMMIT TRANSACTION 
+COMMIT TRANSACTION 
 SET NOCOUNT OFF;        
 RETURN @DocID
+END TRY  
+BEGIN CATCH  
+	--Return exception info [Message,Number,ProcedureName,LineNumber]  
+	IF ERROR_NUMBER()=50000
+	BEGIN
+		SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) 
+		WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID
+	END
+	ELSE
+	BEGIN
+		SELECT ErrorMessage, ERROR_MESSAGE() AS ServerMessage,ERROR_NUMBER() as ErrorNumber, ERROR_PROCEDURE()as ProcedureName, ERROR_LINE() AS ErrorLine
+		FROM COM_ErrorMessages WITH(nolock) WHERE ErrorNumber=-999 AND LanguageID=@LangID
+	END
+	ROLLBACK TRANSACTION
+	SET NOCOUNT OFF  
+	RETURN -999   
+END CATCH
 GO

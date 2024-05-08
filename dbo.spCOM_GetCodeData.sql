@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetCodeData]
 	@CostCenterID [int],
-	@ParentID [bigint],
+	@ParentID [int],
 	@DataXML [nvarchar](max),
 	@Dt [datetime] = null,
 	@IsName [bit] = 0,
@@ -16,12 +16,12 @@ BEGIN TRY
 SET NOCOUNT ON;    
 	-- Declare the variable here
 	DECLARE @Result nvarchar(500),@Year nvarchar(4),@Month nvarchar(20),@Day nvarchar(2),@DocDate datetime,
-		@CodeNumberRoot bigint,@CodeNumberInc int,
-		@CurrentCodeNumber bigint,@IsSeqNoExists BIT,@ContinuousSeqNo BIT,@SeqNoLen int,
+		@CodeNumberRoot INT,@CodeNumberInc int,
+		@CurrentCodeNumber INT,@IsSeqNoExists BIT,@ContinuousSeqNo BIT,@SeqNoLen int,
 		@IsParentCodeInherited bit,@CompanyGUID nvarchar(50),@DATA XML,@Code nvarchar(300),
 		@Suffix NVARCHAR(100),@CodePrefix NVARCHAR(500),@CodeNumber NVARCHAR(20),
-		@ColID bigint,@colType nvarchar(50),@Delimiter nvarchar(2),@TblName nvarchar(50),@PK nvarchar(30),@ApplyAutoCode int
-		,@ShowSeriesNos bit,@SameSeriesForGroups bit,@ShowAutoManual bit,@IsGroupMaual bit,@SeriesStart int,@SeriesEnd int,@TempParentID bigint
+		@ColID INT,@colType nvarchar(50),@Delimiter nvarchar(2),@TblName nvarchar(50),@PK nvarchar(30),@ApplyAutoCode int
+		,@ShowSeriesNos bit,@SameSeriesForGroups bit,@ShowAutoManual bit,@IsGroupMaual bit,@SeriesStart int,@SeriesEnd int,@TempParentID INT
 	declare @SQL nvarchar(max)
 	
 	/*IF len(@DataXML)>0
@@ -31,7 +31,7 @@ SET NOCOUNT ON;
 			declare @DATAStr nvarchar(max),@DATAStr2 nvarchar(max)
 			set @DATAStr2=convert(nvarchar(max),@DATA)
 			set @DATA=@DataXML
-			SELECT @DataXML=X.value('@NodeID','bigint') FROM @DATA.nodes('Password/Row') as DATA(X)
+			SELECT @DataXML=X.value('@NodeID','INT') FROM @DATA.nodes('Password/Row') as DATA(X)
 			exec [spCom_GetAutCodeXML] @DATAStr2,1,@CostCenterID,@DATAStr output
 			select @DataXML=@DATAStr
 		end
@@ -82,10 +82,10 @@ SET NOCOUNT ON;
 
 	select @TblName=TableName,@PK=PrimaryKey from adm_features with(nolock) where featureid=@CostCenterID
 
-    DECLARE @TblDef AS TABLE(ID INT IDENTITY(1,1),NAME nvarchar(300),Length NVARCHAR(50),ColID BIGINT,Delimiter NVARCHAR(2),
+    DECLARE @TblDef AS TABLE(ID INT IDENTITY(1,1),NAME nvarchar(300),Length NVARCHAR(50),ColID INT,Delimiter NVARCHAR(2),
     colType NVARCHAR(50),Value NVARCHAR(MAX))
 	INSERT INTO @TblDef(NAME,[Length],ColID,Delimiter,colType)
-	SELECT X.value('@Name','NVARCHAR(300)'),X.value('@Length','NVARCHAR(50)'),X.value('@CCCID','bigint'),X.value('@Delimiter','nvarchar(2)'),
+	SELECT X.value('@Name','NVARCHAR(300)'),X.value('@Length','NVARCHAR(50)'),X.value('@CCCID','INT'),X.value('@Delimiter','nvarchar(2)'),
 	X.value('@Type','nvarchar(50)')
 	FROM @DATA.nodes('XML/Row') as DATA(X)
 	
@@ -96,7 +96,7 @@ SET NOCOUNT ON;
 			declare @DATAStr nvarchar(max),@DATAStr2 nvarchar(max)
 			set @DATAStr2=convert(nvarchar(max),@DATA)
 			set @DATA=@DataXML
-			SELECT @DataXML=X.value('@NodeID','bigint') FROM @DATA.nodes('Password/Row') as DATA(X)
+			SELECT @DataXML=X.value('@NodeID','INT') FROM @DATA.nodes('Password/Row') as DATA(X)
 			
 			exec [spCom_GetAutCodeXML] @DATAStr2,@DataXML,@CostCenterID,@DATAStr output
 			select @DataXML=@DATAStr
@@ -106,14 +106,14 @@ SET NOCOUNT ON;
 		UPDATE @TblDef
 		SET Value=X.value('@Value','nvarchar(200)')
 		FROM @TblDef D,@DATA.nodes('Data/Row') as DATA(X)
-		WHERE D.ColID=X.value('@ColID','bigint')
+		WHERE D.ColID=X.value('@ColID','INT')
 	end
 
 --	select * from @TblDef
 
-	DECLARE @I INT,@COUNT INT,@Length BIGINT,@Format NVARCHAR(50),@NAME NVARCHAR(300),@Value NVARCHAR(MAX)
+	DECLARE @I INT,@COUNT INT,@Length INT,@Format NVARCHAR(50),@NAME NVARCHAR(300),@Value NVARCHAR(MAX)
 	declare @str nvarchar(max) ,@NodeidXML nvarchar(max)
-	declare @columnCCID bigint, @tbname nvarchar(200) ,@listval nvarchar(200)
+	declare @columnCCID INT, @tbname nvarchar(200) ,@listval nvarchar(200)
 	SELECT @COUNT=COUNT(*) FROM @TblDef  
 	SET @I=1 
 	
@@ -136,7 +136,7 @@ SET NOCOUNT ON;
 			select @columnCCID =columncostcenterid from adm_costcenterdef with(nolock) where costcentercolid=@ColID
 	 
 	 	if ISNUMERIC(@Format)=1
-			set @Length=convert(BIGINT,@Format)
+			set @Length=convert(INT,@Format)
 		else
 			set @Length=0  
 
@@ -264,6 +264,32 @@ SET NOCOUNT ON;
 								set @Result=@Result+convert(nvarchar,datepart(month,@TmpDate))	
 							set @Result=@Result+'/'+substring(@Year,3,2)
 						END 
+						else if @Format='DDMMYY'
+						BEGIN
+							if datepart(day,@TmpDate)<10
+								set @Result=@Result+'0'+convert(nvarchar,datepart(day,@TmpDate))
+							else
+								set @Result=@Result+convert(nvarchar,datepart(day,@TmpDate))
+								
+							if datepart(month,@TmpDate)<10
+								set @Result=@Result+'0'+convert(nvarchar,datepart(month,@TmpDate))
+							else
+								set @Result=@Result+convert(nvarchar,datepart(month,@TmpDate))	
+							set @Result=@Result+substring(@Year,3,2)
+						END 
+						else if @Format='DDMMYYYY'
+						BEGIN
+							if datepart(day,@TmpDate)<10
+								set @Result=@Result+'0'+convert(nvarchar,datepart(day,@TmpDate))
+							else
+								set @Result=@Result+convert(nvarchar,datepart(day,@TmpDate))
+								
+							if datepart(month,@TmpDate)<10
+								set @Result=@Result+'0'+convert(nvarchar,datepart(month,@TmpDate))
+							else
+								set @Result=@Result+convert(nvarchar,datepart(month,@TmpDate))	
+							set @Result=@Result+@Year
+						END 
 						else if @Format='MM/YYYY'
 							BEGIN
 							if datepart(month,@TmpDate)<10
@@ -328,7 +354,7 @@ SET NOCOUNT ON;
 					break
 				set @SQL='select @TempParentID=ParentID from '+@TblName+' with(nolock) where '+@PK+'='+convert(nvarchar,@TempParentID)
 				--print @SQL
-				exec sp_executesql @SQL,N'@TempParentID BIGINT OUTPUT',@TempParentID OUTPUT
+				exec sp_executesql @SQL,N'@TempParentID INT OUTPUT',@TempParentID OUTPUT
 				--select @TempParentID
 				if @TempParentID=1 or @TempParentID=0
 					break
@@ -435,6 +461,5 @@ BEGIN CATCH
  --ROLLBACK TRANSACTION  
  SET NOCOUNT OFF    
  RETURN -999     
-END CATCH    
-
+END CATCH
 GO

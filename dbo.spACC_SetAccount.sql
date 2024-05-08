@@ -3,31 +3,31 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_SetAccount]
-	@AccountID [bigint],
+	@AccountID [int],
 	@AccountCode [nvarchar](200),
 	@AccountName [nvarchar](500),
 	@AliasName [nvarchar](500),
 	@AccountTypeID [int],
 	@StatusID [int],
-	@SelectedNodeID [bigint],
+	@SelectedNodeID [int],
 	@IsGroup [bit],
 	@CreditDays [int],
 	@CreditLimit [float],
 	@DebitDays [int],
 	@DebitLimit [float],
 	@Currency [int],
-	@PurchaseAccount [bigint],
-	@SalesAccount [bigint],
-	@COGSAccountID [bigint],
-	@ClosingStockAccountID [bigint],
-	@PDCReceivableAccount [bigint],
-	@PDCPayableAccount [bigint],
+	@PurchaseAccount [int],
+	@SalesAccount [int],
+	@COGSAccountID [int],
+	@ClosingStockAccountID [int],
+	@PDCReceivableAccount [int],
+	@PDCPayableAccount [int],
 	@IsBillwise [bit],
-	@PaymentTerms [bigint],
+	@PaymentTerms [int],
 	@LetterofCredit [float],
 	@TrustReceipt [float],
-	@TrustReceiptAccount [bigint] = 1,
-	@MarginAccount [bigint] = 1,
+	@TrustReceiptAccount [int] = 1,
+	@MarginAccount [int] = 1,
 	@CompanyGUID [varchar](50),
 	@GUID [varchar](50),
 	@Description [nvarchar](500),
@@ -52,20 +52,21 @@ CREATE PROCEDURE [dbo].[spACC_SetAccount]
 	@PLT [int] = 0,
 	@IsDrCr [bit] = 0,
 	@GLClubTranBy [int] = 0,
-	@PDCDiscountAccount [bigint] = NULL,
+	@PDCDiscountAccount [int] = NULL,
 	@INTERESTRATE [float] = 0,
 	@COMMISSIONRATE [float] = 0,
 	@CHECKDISCOUNTLIMIT [float] = 0,
 	@DistCost [int] = 0,
 	@CodePrefix [nvarchar](200) = NULL,
-	@CodeNumber [bigint] = 0,
+	@CodeNumber [int] = 0,
 	@CreditDebitXML [nvarchar](max) = null,
 	@HistoryXML [nvarchar](max) = null,
 	@StatusXML [nvarchar](max) = null,
 	@IsCode [bit] = 0,
 	@GroupSeqNoLength [int] = 0,
 	@ReportTemplateXML [nvarchar](max) = null,
-	@IsOffline [bit] = 0
+	@IsOffline [bit] = 0,
+	@PDCOnReplaceAccount [int] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION    
@@ -74,9 +75,10 @@ SET NOCOUNT ON;
   --Declaration Section  
   DECLARE @Dt float,@XML xml,@TempGuid nvarchar(50),@HasAccess bit,@IsDuplicateNameAllowed bit,@IsDuplicateCodeAllowed bit,@ActionType INT
   DECLARE @UpdateSql nvarchar(max),@ParentCode nvarchar(200),@CCCCCData XML,@IsIgnoreSpace bit  
-  DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint  
+  DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT  
   DECLARE @SelectedIsGroup bit  ,@HistoryStatus NVARCHAR(300),@AccountTypeAllowDuplicate NVARCHAR(300),@AccountTypeChar NVARCHAR(5)
-  declare @isparentcode bit
+  declare @isparentcode bit,@RefSelectedNodeID INT
+  Declare @level int,@maxLevel int
  set @AccountName=ltrim(@AccountName)
   --User acces check FOR ACCOUNTS  
   IF @AccountID=0  
@@ -185,7 +187,7 @@ SET NOCOUNT ON;
 	IF @IsCode=1 AND @AccountID=0 and @AccountCode='' and exists (SELECT * FROM COM_CostCenterCodeDef WITH(nolock)WHERE CostCenterID=2 and IsEnable=1 and IsName=0 and IsGroupCode=@IsGroup)
 	BEGIN 
 		--CALL AUTOCODEGEN 
-		create table #temp1(prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+		create table #temp1(prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
 		if(@SelectedNodeID is null)
 			insert into #temp1
 			EXEC [spCOM_GetCodeData] 2,1,''  
@@ -229,12 +231,72 @@ SET NOCOUNT ON;
   END  
 
   SET @Dt=convert(float,getdate())--Setting Current Date  
+  declare @CStatusID int
+  SELECT @CStatusID=StatusID
+		FROM ACC_Accounts WITH(NOLOCK) where AccountID=@AccountID
+
+  	if(@WID>0 and @AccountID>0)	 
+	  begin
+		set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+		where WorkFlowID=@WID and  UserID =@UserID)
+
+		if(@level is null )
+			set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
+			where WorkFlowID=@WID and  RoleID =@RoleID)
+
+		if(@level is null ) 
+			set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
+
+		if(@level is null )
+			set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
+			where RoleID =@RoleID))
+
+		select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
+		select @level,@maxLevel
+		if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
+		begin 
+		 	set @StatusID=1001 
+		end	
+		else if(@level is not null and  @maxLevel is not null and @level<@maxLevel and @CStatusID in (1003))--rejected status time
+		begin	
+		 	set @StatusID=1001 
+		end	
+		 
+		 
+	end
   
-  
-  
+  	
   IF @AccountID=0--------START INSERT RECORD-----------  
   BEGIN--CREATE ACCOUNT--  
     --To Set Left,Right And Depth of Record  
+	if(@WID>0)
+		begin
+			set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+			where WorkFlowID=@WID and  UserID =@UserID)
+
+			if(@level is null )
+				set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
+				where WorkFlowID=@WID and  RoleID =@RoleID)
+
+			if(@level is null ) 
+				set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+				where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
+
+			if(@level is null )
+				set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
+				where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
+				where RoleID =@RoleID))
+
+			select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
+		
+			if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
+			begin			
+				set @StatusID=1001
+			END
+		END
+
     SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth  
     from [ACC_Accounts] with(NOLOCK) where AccountID=@SelectedNodeID  
    
@@ -268,7 +330,7 @@ SET NOCOUNT ON;
       set @IsGroup=1  
      END    
      
-     if @ParentID=1 and @IsGroup=0 and exists (select Value from COM_CostCenterPreferences with(nolock) where FeatureID=2 and Name='AllowChildAtRoot' and Value='True')
+     if @ParentID=1 and @IsGroup=0 and not exists (select Value from COM_CostCenterPreferences with(nolock) where FeatureID=2 and Name='AllowChildAtRoot' and Value='True')
      begin
 		RAISERROR('-224',16,1)
      end
@@ -279,18 +341,18 @@ SET NOCOUNT ON;
 	  INSERT INTO [ACC_Accounts]  
        (CodePrefix,CodeNumber,[AccountCode],[AccountName],[AliasName],[AccountTypeID],[StatusID],
        [Depth],[ParentID],[lft],[rgt],[IsGroup],[CreditDays],[CreditLimit],[DebitDays],[DebitLimit],
-       [PurchaseAccount],[SalesAccount],[COGSAccountID],[ClosingStockAccountID],PDCReceivableAccount,PDCPayableAccount,
+       [PurchaseAccount],[SalesAccount],[COGSAccountID],[ClosingStockAccountID],PDCReceivableAccount,PDCPayableAccount,PDCReplaceAccount,
        [IsBillwise],[PaymentTerms],LetterofCredit,TrustReceipt,  TrustReceiptAccount,MarginAccount, 
        [CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedDate],Currency,CrOptionID,
-	   DrOptionID,TB_INT ,PL ,BS ,PLT,PDCDiscountAccount,InterestRate,CommissionRate,CheckDiscountLimit,GLClubTranBy,DistCost )  
+	   DrOptionID,TB_INT ,PL ,BS ,PLT,PDCDiscountAccount,InterestRate,CommissionRate,CheckDiscountLimit,GLClubTranBy,DistCost,WorkFlowID,WorkFlowLevel)    
        VALUES  
        (@CodePrefix,@CodeNumber,@AccountCode,@AccountName,@AliasName,@AccountTypeID,@StatusID,  
        @Depth,@ParentID,@lft,@rgt,@IsGroup,@CreditDays,@CreditLimit,@DebitDays,@DebitLimit,  
-       @PurchaseAccount,@SalesAccount,@COGSAccountID,@ClosingStockAccountID,@PDCReceivableAccount,@PDCPayableAccount,
+       @PurchaseAccount,@SalesAccount,@COGSAccountID,@ClosingStockAccountID,@PDCReceivableAccount,@PDCPayableAccount,@PDCOnReplaceAccount,
        @IsBillwise,@PaymentTerms,@LetterofCredit,@TrustReceipt,isnull(@TrustReceiptAccount,0),isnull(@MarginAccount,0), 
        @CompanyGUID,newid(),@Description,  
        @UserName,@Dt,@Dt,@Currency,@CrOptionID,
-  	  @DrOptionID,@TB,@PL,@BS,@PLT,@PDCDiscountAccount,@INTERESTRATE,@COMMISSIONRATE,@CHECKDISCOUNTLIMIT,@GLClubTranBy,@DistCost)  
+  	  @DrOptionID,@TB,@PL,@BS,@PLT,@PDCDiscountAccount,@INTERESTRATE,@COMMISSIONRATE,@CHECKDISCOUNTLIMIT,@GLClubTranBy,@DistCost,@WID,@level)  
 		--To get inserted record primary key  
 		SET @AccountID=SCOPE_IDENTITY()  
     end
@@ -307,18 +369,18 @@ SET NOCOUNT ON;
 	   INSERT INTO [ACC_Accounts]  
        (AccountID,CodePrefix,CodeNumber,[AccountCode],[AccountName],[AliasName],[AccountTypeID],[StatusID],
        [Depth],[ParentID],[lft],[rgt],[IsGroup],[CreditDays],[CreditLimit],[DebitDays],[DebitLimit],
-       [PurchaseAccount],[SalesAccount],[COGSAccountID],[ClosingStockAccountID],PDCReceivableAccount,PDCPayableAccount,
+       [PurchaseAccount],[SalesAccount],[COGSAccountID],[ClosingStockAccountID],PDCReceivableAccount,PDCPayableAccount,PDCReplaceAccount,
        [IsBillwise],[PaymentTerms],LetterofCredit,TrustReceipt,  TrustReceiptAccount,MarginAccount, 
        [CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedDate],Currency,CrOptionID,
-	   DrOptionID,TB_INT ,PL ,BS ,PLT,PDCDiscountAccount,InterestRate,CommissionRate,CheckDiscountLimit,GLClubTranBy,DistCost)  
+	   DrOptionID,TB_INT ,PL ,BS ,PLT,PDCDiscountAccount,InterestRate,CommissionRate,CheckDiscountLimit,GLClubTranBy,DistCost,WorkFlowID,WorkFlowLevel)  
        VALUES  
        (@AccountID,@CodePrefix,@CodeNumber,@AccountCode,@AccountName,@AliasName,@AccountTypeID,@StatusID,  
        @Depth,@ParentID,@lft,@rgt,@IsGroup,@CreditDays,@CreditLimit,@DebitDays,@DebitLimit,  
-       @PurchaseAccount,@SalesAccount,@COGSAccountID,@ClosingStockAccountID,@PDCReceivableAccount,@PDCPayableAccount,
+       @PurchaseAccount,@SalesAccount,@COGSAccountID,@ClosingStockAccountID,@PDCReceivableAccount,@PDCPayableAccount,@PDCOnReplaceAccount,
        @IsBillwise,@PaymentTerms,@LetterofCredit,@TrustReceipt,isnull(@TrustReceiptAccount,0),isnull(@MarginAccount,0), 
        @CompanyGUID,newid(),@Description,  
        @UserName,@Dt,@Dt,@Currency,@CrOptionID,
-  	   @DrOptionID,@TB,@PL,@BS,@PLT,@PDCDiscountAccount,@INTERESTRATE,@COMMISSIONRATE,@CHECKDISCOUNTLIMIT,@GLClubTranBy,@DistCost)
+  	   @DrOptionID,@TB,@PL,@BS,@PLT,@PDCDiscountAccount,@INTERESTRATE,@COMMISSIONRATE,@CHECKDISCOUNTLIMIT,@GLClubTranBy,@DistCost,@WID,@level)
   	   set identity_insert [ACC_Accounts] OFF
   	   
 		if exists(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]='IsControlAccounts' and [Value]='True')
@@ -365,7 +427,18 @@ SET NOCOUNT ON;
     ,@UserName,@Dt  
     )  
     INSERT INTO COM_ContactsExtended(ContactID,[CreatedBy],[CreatedDate])
-			 	VALUES(SCOPE_IDENTITY(), @UserName, convert(float,getdate()))
+			 	VALUES(SCOPE_IDENTITY(), @UserName, @DT)
+
+
+
+if(@WID>0)
+	BEGIN	 
+		INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)     
+		VALUES(2,@AccountID,@StatusID,CONVERT(FLOAT,getdate()),'',@UserID,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
+	end
+
+
+
 			 	
    END--------END INSERT RECORD-----------  
   ELSE--------START UPDATE RECORD-----------  
@@ -395,8 +468,9 @@ SET NOCOUNT ON;
    WHERE AccountID=@AccountID  
   
    IF(@TempGuid!=@Guid)--IF RECORD ALREADY UPDATED BY SOME OTHER USER i.e DIRTY READ    
-   BEGIN    
-       RAISERROR('-101',16,1)   
+   BEGIN 
+   print '-101'
+       --RAISERROR('-101',16,1)   
    END    
    ELSE    
    BEGIN   
@@ -408,11 +482,20 @@ SET NOCOUNT ON;
 			RAISERROR('-583',16,1)   
 	END
     
+  --checking AccountType While Saving for Vendor Users
+	 Declare @AccTypeID Nvarchar(100)
+	 SELECT @AccTypeID=AccountTypeID from [ACC_Accounts]  WITH(NOLOCK)  WHERE AccountID=@AccountID  
   
+	 IF(@AccTypeID != @AccountTypeID)  
+	 BEGIN 
+		if exists(select * from COM_Contacts WITH(NOLOCK) where FeaturePK=@AccountID and FeatureID = 2 and UserID is not null)
+			RAISERROR('Cannot Change Account Type ,User Created With Reference to it',16,1)
+	 END   
+
    --Delete mapping if any  
  --  DELETE FROM  ACC_AccountCostCenterMap WHERE AccountID=@AccountID  
 
-    DELETE FROM  COM_CCCCDATA WHERE NodeID=@AccountID AND  CostCenterID = 2
+    --DELETE FROM  COM_CCCCDATA WHERE NodeID=@AccountID AND  CostCenterID = 2
 
 
   
@@ -421,8 +504,9 @@ SET NOCOUNT ON;
    --VALUES(@AccountID, @UserName, @Dt, @CompanyGUID,newid())  
 
    
-    INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[CompanyGUID],[Guid],[CreatedBy],[CreatedDate])
-     VALUES(2,@AccountID, @CompanyGUID,newid(),  @UserName, @Dt)      
+    --INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[CompanyGUID],[Guid],[CreatedBy],[CreatedDate])
+    -- VALUES(2,@AccountID, @CompanyGUID,newid(),  @UserName, @Dt)      
+ 
   
     UPDATE [ACC_Accounts]  
        SET [AccountCode] = @AccountCode  
@@ -441,6 +525,7 @@ SET NOCOUNT ON;
 	   ,[ClosingStockAccountID] = @ClosingStockAccountID  
 	   ,PDCReceivableAccount=@PDCReceivableAccount
 	   ,PDCPayableAccount=@PDCPayableAccount
+	   ,PDCReplaceAccount=@PDCOnReplaceAccount
        ,[IsBillwise] = @IsBillwise       
        ,[PaymentTerms] = @PaymentTerms    
        ,LetterofCredit = @LetterofCredit
@@ -457,6 +542,7 @@ SET NOCOUNT ON;
   	  PDCDiscountAccount=@PDCDiscountAccount,InterestRate=@INTERESTRATE,CommissionRate=@COMMISSIONRATE
   	  ,CheckDiscountLimit=@CHECKDISCOUNTLIMIT,GLClubTranBy=@GLClubTranBy,CodePrefix=@CodePrefix,CodeNumber=@CodeNumber    	  
   	  ,DistCost=@DistCost
+	  ,WorkFlowLevel=isnull(@level,0)
      WHERE AccountID=@AccountID        
        
    END  
@@ -471,7 +557,7 @@ SET NOCOUNT ON;
 	END		
  
   --CHECK WORKFLOW
-  EXEC spCOM_CheckCostCentetWF 2,@AccountID,@WID,@RoleID,@UserID,@UserName,@StatusID output
+  --EXEC spCOM_CheckCostCentetWF 2,@AccountID,@WID,@RoleID,@UserID,@UserName,@StatusID output
  
   --SETTING ACCOUNT CODE EQUALS AccountID IF EMPTY  
   IF(@AccountCode IS NULL OR @AccountCode='')  
@@ -479,7 +565,7 @@ SET NOCOUNT ON;
 	set @AccountCode=convert(nvarchar,@AccountID)
 	IF  @IsDuplicateCodeAllowed=0 OR charindex(@AccountTypeChar,@AccountTypeAllowDuplicate,1)=0
 	begin
-		declare @I bigint
+		declare @I INT
 		set @I=@AccountID
 		while(1=1)
 		begin
@@ -528,7 +614,8 @@ SET NOCOUNT ON;
 		+''',[ModifiedDate] =@ModDate WHERE AccountID='+convert(nvarchar,@AccountID)   
 	  EXEC sp_executesql @UpdateSql,N'@ModDate float',@Dt
   end
-  if exists (select CostCenterColID from adm_costcenterdef where CostCenterID=2 and CostCenterColID=244)
+  if exists (select CostCenterColID from adm_costcenterdef  with(nolock) where CostCenterID=2 and CostCenterColID=244)
+  and ((select count(*) from sys.columns where object_id=object_id('ACC_AccountsExtended') and name in ('acAlpha51','acAlpha60'))=2)
 	  begin
 		set @UpdateSql='
 		if exists (select acAlpha60 from ACC_AccountsExtended with(nolock) where AccountID=@AccountID and acAlpha60=0)
@@ -537,7 +624,7 @@ SET NOCOUNT ON;
 		end'
 		EXEC sp_executesql @UpdateSql,N'@AccountID int',@AccountID
 		set @UpdateSql='
-declare @TRN nvarchar(max),@GA bigint
+declare @TRN nvarchar(max),@GA BIGINT
 select @TRN=acAlpha51,@GA=acAlpha60 from ACC_AccountsExtended with(nolock) where AccountID=@AccountID
 if @TRN is not null and @TRN!=''''
 begin
@@ -546,7 +633,7 @@ begin
 	else
 	begin
 		begin try
-			select convert(bigint,@TRN)
+			select convert(BIGINT,@TRN)
 		end try
 		begin catch
 			RAISERROR(''Invalid Tax Registration Number - TRN/TIN'',16,1)
@@ -575,7 +662,7 @@ end'
 	exec [spCOM_CheckUniqueCostCenter] @CostCenterID=2,@NodeID =@AccountID,@LangID=@LangID
 
 	--Series Check
-	declare @retSeries bigint
+	declare @retSeries INT
 	EXEC @retSeries=spCOM_ValidateCodeSeries 2,@AccountID,@LangId
 	if @retSeries>0
 	begin
@@ -584,105 +671,33 @@ end'
 		RETURN -999
 	end
   
---  IF (@CCMapXML IS NOT NULL AND @CCMapXML <> '')  
---  BEGIN  
---   SET @XML=@CCMapXML  
---   INSERT INTO ACC_AccountCostCenterMap(CostCenterID,NodeID,AccountID,CompanyGUID,  
---   GUID,CreatedBy,CreatedDate)  
---   SELECT X.value('@CCID','INT'),  
---       X.value('@Value','BIGINT'),@AccountID,  
---   @CompanyGUID,newid(),@UserName,@Dt  
---   FROM @XML.nodes('/CCXML/Row') as Data(X)  
---  END  
-  
+
   --ADDED CODE ON DEC 08 2011 BY HAFEEZ  
 
   IF  (@AssignCCCCData IS NOT NULL AND @AssignCCCCData <> '')   
   BEGIN    
     SET @CCCCCData=@AssignCCCCData  
-    declare @Val bit,   @NodeID bigint,@DATA xml,@DefCCID INT
-	
+    
     EXEC [spCOM_SetCCCCMap] 2,@AccountID,@CCCCCData,@UserName,@LangID  
     
     if(@IsGroup=1 and not exists(select Name from com_costcenterpreferences with(nolock) where CostCenterID=2 and Name='DontAssignGroupToNodes' and Value='True'))
     begin
-		declare @count int, @a int,@Action NVARCHAR(100)
-		create table #temp (id int identity(1,1), Accountid bigint )
+		declare @count int, @a int,@acc INT 
+		create table #temp (id int identity(1,1), Accountid INT )
 		insert into #temp
 		select AccountID from acc_accounts with(nolock) where lft between (select lft from acc_accounts with(nolock) where accountid=@AccountID) 
 	    and (select rgt from acc_accounts with(nolock) where accountid=@AccountID) and accountid<>@AccountID order by lft
-	    select @count=count(*) from #temp	
-	    set @a=1 
+	    select @a=1,@count=count(*) from #temp with(nolock)	
+
 	    while @a<=@count
 	    begin
-			declare @acc bigint 
-			select @acc=Accountid from #temp where id=@a   
-			if(@Val =1)
-			begin
-				set @NodeID=@acc
-				IF exists (select @DATA from @DATA.nodes('/ASSIGNMAPXML') as DATA(A) )
-				BEGIN
-					 
-					select @DefCCID=A.value('@Dimension','INT'),@Action=A.value('@Action','NVARCHAR(30)') from @DATA.nodes('/ASSIGNMAPXML') as DATA(A)
-					IF @Action='ASSIGN' OR @Action='ASSIGN/MAP'
-						if exists ( select voucherno from Inv_DocDetails d with(nolock)
-							join com_docccdata cc with(nolock) on d.InvDocDetailsID=cc.InvDocDetailsID
-							where (debitaccount =@NodeID or CreditAccount=@NodeID) and cc.dcCCNID2 in  
-							(Select cc.NodeID    from COM_CostCenterCostCenterMap cc with(nolock)
-							left join @DATA.nodes('/ASSIGNMAPXML/ASSIGN/R') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID 
-							and costcenterid=A.value('@CCID','BIGINT') and NodeID=A.value('@ID','BIGINT')
-							where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 
-							and A.value('@ID','BIGINT') is null))
-							or exists  (select voucherno from ACC_DocDetails d with(nolock)
-							join com_docccdata cc with(nolock) on d.AccDocDetailsID=cc.AccDocDetailsID
-							where (debitaccount =@NodeID or CreditAccount=@NodeID) and cc.dcCCNID2 in  
-							(Select cc.NodeID    from COM_CostCenterCostCenterMap cc with(nolock)
-							left join @DATA.nodes('/ASSIGNMAPXML/ASSIGN/R') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID 
-							and costcenterid=A.value('@CCID','BIGINT') and NodeID=A.value('@ID','BIGINT')
-							where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 and A.value('@ID','BIGINT') is null))
-							BEGIN
-								if not exists(Select cc.nodeid from COM_CostCenterCostCenterMap cc with(nolock)
-								left join @DATA.nodes('/ASSIGNMAPXML/ASSIGN/R') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID and costcenterid=A.value('@CCID','BIGINT')  
-								join com_location k  with(nolock) on cc.NodeID=k.nodeid
-								join com_location gl with(nolock) on A.value('@ID','BIGINT')=gl.nodeid and k.lft between gl.lft and gl.rgt 
-								where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002)
-									RAISERROR('-110',16,1) 
-							END
-				END
-				ELSE
-				BEGIN
-					--IF DATA EXISTS @ DOCUMENTS THE RAISE ERROR 
-					if exists ( select voucherno from Inv_DocDetails d with(nolock)
-					join com_docccdata cc with(nolock) on d.InvDocDetailsID=cc.InvDocDetailsID
-					where (debitaccount =@NodeID or CreditAccount=@NodeID) and cc.dcCCNID2 in  
-					(Select cc.NodeID    from COM_CostCenterCostCenterMap cc with(nolock)
-					left join @DATA.nodes('/XML/Row') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID 
-					and costcenterid=A.value('@CostCenterId','BIGINT') and NodeID=A.value('@NodeID','BIGINT')
-					where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 
-					and A.value('@NodeID','BIGINT') is null))
-					or exists  (select voucherno from ACC_DocDetails d with(nolock)
-					join com_docccdata cc with(nolock) on d.AccDocDetailsID=cc.AccDocDetailsID
-					where (debitaccount =@NodeID or CreditAccount=@NodeID) and cc.dcCCNID2 in  
-					(Select cc.NodeID    from COM_CostCenterCostCenterMap cc with(nolock)
-					left join @DATA.nodes('/XML/Row') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID 
-					and costcenterid=A.value('@CostCenterId','BIGINT') and NodeID=A.value('@NodeID','BIGINT')
-					where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 and A.value('@NodeID','BIGINT') is null))
-					BEGIN  
-						if not exists(Select cc.nodeid from COM_CostCenterCostCenterMap cc with(nolock)
-						left join @DATA.nodes('/XML/Row') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID and costcenterid=A.value('@CostCenterId','BIGINT')  
-						join com_location k  with(nolock) on cc.NodeID=k.nodeid
-						join com_location gl with(nolock) on A.value('@NodeID','BIGINT')=gl.nodeid and k.lft between gl.lft and gl.rgt 
-						where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002)
-							RAISERROR('-110',16,1)  
-						
-					END
-				END
-			end	 
+			select @acc=Accountid from #temp with(nolock) where id=@a   
+ 
 			EXEC [spCOM_SetCCCCMap] 2,@acc,@CCCCCData,@UserName,@LangID  
 			set @a=@a+1
 	    end
 	    drop table #temp 
-   end
+	end
   END  
   
   --Dimension History Data
@@ -731,12 +746,12 @@ end'
     ModifiedDate=@Dt  
    FROM COM_Notes C   
    INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X)    
-   ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID  
+   ON convert(INT,X.value('@NoteID','INT'))=C.NoteID  
    WHERE X.value('@Action','NVARCHAR(10)')='MODIFY'  
   
    --If Action is DELETE then delete Notes  
    DELETE FROM COM_Notes  
-   WHERE NoteID IN(SELECT X.value('@NoteID','bigint')  
+   WHERE NoteID IN(SELECT X.value('@NoteID','INT')  
     FROM @XML.nodes('/NotesXML/Row') as Data(X)  
     WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
   
@@ -749,13 +764,28 @@ end'
 	exec [spCOM_SetAttachments] @AccountID,2,@AttachmentsXML,@UserName,@Dt
    
 	--Creating Dimension based on Preference 'AccountTypeLinkDimension'
-	declare @CC nvarchar(max), @CCID nvarchar(10)
+	declare @CC nvarchar(max), @CCID nvarchar(10),@Tabs nvarchar(200),@CCContactsXML nvarchar(max), @CCAttachmentsXML nvarchar(max),@CCNotesXML nvarchar(max), @CCAddressXML nvarchar(max),@CCAssignCCCCData NVARCHAR(MAX)
 	SELECT @CC=[Value] FROM com_costcenterpreferences with(nolock) WHERE [Name]='AccountTypeLinkDimension'
-	if (@CC is not null and @CC<>'' and @IsGroup=0)
+	SELECT @Tabs=[Value] FROM com_costcenterpreferences with(nolock) WHERE [Name]='CopyTabs' and costcenterid=2
+	
+	if (@CC is not null and @CC<>'')-- and @IsGroup=0)
 	begin
 		DECLARE @TblCC AS TABLE(ID INT IDENTITY(1,1),CC nvarchar(100))
 		DECLARE @TblCCVal AS TABLE(ID INT IDENTITY(1,1),CC2 nvarchar(100))
-
+		
+		--START TABS
+		SET @CCContactsXML=''
+		SET @CCAttachmentsXML=''
+		SET @CCNotesXML=''
+		SET @CCAddressXML=''
+		SET @CCAssignCCCCData=''
+		SELECT @CCContactsXML = CASE WHEN @Tabs LIKE '%1%' THEN @ContactsXML ELSE '' END
+		SELECT @CCAddressXML = CASE WHEN @Tabs LIKE '%2%' THEN @AddressXML ELSE '' END
+		SELECT @CCNotesXML = CASE WHEN @Tabs LIKE '%3%' THEN @NotesXML ELSE '' END
+		SELECT @CCAttachmentsXML = CASE WHEN @Tabs LIKE '%4%' THEN @AttachmentsXML ELSE '' END
+		SELECT @CCAssignCCCCData = CASE WHEN @Tabs LIKE '%5%' THEN @AssignCCCCData ELSE '' END
+		--END TABS
+		
 		INSERT INTO @TblCC(CC)
 		EXEC SPSplitString @CC,','
 		declare @cnt int
@@ -776,9 +806,9 @@ end'
 				--select @CCID
 				if(@CCID>50000)
 				begin
-					declare @CCStatusID bigint
+					declare @CCStatusID INT
 					set @CCStatusID = (select top 1 statusid from com_status with(nolock) where costcenterid=@CCID)
-					declare @NID bigint, @CCIDAcc bigint
+					declare @NID INT, @CCIDAcc INT
 					select @NID = CCNodeID, @CCIDAcc=CCID  from acc_Accounts with(nolock) where Accountid=@AccountID
 					iF(@CCIDAcc<>@CCID)
 					BEGIN
@@ -796,17 +826,24 @@ end'
 						set @NID=0
 						set @CCIDAcc=0 
 					END
+					
 					declare @return_value int
 					if(@NID is null or @NID =0)
 					begin 
+						SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
+								WHERE CostCenterID=2 AND RefDimensionID=@CCID AND NodeID=@SelectedNodeID 
+						
+						SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
+						
 						EXEC	@return_value = [dbo].[spCOM_SetCostCenter]
-						@NodeID = 0,@SelectedNodeID = 1,@IsGroup = 0,
+						@NodeID = 0,@SelectedNodeID =@RefSelectedNodeID,@IsGroup = @IsGroup,
 						@Code = @AccountCode,
 						@Name = @AccountName,
 						@AliasName=@AccountName,
 						@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
-						@CustomFieldsQuery=null,@AddressXML=@AddressXML,@AttachmentsXML=NULL,
-						@CustomCostCenterFieldsQuery=@CustomCostCenterFieldsQuery,@ContactsXML=@ContactsXML,@NotesXML=NULL,
+						@CustomFieldsQuery=null,@AddressXML=@CCAddressXML,@AttachmentsXML=@CCAttachmentsXML,
+						@CustomCostCenterFieldsQuery=@CustomCostCenterFieldsQuery,@ContactsXML=@CCContactsXML,@NotesXML=@CCNotesXML,
+						@CostCenterRoleXML=@CCAssignCCCCData,
 						@CostCenterID = @CCID,@CompanyGUID=@COMPANYGUID,@GUID='',@UserName='admin',@RoleID=1,@UserID=1,
 						@CheckLink = 0,@IsOffline=@IsOffline 
 						 -- Link Dimension Mapping
@@ -824,19 +861,94 @@ end'
 						select @Table=Tablename from adm_features where featureid=@CCID
 						declare @str nvarchar(max) 
 						set @str='@Gid nvarchar(50) output' 
-						set @NodeidXML='set @Gid= (select GUID from '+convert(nvarchar,@Table)+' where NodeID='+convert(nvarchar,@NID)+')'
+						set @NodeidXML='set @Gid= (select GUID from '+@Table+' with(nolock) where NodeID='+convert(nvarchar,@NID)+')'
 							exec sp_executesql @NodeidXML, @str, @Gid OUTPUT 
 							
+						SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
+						WHERE CostCenterID=2 AND RefDimensionID=@CCID AND NodeID=@AccountID 
+						
+						SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
+					
 						EXEC	@return_value = [dbo].[spCOM_SetCostCenter]
-						@NodeID = @NID,@SelectedNodeID = 1,@IsGroup = 0,
+						@NodeID = @NID,@SelectedNodeID = @RefSelectedNodeID,@IsGroup = @IsGroup,
 						@Code = @AccountCode,
 						@Name = @AccountName,
 						@AliasName=@AccountName,
 						@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
-						@CustomFieldsQuery=null,@AddressXML=@AddressXML,@AttachmentsXML=NULL,
-						@CustomCostCenterFieldsQuery=@CustomCostCenterFieldsQuery,@ContactsXML=@ContactsXML,@NotesXML=NULL,
+						@CustomFieldsQuery=null,@AddressXML=NULL,@AttachmentsXML=NULL,
+						@CustomCostCenterFieldsQuery=@CustomCostCenterFieldsQuery,@ContactsXML=NULL,@NotesXML=NULL,
+						@CostCenterRoleXML=@CCAssignCCCCData,
 						@CostCenterID = @CCID,@CompanyGUID=@CompanyGUID,@GUID=@Gid,@UserName='admin',@RoleID=1,@UserID=1
 						,@CheckLink = 0,@IsOffline=@IsOffline
+						
+						--Notes
+						DECLARE @NOTEID INT
+						if(isnull(@CCNotesXML,'')<>'')
+						begin
+							SET @NOTEID=(SELECT TOP 1 N.FEATUREPK FROM  COM_NOTES N WITH(NOLOCK),COM_DocBridge B WITH(NOLOCK)
+							WHERE N.FEATUREID=B.REFDIMENSIONID AND N.FEATUREPK=B.REFDIMENSIONNODEID AND B.COSTCENTERID=2 AND B.NODEID=@AccountID)
+							if(isnull(@NOTEID,0)>0)
+							begin
+								DELETE FROM  COM_Notes 	WHERE FeatureID=@CCID and  FeaturePK =@NOTEID
+								INSERT INTO COM_Notes(FeatureID,CostCenterID,FeaturePK,Note,GUID,CreatedBy,CreatedDate)  
+								SELECT @CCID,@CCID,@NOTEID,Note,newid(),@UserName,@Dt FROM  COM_Notes	WHERE FeatureID=2 and  FeaturePK =@AccountID
+							end
+						end
+						
+						--Address
+						DECLARE @ADDRESSID INT
+						if(isnull(@CCAddressXML,'')<>'')
+						begin
+							SET @ADDRESSID=(SELECT TOP 1 N.FEATUREPK FROM  COM_Address N WITH(NOLOCK),COM_DocBridge B WITH(NOLOCK)
+											WHERE N.FEATUREID=B.REFDIMENSIONID AND N.FEATUREPK=B.REFDIMENSIONNODEID AND B.COSTCENTERID=2 AND B.NODEID=@AccountID)
+							if(isnull(@ADDRESSID,0)>0)
+							begin											
+								DELETE FROM  COM_Address WHERE FeatureID=@CCID and  FeaturePK =@ADDRESSID and AddressTypeID<>1
+								
+								IF(@CCAddressXML like '%AddressTypeID="1"%')
+										DELETE FROM  COM_Address WHERE FeatureID=@CCID and  FeaturePK =@ADDRESSID and AddressTypeID=1
+								
+								SET @CCAddressXML=Replace(@CCAddressXML,'MODIFY','NEW')
+								SET @CCAddressXML=Replace(@CCAddressXML,'AddressID','ADDID')
+								EXEC spCOM_SetAddress @CCID,@ADDRESSID,@CCAddressXML,@UserName  
+							end
+						end
+						
+						--Attachment
+						DECLARE @ATTACHMENTID INT
+						if(isnull(@CCAttachmentsXML,'')<>'')
+						begin
+							SET @ATTACHMENTID=(SELECT TOP 1 N.FEATUREPK FROM  COM_FILES N WITH(NOLOCK),COM_DocBridge B WITH(NOLOCK)
+							WHERE N.FEATUREID=B.REFDIMENSIONID AND N.FEATUREPK=B.REFDIMENSIONNODEID AND B.COSTCENTERID=2 AND B.NODEID=@AccountID)
+							if(isnull(@ATTACHMENTID,0)>0)
+							begin
+								DELETE FROM  COM_FILES WHERE FeatureID=@CCID and  FeaturePK =@ATTACHMENTID
+							
+								INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,[GUID],CreatedBy,CreatedDate , IsDefaultImage,LocationID ,DivisionID,ColName,ValidTill,HasThumb
+													,IssueDate,Type,RefNum,Remarks,DocNo,status,AllowInPrint,IsSign)
+								select FilePath,ActualFileName,RelativeFileName,FileExtension,FileDescription,IsProductImage,@CCID,@CCID,@ATTACHMENTID,[GUID],CreatedBy,CreatedDate , IsDefaultImage,LocationID ,DivisionID,ColName,ValidTill,HasThumb
+													,IssueDate,Type,RefNum,Remarks,DocNo,status,AllowInPrint,IsSign from com_files with(nolock) where FeatureID=2 and  FeaturePK =@AccountID
+							end
+						end
+						
+						--Contact
+						DECLARE @CONTACTID INT
+						if(isnull(@CCContactsXML,'')<>'')
+						begin
+							SET @CONTACTID=(SELECT TOP 1 N.FEATUREPK FROM  COM_Contacts N WITH(NOLOCK),COM_DocBridge B WITH(NOLOCK)
+							WHERE N.FEATUREID=B.REFDIMENSIONID AND N.FEATUREPK=B.REFDIMENSIONNODEID AND B.COSTCENTERID=2 AND B.NODEID=@AccountID)
+							if(isnull(@CONTACTID,0)>0)
+							begin
+								DELETE FROM COM_ContactsExtended WHERE ContactID in (SELECT CONTACTID FROM COM_Contacts WHERE  FeatureID=@CCID and  FeaturePK =@CONTACTID AND AddressTypeID<>1)
+								DELETE FROM COM_Contacts WHERE  FeatureID=@CCID and  FeaturePK =@CONTACTID AND AddressTypeID<>1
+							
+								SET @CCContactsXML=Replace(@CCContactsXML,'MODIFY','NEW')
+								SET @CCContactsXML=Replace(@CCContactsXML,'ContactID','ContID')
+								 declare @rValue1 int
+								EXEC @rValue1 = spCOM_SetFeatureWiseContacts @CCID,@CONTACTID,2,@CCContactsXML,@UserName,@Dt,@LangID   
+							end
+						end
+						
 				 	end 
 					if(@return_value>0 or @return_value<-10000)
 					BEGIN
@@ -858,21 +970,29 @@ end'
 		end 
 	end
   
-  
+  --validate Data External function
+	DECLARE @tempCode NVARCHAR(200)
+	set @tempCode=''
+	select @tempCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=2 and Mode=9
+	if(@tempCode<>'')
+	begin
+		exec @tempCode 2,@AccountID,@UserID,@LangID
+	end
+	
   --Inserts Location Division Wise Credit & Debit Amount
     IF (@CreditDebitXML IS NOT NULL AND @CreditDebitXML <> '')  
 	BEGIN 
 		SET @XML=@CreditDebitXML  
 		
-		if exists(select * from Acc_CreditDebitAmount where AccountID=@AccountID)
+		if exists(select * from Acc_CreditDebitAmount with(nolock) where AccountID=@AccountID)
 		BEGIN
 			delete from Acc_CreditDebitAmount where AccountID=@AccountID
 		END
 		
 		insert into Acc_CreditDebitAmount(AccountID,LocationID,DivisionID,DimensionID,CurrencyID,CreditAmount,DebitAmount,CreditDays,DebitDays,Guid,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate
 		,CrOptionID,DrOptionID,CreditRemarks,DebitRemarks)
-		       select @AccountID,X.value('@LocationID','bigint'),X.value('@DivisionID','bigint'),X.value('@DimensionID','bigint'),X.value('@CurrencyID','bigint'),
-					  X.value('@Credit','float'),X.value('@Debit','float'),X.value('@CreditDays','bigint'),X.value('@DebitDays','bigint'),newid(),@Dt,@UserID,@Dt,@UserID
+		       select @AccountID,X.value('@LocationID','INT'),X.value('@DivisionID','INT'),X.value('@DimensionID','INT'),X.value('@CurrencyID','INT'),
+					  X.value('@Credit','float'),X.value('@Debit','float'),X.value('@CreditDays','INT'),X.value('@DebitDays','INT'),newid(),@Dt,@UserID,@Dt,@UserID
 				,X.value('@CrOptionID','int'),X.value('@DrOptionID','int'),X.value('@CreditRemarks','NVARCHAR(MAX)'),X.value('@DebitRemarks','NVARCHAR(MAX)')
 			   FROM @XML.nodes('/XML/Row') as Data(X) 	 	  
 
@@ -885,20 +1005,20 @@ end'
 		delete from ACC_ReportTemplate where accountid=@AccountID 
 		if(@IsGroup=1)
 		BEGIN
-			DECLARE @GLFT BIGINT, @GRGT bigint
+			DECLARE @GLFT INT, @GRGT INT
 			select @GLFT=LFT, @GRGT=rgt FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID= @AccountID
 			
 			DELETE FROM ACC_REPORTTEMPLATE
 			WHERE TemplateReportID IN (
 				SELECT TemplateReportID FROM ACC_REPORTTEMPLATE with(nolock) 
-				inner join @XML.nodes('/XML/Row') as Data(X) ON X.value('@TemplateNodeID','bigint')=TemplateNodeID
+				inner join @XML.nodes('/XML/Row') as Data(X) ON X.value('@TemplateNodeID','INT')=TemplateNodeID
 				WHERE ACCOUNTID IN (SELECT AccountID FROM ACC_ACCOUNTS with(nolock) WHERE LFT>@GLFT AND RGT<@GRGT))
 			--DELETE FROM ACC_REPORTTEMPLATE WHERE ACCOUNTID IN (SELECT AccountID FROM ACC_ACCOUNTS with(nolock) WHERE LFT>@GLFT AND RGT<@GRGT)			
 		END
 		
 		insert into ACC_ReportTemplate([TemplateNodeID],[AccountID],[DrNodeID],[CrNodeID],[CreatedBy],[CreatedDate], RTDate,RTGroup)
-		select X.value('@TemplateNodeID','bigint'),@AccountID,X.value('@DrNodeID','bigint'),
-		X.value('@CrNodeID','bigint'),@UserName,@Dt,Convert(float,X.value('@RTDate','DateTime')),X.value('@Grp','nvarchar(50)')
+		select X.value('@TemplateNodeID','INT'),@AccountID,X.value('@DrNodeID','INT'),
+		X.value('@CrNodeID','INT'),@UserName,@Dt,Convert(float,X.value('@RTDate','DateTime')),X.value('@Grp','nvarchar(50)')
 		FROM @XML.nodes('/XML/Row') as Data(X) 	
 	END
     --Insert Notifications
@@ -913,7 +1033,9 @@ end'
 		@CostCenterID =2,    
 		@NodeID =@AccountID,
 		@HistoryStatus =@HistoryStatus,
-		@UserName=@UserName
+		@UserName=@UserName,
+		@DT=@DT
+	
 	
  COMMIT TRANSACTION    
  --ROLLBACK TRANSACTION    

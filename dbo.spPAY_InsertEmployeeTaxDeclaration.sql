@@ -15,7 +15,7 @@ WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION
 Begin Try
-DECLARE @XML xml,@Hasaccesss BIT,@RoleID INT,@PrimaryDocumentID int ,@AttachXml XML,@Dt FLOAT,@PREVSEQNO BIGINT
+DECLARE @XML xml,@Hasaccesss BIT,@RoleID INT,@PrimaryDocumentID int ,@AttachXml XML,@Dt FLOAT,@PREVSEQNO INT
 SET @Dt=CONVERT(FLOAT,GETDATE())
 --User access check for EMPLOYEE  
 SELECT @RoleID=R.ROLEID FROM ADM_USERROLEMAP R WITH(NOLOCK),ADM_USERS U WITH(NOLOCK) WHERE R.USERID=U.USERID AND U.USERID=@UserID
@@ -71,12 +71,12 @@ BEGIN
 		ModifiedBy=@CreatedBy,  
 		ModifiedDate=@Dt  
 		FROM COM_Files C WITH(NOLOCK)  
-		INNER JOIN @AttachXml.nodes('/AttachmentsXML/Row') as Data(X) ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID  
+		INNER JOIN @AttachXml.nodes('/AttachmentsXML/Row') as Data(X) ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID  
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
 
 		--If Action is DELETE then delete Attachments  
 		DELETE FROM COM_Files  
-		WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')  
+		WHERE FileID IN(SELECT X.value('@AttachmentID','INT')  
 		FROM @AttachXml.nodes('/AttachmentsXML/Row') as Data(X)  
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
 END  
@@ -118,5 +118,4 @@ Begin Catch
 	SET NOCOUNT OFF    
 	RETURN -999     
 End Catch
-
 GO

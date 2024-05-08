@@ -3,14 +3,14 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPRD_SetMultiStageBOM]
-	@BOMID [bigint] = 0,
+	@BOMID [int] = 0,
 	@BOMCode [nvarchar](200),
 	@BOMName [nvarchar](500),
-	@ProductID [bigint] = 0,
+	@ProductID [int] = 0,
 	@UOMID [int],
 	@FPQty [float] = 1,
-	@LocationID [bigint] = 0,
-	@DivisionID [bigint] = 0,
+	@LocationID [int] = 0,
+	@DivisionID [int] = 0,
 	@Description [nvarchar](500) = NULL,
 	@StatusID [int],
 	@BOMTypeID [int] = 1,
@@ -26,6 +26,7 @@ CREATE PROCEDURE [dbo].[spPRD_SetMultiStageBOM]
 	@CustomFieldsQuery [nvarchar](max) = null,
 	@CustomCostCenterFieldsQuery [nvarchar](max) = null,
 	@ProductionMethodXML [nvarchar](max) = null,
+	@AttachmentsXML [nvarchar](max),
 	@CompanyGUID [nvarchar](50),
 	@GUID [varchar](50),
 	@UserName [nvarchar](50),
@@ -39,13 +40,38 @@ SET NOCOUNT ON
  BEGIN TRANSACTION    
  BEGIN TRY    
       
-	DECLARE @Dt FLOAT, @lft bigint,@rgt bigint,@TempGuid nvarchar(50),@Selectedlft bigint,@Selectedrgt bigint,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsBOMCodeAutoGen bit  ,@IsIgnoreSpace bit  ,    
-		@Depth int,@ParentID bigint,@SelectedIsGroup int , @XML XML,@ParentCode nvarchar(200),@UpdateSql nvarchar(max)  ,@ProductionXML XML   ,@BOMCCID bigint,@HistoryStatus NVARCHAR(50)
+	DECLARE @Dt FLOAT, @lft INT,@rgt INT,@TempGuid nvarchar(50),@Selectedlft INT,@Selectedrgt INT,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsBOMCodeAutoGen bit  ,@IsIgnoreSpace bit  ,    
+		@Depth int,@ParentID INT,@SelectedIsGroup int , @XML XML,@ParentCode nvarchar(200),@UpdateSql nvarchar(max)  ,@ProductionXML XML   ,@BOMCCID INT,@HistoryStatus NVARCHAR(50)
 
+	IF @BOMID=0  
+	BEGIN
+		SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,76,1)  
+	END  
+	ELSE  
+	BEGIN  
+		SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,76,3)  
+	END  
+
+	IF @HasAccess=0  
+	BEGIN  
+		RAISERROR('-105',16,1)  
+	END  
+	
 	SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,76,133)
 	if(@HasAccess=1)
 		set @StatusID=464
    SET @Dt=convert(float,getdate())--Setting Current Date      
+
+   	   --User acces check FOR Attachments  
+    IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')  
+	 BEGIN  
+   SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,76,12)  
+  
+   IF @HasAccess=0  
+   BEGIN  
+    RAISERROR('-105',16,1)  
+   END  
+  END 
 
 	--GETTING PREFERENCE      
 	SELECT @IsDuplicateNameAllowed=Value FROM COM_CostCenterPreferences WITH(nolock) WHERE COSTCENTERID=76 and  Name='DuplicateNameAllowed'      
@@ -232,13 +258,13 @@ SET NOCOUNT ON
      
   END     
 	--Stages Inserting
-	DECLARE @TblStages AS TABLE(ID INT IDENTITY(1,1),StageID INT,StageNodeID BIGINT,Parent INT,lft INT,Depth INT,NewStageID INT)
+	DECLARE @TblStages AS TABLE(ID INT IDENTITY(1,1),StageID INT,StageNodeID INT,Parent INT,lft INT,Depth INT,NewStageID INT,Duration int)
 	DECLARE @I INT,@CNT INT,@StageID INT
 	
 	SET @XML=@StageXML
-	INSERT INTO @TblStages(StageID,StageNodeID,Parent,lft,Depth,NewStageID)
-	SELECT X.value('@ID','int'),X.value('@StageNodeID','bigint'),X.value('@Parent','int'),
-		X.value('@lft','int'),X.value('@Depth','int'),X.value('@ID','int')
+	INSERT INTO @TblStages(StageID,StageNodeID,Parent,lft,Depth,NewStageID,Duration)
+	SELECT X.value('@ID','int'),X.value('@StageNodeID','INT'),X.value('@Parent','int'),
+		X.value('@lft','int'),X.value('@Depth','int'),X.value('@ID','int'),X.value('@Duration','int')
 	FROM @XML.nodes('/Stages/Stage') as Data(X)      
  
 	
@@ -251,8 +277,8 @@ SET NOCOUNT ON
 	BEGIN
 		IF (SELECT StageID FROM @TblStages WHERE ID=@I)<0
 		BEGIN
-			INSERT INTO [PRD_BOMStages](BOMID,StageNodeID,[ParentID],[lft],[Depth],CreatedDate)
-			SELECT @BOMID,StageNodeID,Parent,lft,Depth,@Dt FROM @TblStages WHERE ID=@I
+			INSERT INTO [PRD_BOMStages](BOMID,StageNodeID,[ParentID],[lft],[Depth],CreatedDate,Duration)
+			SELECT @BOMID,StageNodeID,Parent,lft,Depth,@Dt,Duration FROM @TblStages WHERE ID=@I
 			SET @StageID=SCOPE_IDENTITY()
 			
 			UPDATE @TblStages 
@@ -269,6 +295,7 @@ SET NOCOUNT ON
 	
 	UPDATE PRD_BOMStages
 	SET StageNodeID=TS.StageNodeID,ParentID=TS.Parent,lft=TS.lft,Depth=TS.Depth,CreatedDate=@Dt
+	,Duration=ts.Duration
 	FROM PRD_BOMStages S INNER JOIN @TblStages TS ON TS.StageID>0 AND TS.StageID=S.StageID
 	
 
@@ -294,13 +321,15 @@ WHERE NodeID = '+convert(nvarchar,@BOMID) + ' AND CostCenterID = 76 '
 	BEGIN
 		INSERT INTO  [PRD_BOMProducts]([BOMID] ,StageID,[ProductUse],[ProductID],FilterOn,[Quantity],[UOMID],[UnitPrice]
 		,[ExchgRT],[CurrencyID],[Value],[Wastage],[CreatedBy],[CreatedDate],IncInFinalCost,IncInStageCost,AutoStage,Remarks)    
-		SELECT @BOMID,TS.NewStageID,X.value('@ProductUse','int'),X.value('@ProductID','BIGINT'),X.value('@FilterOn','BIGINT'),       
-			X.value('@Quantity','float'),X.value('@UOMID','bigint'),X.value('@UnitPrice','float'),      
-			X.value('@ExchgRT','float'),X.value('@CurrencyID','bigint'),X.value('@Value','float'),X.value('@Wastage','float'),    
-			@UserName,@Dt,isnull(X.value('@IncInFinalCost','bit'),0),isnull(X.value('@IncInStageCost','bit'),0),X.value('@AutoStage','BIGINT')
+		SELECT @BOMID,TS.NewStageID,X.value('@ProductUse','int'),X.value('@ProductID','INT'),X.value('@FilterOn','INT'),       
+			X.value('@Quantity','float'),X.value('@UOMID','INT'),X.value('@UnitPrice','float'),      
+			X.value('@ExchgRT','float'),X.value('@CurrencyID','INT'),X.value('@Value','float'),X.value('@Wastage','float'),    
+			@UserName,@Dt,isnull(X.value('@IncInFinalCost','bit'),0),isnull(X.value('@IncInStageCost','bit'),0),X.value('@AutoStage','INT')
 			,X.value('@Remarks','nvarchar(max)')
 		FROM @XML.nodes('/BOMProductXML/Row') as Data(X)     
-		inner join @TblStages TS ON TS.StageID=X.value('@StageID','int')      
+		inner join @TblStages TS ON TS.StageID=X.value('@StageID','int') 
+		
+		SELECT X.value('@UOMID','INT') FROM @XML.nodes('/BOMProductXML/Row') as Data(X)     
    END
     
     SET @XML=@BOMExpenseXML    
@@ -311,8 +340,8 @@ WHERE NodeID = '+convert(nvarchar,@BOMID) + ' AND CostCenterID = 76 '
 	BEGIN       
 		INSERT INTO [PRD_Expenses]([BOMID],StageID,[ResourceID],Name,[CreditAccountID],[DebitAccountID]    
        ,[ExchgRT],[CurrencyID],[Value],[CreatedBy],[CreatedDate],IncInFinalCost,IncInStageCost)    
-		SELECT @BOMID,TS.NewStageID,  X.value('@ResourceID','bigint'),X.value('@Name','NVARCHAR(500)') ,X.value('@CreditAccountID','BIGINT'),X.value('@DebitAccountID','BIGINT'),            
-		   X.value('@ExchgRT','float'),X.value('@CurrencyID','bigint'),X.value('@Value','float'),    
+		SELECT @BOMID,TS.NewStageID,  X.value('@ResourceID','INT'),X.value('@Name','NVARCHAR(500)') ,X.value('@CreditAccountID','INT'),X.value('@DebitAccountID','INT'),            
+		   X.value('@ExchgRT','float'),X.value('@CurrencyID','INT'),X.value('@Value','float'),    
 		   @UserName,@Dt,isnull(X.value('@IncInFinalCost','bit'),0),isnull(X.value('@IncInStageCost','bit'),0)      
 		FROM @XML.nodes('/BOMExpenseXML/Row') as Data(X)     
 		inner join @TblStages TS ON TS.StageID=X.value('@StageID','int')
@@ -326,10 +355,12 @@ WHERE NodeID = '+convert(nvarchar,@BOMID) + ' AND CostCenterID = 76 '
     BEGIN      
 		--INSERT RECORD INTO BOM Resources    
 		INSERT INTO [PRD_BOMResources] ([BOMID],StageID,[ResourceID],[Hours]    
-		   ,[ExchgRT],[CurrencyID],[Value],[CreatedBy],[CreatedDate],IncInFinalCost,IncInStageCost)    
-		SELECT @BOMID,TS.NewStageID,  X.value('@ResourceID','bigint') ,X.value('@Hours','float'),       
-			X.value('@ExchgRT','float'),X.value('@CurrencyID','bigint'),X.value('@Value','float'),    
+		   ,[ExchgRT],[CurrencyID],[Value],[CreatedBy],[CreatedDate],IncInFinalCost,IncInStageCost
+		   ,MachineDim1,MachineDim2,Options,Frequency)    
+		SELECT @BOMID,TS.NewStageID,  X.value('@ResourceID','INT') ,X.value('@Hours','float'),       
+			X.value('@ExchgRT','float'),X.value('@CurrencyID','INT'),X.value('@Value','float'),    
 			@UserName,@Dt,isnull(X.value('@IncInFinalCost','bit'),0),isnull(X.value('@IncInStageCost','bit'),0)      
+			,X.value('@MachineDim1','INT'), X.value('@MachineDim2','INT'), X.value('@Options','INT'),isnull(X.value('@Frequency','float'),0)
 		FROM @XML.nodes('/BOMResourceXML/Row') as Data(X)     
 		inner join @TblStages TS ON TS.StageID=X.value('@StageID','int')
     END     
@@ -349,7 +380,7 @@ set @ProductionXML=@ProductionMethodXML
            ,[CreatedDate]
            ,[ModifiedBy]
            ,[ModifiedDate])
-  select X.value('@SequenceNo','bigint'),@BOMID,NULL,X.value('@Particulars','nvarchar(200)'),@CompanyGUID    
+  select X.value('@SequenceNo','INT'),@BOMID,NULL,X.value('@Particulars','nvarchar(200)'),@CompanyGUID    
       ,newid()    
       ,@UserName    
       ,@Dt
@@ -358,13 +389,13 @@ set @ProductionXML=@ProductionMethodXML
        from @ProductionXML.nodes('/XML/Row') as data(X)  
     
   end  
-      SELECT @BOMCCID=Convert(bigint,isnull(Value,0)) FROM COM_CostCenterPreferences WITH(nolock) WHERE COSTCENTERID=76 and  Name='BomDimension'      
+      SELECT @BOMCCID=Convert(INT,isnull(Value,0)) FROM COM_CostCenterPreferences WITH(nolock) WHERE COSTCENTERID=76 and  Name='BomDimension'      
   
 	if(@BOMCCID>50000)
 	begin
-		declare @CCStatusID bigint
+		declare @CCStatusID INT
 		set @CCStatusID = (select top 1 statusid from com_status WITH(nolock) where costcenterid=@BOMCCID)
-		declare @NID bigint, @CCIDBom bigint
+		declare @NID INT, @CCIDBom INT
 		select @NID = CCNodeID, @CCIDBom=CCID  from PRD_BillOfMaterial WITH(nolock) where BOMID=@BOMID
 		iF(@CCIDBom<>@BOMCCID)
 		BEGIN
@@ -426,7 +457,7 @@ set @ProductionXML=@ProductionMethodXML
 		DECLARE @CCMapSql nvarchar(max)
 		set @CCMapSql='update COM_CCCCDATA  
 		SET CCNID'+convert(nvarchar,(@BOMCCID-50000))+'='+CONVERT(NVARCHAR,@return_value)+'  WHERE NodeID = '+convert(nvarchar,@BOMID) + ' AND CostCenterID = 76' 
-		EXEC (@CCMapSql)
+		EXEC sp_executesql @CCMapSql
 		
 		Exec [spDOC_SetLinkDimension]
 			@InvDocDetailsID=@BOMID, 
@@ -438,6 +469,44 @@ set @ProductionXML=@ProductionMethodXML
 					
 
 	end
+	
+		
+	--Inserts Multiple Attachments  
+  IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')  
+  BEGIN  
+   SET @XML=@AttachmentsXML  
+  
+   INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,
+   FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,  
+   GUID,CreatedBy,CreatedDate)  
+   SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(50)'),  
+   X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),76,76,@BOMID,  
+   X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt  
+   FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
+   WHERE X.value('@Action','NVARCHAR(10)')='NEW'  
+  
+   --If Action is MODIFY then update Attachments  
+   UPDATE COM_Files  
+   SET FilePath=X.value('@FilePath','NVARCHAR(500)'),  
+    ActualFileName=X.value('@ActualFileName','NVARCHAR(50)'),  
+    RelativeFileName=X.value('@RelativeFileName','NVARCHAR(50)'),  
+    FileExtension=X.value('@FileExtension','NVARCHAR(50)'),  
+    FileDescription=X.value('@FileDescription','NVARCHAR(500)'),  
+    IsProductImage=X.value('@IsProductImage','bit'),        
+    GUID=X.value('@GUID','NVARCHAR(50)'),  
+    ModifiedBy=@UserName,  
+    ModifiedDate=@Dt  
+   FROM COM_Files C   
+   INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)    
+   ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID  
+   WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
+  
+   --If Action is DELETE then delete Attachments  
+   DELETE FROM COM_Files  
+   WHERE FileID IN(SELECT X.value('@AttachmentID','INT')  
+    FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)  
+    WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
+  END  
 	
 	
 	if exists(SELECT Value FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE CostCenterID=76 and Name='AuditTrial' and Value='True')
@@ -480,5 +549,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION      
  SET NOCOUNT OFF        
  RETURN -999         
-END CATCH 
+END CATCH
 GO

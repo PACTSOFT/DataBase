@@ -3,12 +3,14 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_CloseReservation]
-	@QuotationID [bigint],
+	@QuotationID [int],
 	@VacancyDate [datetime],
 	@PostPDRecieptXML [nvarchar](max),
-	@ContractLocationID [bigint],
-	@ContractDivisionID [bigint],
-	@RoleID [bigint] = 0,
+	@ContractLocationID [int],
+	@ContractDivisionID [int],
+	@RoleID [int] = 0,
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
@@ -18,15 +20,36 @@ AS
 BEGIN TRANSACTION        
 BEGIN TRY      
 	SET NOCOUNT ON; 
+	declare @DT float
+	set @DT=CONVERT(float,getdate()) 
 	
 	UPDATE REN_Quotation SET StatusID=471,VacancyDate=CONVERT(FLOAT,@VacancyDate),
-	ModifiedBy=@UserName,ModifiedDate=CONVERT(FLOAT,GETDATE())
+	ModifiedBy=@UserName,ModifiedDate=@DT
 	WHERE QuotationID=@QuotationID
+	
+	
+	
+	DECLARE @AuditTrial BIT        
+	SET @AuditTrial=0        
+	SELECT @AuditTrial= CONVERT(BIT,VALUE)  FROM [COM_COSTCENTERPreferences] with(nolock)     
+	WHERE CostCenterID=95  AND NAME='AllowAudit'   
+	IF (@AuditTrial=1)      
+	BEGIN 		
+		--INSERT INTO HISTROY   
+		EXEC [spCOM_SaveHistory]  
+			@CostCenterID =129,    
+			@NodeID =@QuotationID,
+			@HistoryStatus ='Close',
+			@UserName=@UserName,
+			@DT=@DT   
+	END
 		  
 	if(@PostPDRecieptXML<>'')
 	BEGIN
 		declare @DocPrefix nvarchar(200),@XML xml,@CNT int,@i int,@AA nvarchar(max),@DocXML XML
-		declare @AccValue nvarchar(100),@RcptCCID int,@SNO BIGINT,@return_value int 
+		declare @AccValue nvarchar(100),@RcptCCID int,@SNO INT,@return_value int,@ActXml nvarchar(max)         
+	
+		set @ActXml='<XML SysInfo="'+@sysinfo+'" AP="'+@AP+'" ></XML>'   
 		
 		select @SNO=SNO from REN_Quotation WITH(NOLOCK) WHERE QuotationID = @QuotationID
 		
@@ -64,7 +87,7 @@ BEGIN TRY
 			END 
 			
 			set @DocPrefix=''
-			EXEC [sp_GetDocPrefix] '',@VacancyDate,@RcptCCID,@DocPrefix output,@QuotationID,0,0,129
+			EXEC [sp_GetDocPrefix] @AA,@VacancyDate,@RcptCCID,@DocPrefix output
 
 			EXEC @return_value = [dbo].[spDOC_SetTempAccDocument]      
 				   @CostCenterID = @RcptCCID,      
@@ -77,7 +100,7 @@ BEGIN TRY
 				   @InvDocXML = @AA,      
 				   @NotesXML = N'',      
 				   @AttachmentsXML = N'',      
-				   @ActivityXML  = N'',     
+				   @ActivityXML  = @ActXml,     
 				   @IsImport = 0,      
 				   @LocationID = @ContractLocationID,      
 				   @DivisionID = @ContractDivisionID,      
@@ -133,6 +156,5 @@ IF ERROR_NUMBER()=50000
  RETURN -999       
   
   
-END CATCH 
-
+END CATCH
 GO

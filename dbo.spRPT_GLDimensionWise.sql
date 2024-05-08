@@ -24,11 +24,13 @@ CREATE PROCEDURE [dbo].[spRPT_GLDimensionWise]
 	@IsDetailAcc [bit] = 0,
 	@CurrencyType [int],
 	@CurrencyID [int],
-	@JVDetail [smallint],
+	@JVDetail [bit],
 	@SortDateBy [nvarchar](30),
 	@SELECTQUERY [nvarchar](max),
 	@FROMQUERY [nvarchar](max),
 	@SELECTQUERYALIAS [nvarchar](max),
+	@FCWithExchRate [float] = 0,
+	@UpPostedDocsListOP [nvarchar](200),
 	@LangID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -37,11 +39,16 @@ SET NOCOUNT ON;
 /***16-Opening Balance,14-Postdated Payment,19-Postdated Receipts***/
 
 	DECLARE @SQL NVARCHAR(MAX),@INV_SELECT NVARCHAR(MAX),@PDCSQL NVARCHAR(MAX),@Temp NVARCHAR(max),@AccountName NVARCHAR(200),@AccountCode NVARCHAR(200),@AccountType INT
-	DECLARE	@From NVARCHAR(20),@To NVARCHAR(20),@YearStart NVARCHAR(20),@AmtColumn NVARCHAR(10),@CurrWHERE1 NVARCHAR(30),@CurrWHERE2 NVARCHAR(30)
-	DECLARE @DimColumn NVARCHAR(50),@DimColAlias NVARCHAR(50),@DimJoin NVARCHAR(100),@DetailSQL NVARCHAR(50),@InvDetailDr NVARCHAR(50),@InvDetailCr NVARCHAR(50),@UnAppSQL NVARCHAR(MAX)
-	DECLARE @ParticularCr NVARCHAR(350), @ParticularDr NVARCHAR(350), @ParticularCrAcc NVARCHAR(350), @ParticularDrAcc NVARCHAR(350)
+	DECLARE	@From NVARCHAR(20),@To NVARCHAR(20),@YearStart NVARCHAR(20),@AmtColumn NVARCHAR(32),@CurrWHERE1 NVARCHAR(30),@CurrWHERE2 NVARCHAR(30)
+	DECLARE @DimColumn NVARCHAR(50),@DimColAlias NVARCHAR(50),@DimJoin NVARCHAR(100),@DetailSQL NVARCHAR(50),@InvDetailDr NVARCHAR(50),@InvDetailCr NVARCHAR(50),@UnAppSQL NVARCHAR(MAX),@UnAppSQLOP NVARCHAR(MAX)
+	DECLARE @ParticularCr NVARCHAR(350), @ParticularDr NVARCHAR(350), @ParticularCrAcc NVARCHAR(350), @ParticularDrAcc NVARCHAR(350),@ReportByPDCConvDate bit,@IntermediatePDC NVARCHAR(max), @ParticularCrAccJV NVARCHAR(MAX), @ParticularDrAccJV NVARCHAR(MAX)
 		,@TblAccName varchar(max),@CntrlAccWhere varchar(max),@SortAccountID varchar(10)
-	create table #TblAcc(AccountID bigint primary key,IsExpense bit default(1))
+	create table #TblAcc(AccountID INT primary key,IsExpense bit default(1))
+	
+	if exists (select Value from adm_globalpreferences with(nolock) where name ='ReportByPDCConvDate' and Value='True')
+		set @ReportByPDCConvDate=1
+	else
+		set @ReportByPDCConvDate=0
 	
 	SET @From=CONVERT(FLOAT,@FromDate)
 	SET @To=CONVERT(FLOAT,@ToDate)
@@ -73,6 +80,11 @@ SET NOCOUNT ON;
 		set @UnAppSQL=' AND (D.StatusID=369 or D.StatusID=429)'
 	else
 		set @UnAppSQL=' AND D.StatusID IN (369,429,'+@UpPostedDocsList+')'
+	
+	if @UpPostedDocsListOP=''
+		set @UnAppSQLOP=' AND (D.StatusID=369 or D.StatusID=429)'
+	else
+		set @UnAppSQLOP=' AND D.StatusID IN (369,429,'+@UpPostedDocsListOP+')'	
 		
 	IF @CurrencyID>0
 	BEGIN
@@ -88,6 +100,9 @@ SET NOCOUNT ON;
 			SET @AmtColumn='Amount'
 		SET @CurrWHERE1=''
 		SET @CurrWHERE2=''
+		
+		IF(@FCWithExchRate>0)
+			SET @AmtColumn='Amount/'+CONVERT(NVARCHAR,@FCWithExchRate)
 	END
 		
 	IF @DimensionID>0
@@ -103,25 +118,37 @@ SET NOCOUNT ON;
 		SET @DimJoin=''
 	END
 	
+	set @IntermediatePDC=''
+	if @ReportByPDCConvDate=1 and exists(select Value from adm_globalPreferences with(nolock) where name='IntermediatePDConConversionDate' and Value='False')
+	begin		
+		select @IntermediatePDC=@IntermediatePDC+convert(nvarchar,IntermediateConvertion)+',' from adm_documenttypes 
+		where IntermediateConvertion>0
+		group by IntermediateConvertion
+		if len(@IntermediatePDC)!=''
+		begin
+			set @IntermediatePDC=substring(@IntermediatePDC,1,len(@IntermediatePDC)-1)
+			set @IntermediatePDC=' and (D.CostCenterID not in ('+@IntermediatePDC+') or D.ConvertedDate is null or D.ConvertedDate<='+@To+')'
+		end
+	end
 	--INNER JOIN ACC_Accounts A ON A.AccountID=T.AccountID
 	SET @SQL=''
 	IF LEN(@Account)>0
 	BEGIN
 		SET @SQL='SELECT '+(case when @IsCtrlAcc=0 then 'D.DebitAccount' else 'AL.ParentID' end)+' AccountID'+@DimColumn+',D.'+@AmtColumn+' Debit,0 Credit
 FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@LocationWHERE+'		
-WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1+'
+WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1+@IntermediatePDC+'
 UNION ALL
 SELECT '+(case when @IsCtrlAcc=0 then 'D.CreditAccount' else 'AL.ParentID' end)+@DimColumn+',0 Debit, D.'+@AmtColumn+' Credit
 FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@LocationWHERE+'
-WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1+'
+WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and D.DocumentType<>14 AND D.DocumentType<>19  AND (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1+@IntermediatePDC+'
 UNION ALL
 SELECT '+(case when @IsCtrlAcc=0 then 'D.DebitAccount' else 'AL.ParentID' end)+' AccountID'+@DimColumn+', D.'+@AmtColumn+' Debit,0 Credit
 FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@LocationWHERE+'		
-WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1+'
+WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1+'
 UNION ALL
 SELECT '+(case when @IsCtrlAcc=0 then 'D.CreditAccount' else 'AL.ParentID' end)+@DimColumn+',0 Debit, D.'+@AmtColumn+' Credit
 FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@LocationWHERE+'
-WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1
+WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Account end)+' and (D.DocDate<'+@From+' OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1
 	END
 	
 	IF LEN(@IncomeExpAccounts)>0
@@ -130,20 +157,20 @@ WHERE '+(case when @IsCtrlAcc=0 then 'AL.IsExpense=0' else 'AL.ParentID='+@Accou
 		IF LEN(@Account)>0
 			SET @SQL=@SQL+' UNION ALL '
 		SET @SQL=@SQL+'SELECT D.DebitAccount AccountID'+@DimColumn+',D.'+@AmtColumn+' Debit,0 Credit
-FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@LocationWHERE+'		
-WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19  AND ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1+'
+FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@LocationWHERE+@IntermediatePDC+'	
+WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19  AND ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1+'
 UNION ALL
 SELECT D.CreditAccount'+@DimColumn+',0 Debit, D.'+@AmtColumn+' Credit
-FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@LocationWHERE+'
-WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19  AND ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1+'
+FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@LocationWHERE+@IntermediatePDC+'
+WHERE AL.IsExpense=1 and D.DocumentType<>14 AND D.DocumentType<>19  AND ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1+'
 UNION ALL
 SELECT D.DebitAccount AccountID'+@DimColumn+', D.'+@AmtColumn+' Debit,0 Credit
 FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@LocationWHERE+'		
-WHERE AL.IsExpense=1 and ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1+'
+WHERE AL.IsExpense=1 and ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1+'
 UNION ALL
 SELECT D.CreditAccount'+@DimColumn+',0 Debit, D.'+@AmtColumn+' Credit
 FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.InvDocDetailsID=D.InvDocDetailsID '+@LocationWHERE+'
-WHERE AL.IsExpense=1 and ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR D.DocumentType=16)'+@UnAppSQL+@CurrWHERE1
+WHERE AL.IsExpense=1 and ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR D.DocumentType=16)'+@UnAppSQLOP+@CurrWHERE1
 	END
 			
 	SET @SQL='SELECT A.AccountName,A.AccountID,A.AccountTypeID'+@DimColAlias+',ISNULL(SUM(Debit)-SUM(Credit),0) BF 
@@ -180,6 +207,7 @@ WHERE AL.IsExpense=1 and ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR
 		end
 		SET @ParticularCr='(SELECT AccountName FROM ACC_Accounts with(nolock) WHERE AccountID=dbo.[fnRPT_GLParticular](1,D.DocID,AD.DebitAccount,AD.CreditAccount)) Particular,dbo.[fnRPT_GLParticular](1,D.DocID,AD.DebitAccount,AD.CreditAccount) ParticularID'
 		SET @ParticularDr='(SELECT AccountName FROM ACC_Accounts with(nolock) WHERE AccountID=dbo.[fnRPT_GLParticular](0,D.DocID,AD.CreditAccount,AD.DebitAccount)) Particular,dbo.[fnRPT_GLParticular](0,D.DocID,AD.CreditAccount,AD.DebitAccount) ParticularID'
+	
 	END
 	
 	IF @IsDetailAcc=1
@@ -187,6 +215,11 @@ WHERE AL.IsExpense=1 and ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR
 		SET @DetailSQL='D.AccDocDetailsID,D.DocSeqNo,'
 		SET @ParticularCrAcc='(SELECT TOP 1 AccountName FROM ACC_Accounts with(nolock) WHERE AccountID=D.CreditAccount) Particular,D.CreditAccount ParticularID'
 		SET @ParticularDrAcc='(SELECT TOP 1 AccountName FROM ACC_Accounts with(nolock) WHERE AccountID=D.DebitAccount) Particular,D.DebitAccount ParticularID'
+		
+		set @ParticularCrAccJV='case when D.CreditAccount>0 then (SELECT AccountName FROM ACC_Accounts with(nolock) WHERE AccountID=D.CreditAccount) else dbo.fnRPT_GLAccCrDr(D.CostCenterID,D.DocID,D.DebitAccount,0,'+convert(nvarchar,@JVDetail)+') end Particular
+,case when D.CreditAccount>0 then D.CreditAccount else (SELECT TOP 1 I.CreditAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID=D.DocID and I.CreditAccount>0) end ParticularID'
+		set @ParticularDrAccJV='case when D.DebitAccount>0 then (SELECT AccountName FROM ACC_Accounts with(nolock) WHERE AccountID=D.DebitAccount) else dbo.fnRPT_GLAccCrDr(D.CostCenterID,D.DocID,D.CreditAccount,1,'+convert(nvarchar,@JVDetail)+') end Particular
+,case when D.DebitAccount>0 then D.DebitAccount else (SELECT TOP 1 I.DebitAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID= D.DocID and I.DebitAccount>0) end ParticularID'
 	END
 	ELSE
 	BEGIN
@@ -197,29 +230,38 @@ WHERE AL.IsExpense=1 and ((D.DocDate>='+@YearStart+' and D.DocDate<'+@From+') OR
 			
 		SET @ParticularCrAcc='(SELECT TOP 1 AccountName FROM ACC_Accounts with(nolock) WHERE AccountID IN (SELECT TOP 1 I.CreditAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID= D.DocID)) Particular,(SELECT TOP 1 I.CreditAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID= D.DocID) ParticularID'
 		SET @ParticularDrAcc='(SELECT TOP 1 AccountName FROM ACC_Accounts with(nolock) WHERE AccountID IN (SELECT TOP 1 I.DebitAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID= D.DocID)) Particular,(SELECT TOP 1 I.DebitAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID= D.DocID) ParticularID'
+		
+		set @ParticularCrAccJV='case when D.CreditAccount>0 then (SELECT TOP 1 AccountName FROM ACC_Accounts with(nolock) WHERE AccountID IN (SELECT TOP 1 I.CreditAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID= D.DocID order by IsNegative asc,AccDocDetailsID)) 
+			else dbo.fnRPT_GLAccCrDr(D.CostCenterID,D.DocID,D.DebitAccount,0,'+convert(nvarchar,@JVDetail)+') end Particular
+			,(SELECT TOP 1 I.CreditAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID= D.DocID and I.CreditAccount>0 order by IsNegative asc,AccDocDetailsID) ParticularID'
+		set @ParticularDrAccJV='case when D.DebitAccount>0 then (SELECT TOP 1 AccountName FROM ACC_Accounts with(nolock) WHERE AccountID IN (SELECT TOP 1 I.DebitAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID= D.DocID order by IsNegative asc,AccDocDetailsID)) 
+			else dbo.fnRPT_GLAccCrDr(D.CostCenterID,D.DocID,D.CreditAccount,1,'+convert(nvarchar,@JVDetail)+') end Particular
+			,(SELECT TOP 1 I.DebitAccount FROM ACC_DocDetails I with(nolock) WHERE I.DocID= D.DocID and I.DebitAccount>0 order by IsNegative asc,AccDocDetailsID) ParticularID'
+		
 	END
 	
 SET @INV_SELECT=replace(@SELECTQUERY,'D.ClearanceDate','NULL')
+SET @INV_SELECT=replace(@INV_SELECT,'D.ConvertedDate','NULL')
 SET @INV_SELECT=replace(@INV_SELECT,'D.BRS_Status','NULL')
 SET @INV_SELECT=replace(@INV_SELECT,'D.ChequeBankName','NULL')
 
 --Two Queries For Cr,Dr For Accounting Vouchers Joins With Location
 --Two Queries For Cr,Dr For Inventory Vouchers Joins With Location
 SET @SQL='SELECT '+@DetailSQL+'A1.AccountName,DebitAccount AccountID'+@DimColumn+',CONVERT(DATETIME,D.DocDate) DocDate'+@SortDateBy+', D.VoucherNo, D.BillNo,  CONVERT(DATETIME, D.BillDate) BillDate,
-'+@ParticularCrAcc+',D.'+@AmtColumn+' DebitAmount,NULL  CreditAmount,0.0 Balance,D.ChequeNumber,CONVERT(DATETIME,D.ChequeDate) ChequeDate,CONVERT(DATETIME,D.ChequeMaturityDate) ChequeMaturityDate,0 VType,D.StatusID'+@SELECTQUERY+'
+'+@ParticularCrAccJV+',D.'+@AmtColumn+' DebitAmount,NULL  CreditAmount,0.0 Balance,D.ChequeNumber,CONVERT(DATETIME,D.ChequeDate) ChequeDate,CONVERT(DATETIME,D.ChequeMaturityDate) ChequeMaturityDate,0 VType,D.StatusID'+@SELECTQUERY+'
 FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.DebitAccount
 LEFT JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=DebitAccount
 LEFT JOIN ACC_Accounts A2 with(nolock) ON A2.AccountID=CreditAccount
 INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-WHERE D.DocumentType<>16 AND D.DocumentType<>14 AND D.DocumentType<>19 AND D.DocDate>='+@From+' AND D.DocDate<='+@To+' '+@CntrlAccWhere+@LocationWHERE+@UnAppSQL+@CurrWHERE1+'
+WHERE D.DocumentType<>16 AND D.DocumentType<>14 AND D.DocumentType<>19 AND D.DocDate>='+@From+' AND D.DocDate<='+@To+' '+@CntrlAccWhere+@LocationWHERE+@UnAppSQL+@CurrWHERE1+@IntermediatePDC+'
 UNION ALL
 SELECT '+@DetailSQL+'A1.AccountName,CreditAccount'+@DimColumn+',CONVERT(DATETIME,D.DocDate) DocDate'+@SortDateBy+', D.VoucherNo,D.BillNo,  CONVERT(DATETIME, D.BillDate) BillDate,
-'+@ParticularDrAcc+',NULL DebitAmount,D.'+@AmtColumn+' CreditAmount,0.0 Balance,D.ChequeNumber,CONVERT(DATETIME,D.ChequeDate) ChequeDate,CONVERT(DATETIME,D.ChequeMaturityDate) ChequeMaturityDate,0 VType,D.StatusID'+@SELECTQUERY+'
+'+@ParticularDrAccJV+',NULL DebitAmount,D.'+@AmtColumn+' CreditAmount,0.0 Balance,D.ChequeNumber,CONVERT(DATETIME,D.ChequeDate) ChequeDate,CONVERT(DATETIME,D.ChequeMaturityDate) ChequeMaturityDate,0 VType,D.StatusID'+@SELECTQUERY+'
 FROM ACC_DocDetails D with(nolock) join '+@TblAccName+' AL on AL.AccountID=D.CreditAccount
 LEFT JOIN ACC_Accounts A1 with(nolock) ON A1.AccountID=CreditAccount
 LEFT JOIN ACC_Accounts A2 with(nolock) ON A2.AccountID=DebitAccount
 INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID '+@FROMQUERY+'
-WHERE D.DocumentType<>16 AND D.DocumentType<>14 AND D.DocumentType<>19 AND D.DocDate>='+@From+' AND D.DocDate<='+@To+' '+@CntrlAccWhere+@LocationWHERE+@UnAppSQL+@CurrWHERE1+'
+WHERE D.DocumentType<>16 AND D.DocumentType<>14 AND D.DocumentType<>19 AND D.DocDate>='+@From+' AND D.DocDate<='+@To+' '+@CntrlAccWhere+@LocationWHERE+@UnAppSQL+@CurrWHERE1+@IntermediatePDC+'
 UNION ALL
 SELECT '+@InvDetailDr+'A1.AccountName,AD.DebitAccount'+@DimColumn+',CONVERT(DATETIME,AD.DocDate) DocDate'+@SortDateBy+', AD.VoucherNo, D.BillNo, CONVERT(DATETIME, D.BillDate) BillDate,
 '+@ParticularCr+',AD.'+@AmtColumn+' DebitAmount,NULL  CreditAmount,0.0 Balance,AD.ChequeNumber,CONVERT(DATETIME,AD.ChequeDate) ChequeDate,CONVERT(DATETIME,AD.ChequeMaturityDate) ChequeMaturityDate,0 VType,D.StatusID'+@INV_SELECT+'
@@ -244,6 +286,8 @@ BEGIN
 		SET @Temp=@Temp+' OR D.StatusID=371 OR D.StatusID=441'
 	IF @IncludeTerminatedPDC=1
 		SET @Temp=@Temp+' OR D.StatusID=452'
+	if @ReportByPDCConvDate=1
+		SET @Temp=@Temp+' or ((D.StatusID=369 or D.StatusID=429) and D.ConvertedDate>'+@To+')'
 	SET @Temp=@Temp+')'
 		
 	declare @LineWisePDC nvarchar(max)

@@ -17,8 +17,9 @@ SET NOCOUNT ON
 		@Table nvarchar(100),@TabRef nvarchar(3),@CCID int,@TypeID int,@ColumnName nvarchar(50)
 		create table #CustomTable(ID int identity(1,1),CostCenterID int, TypeID int, ColumnName nvarchar(50))
 		insert into #CustomTable(CostCenterID, TypeID, ColumnName)
-		select ColumnCostCenterID, ColumnCCListViewTypeID, SysColumnName from adm_CostCenterDef WITH(NOLOCK) where CostCenterID=110 
-		 and (ColumnCostCenterID>50000 or (ColumnCostCenterID=44 and usercolumntype='LISTBOX' ))
+		select ColumnCostCenterID, ColumnCCListViewTypeID, SysColumnName 
+		from adm_CostCenterDef WITH(NOLOCK) 
+		where CostCenterID=110 and (ColumnCostCenterID>50000 or (ColumnCostCenterID=44 and usercolumntype='LISTBOX' ))
 
 		set @i=1
 		set @CustomQuery1=''
@@ -38,14 +39,17 @@ SET NOCOUNT ON
 			end
 			else
 			begin
-				select @Table=TableName,@FeatureName=FeatureID from adm_features WITH(NOLOCK) where FeatureID = @CCID
-				set @TabRef='A'+CONVERT(nvarchar,@i)
-				set @CCID=@CCID-50000
-	    	 
-				if(@CCID>0)
+				if exists (select TableName from adm_features WITH(NOLOCK) where FeatureID = @CCID)
 				begin
-					set @CustomQuery1=@CustomQuery1+' left join '+@Table+' '+@TabRef+' WITH(NOLOCK) on '+@TabRef+'.NodeID=c.CCNID'+CONVERT(nvarchar,@CCID)
-					set @CustomQuery3=@CustomQuery3+' '+@TabRef+'.Name as CCNID'+CONVERT(nvarchar,@CCID)+'_Name ,'
+					select @Table=TableName,@FeatureName=FeatureID from adm_features WITH(NOLOCK) where FeatureID = @CCID
+					set @TabRef='A'+CONVERT(nvarchar,@i)
+					set @CCID=@CCID-50000
+		    	 
+					if(@CCID>0)
+					begin
+						set @CustomQuery1=@CustomQuery1+' left join '+@Table+' '+@TabRef+' WITH(NOLOCK) on '+@TabRef+'.NodeID=c.CCNID'+CONVERT(nvarchar,@CCID)
+						set @CustomQuery3=@CustomQuery3+' '+@TabRef+'.Name as CCNID'+CONVERT(nvarchar,@CCID)+'_Name ,'
+					end
 				end
 			end
 			set @i=@i+1
@@ -55,7 +59,7 @@ SET NOCOUNT ON
 		begin
 			set @CustomQuery3=SUBSTRING(@CustomQuery3,0,LEN(@CustomQuery3)-1)
 		end
-	  
+
 		drop table #CustomTable
 		declare @sql nvarchar(max)
 		set @sql='
@@ -63,6 +67,7 @@ SET NOCOUNT ON
 		'+@CustomQuery1+'
 		WHERE c.FeatureID='+convert(nvarchar(300),@CostCenterID)+' and  c.FeaturePK='+convert(nvarchar(300),@NodeID) 
 		PRINT @sql
+		PRINT substring(@sql,4001,4000)
 		exec(@sql)
 		
 COMMIT TRANSACTION
@@ -83,6 +88,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
- 
+END CATCH
 GO

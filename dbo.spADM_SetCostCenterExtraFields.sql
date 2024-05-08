@@ -10,11 +10,12 @@ CREATE PROCEDURE [dbo].[spADM_SetCostCenterExtraFields]
 	@QuickXML [nvarchar](max),
 	@GridsXML [nvarchar](max),
 	@PreferenceXml [nvarchar](max),
-	@COSTCENTERID [bigint],
-	@ParentCCID [bigint],
+	@ExtrnFuncXML [nvarchar](max),
+	@COSTCENTERID [int],
+	@ParentCCID [int],
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [bigint],
+	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -24,11 +25,11 @@ SET NOCOUNT ON
 BEGIN TRY      
 	--Declaration Section      
 	DECLARE @TempGuid NVARCHAR(50),@TextFormat int,@COLSPAN INT,@HasAccess BIT,@DATA XML,@COUNT INT,@I INT,@FIELDNAME NVARCHAR(300),  @TYPE NVARCHAR(300),      
-	@TabName NVARCHAR(300), @DEFAULTVALUE NVARCHAR(300), @ResourceID BIGINT,@COSTCENTERCOLID BIGINT,@MAPACTION NVARCHAR(300),  
+	@TabName NVARCHAR(300), @DEFAULTVALUE NVARCHAR(300), @ResourceID INT,@COSTCENTERCOLID INT,@MAPACTION NVARCHAR(300),@SQL nvarchar(max),  
 	@Filter NVARCHAR(10),   @Display NVARCHAR(10), @PROBABLEVALUES NVARCHAR(MAX), @MANDATORY smallint, @COLUMNCOSTCENTERID INT, @CNTTAB INT,      
 	@IsCostCenterUserDefined NVARCHAR(10), @ColumnDataType NVARCHAR(10), @RowCount int, @SectionName NVARCHAR(50),@SectionSeqNumber INT,  @ExtraTabData XML 
-	DECLARE @COLUMNCCLISTVIEWTYPEID INT, @StaticXMLData XML,@langResourceID int,@Formula nvarchar(max),@localRef bigint,@lnkData bigint,@ResID BIGINT
-	DECLARE @GridData XML,@dependancy bigint,@dependanton bigint,@Isvisible bit,@IsUnique int,@IsnoTab bit,@Decimals int,@XMLDATA XML,@IgnoreChars bigint,@WaterMark nvarchar(500)
+	DECLARE @COLUMNCCLISTVIEWTYPEID INT, @StaticXMLData XML,@langResourceID int,@Formula nvarchar(max),@localRef INT,@lnkData INT,@ResID INT,@IsCalculate bit,@EvalAfter nvarchar(200)
+	DECLARE @GridData XML,@dependancy INT,@dependanton INT,@Isvisible bit,@IsUnique int,@IsnoTab bit,@Decimals int,@XMLDATA XML,@IgnoreChars INT,@WaterMark nvarchar(500),@MinChar int,@MaxChar int,@FieldExpression NVARCHAR(MAX),@LabelColor NVARCHAR(500),@ExtFuntDATA XML
 	
 	SET @GridData=@GridsXML
 	SET @DATA=@XML      
@@ -56,20 +57,21 @@ BEGIN TRY
 	END  
 	    
 	--@XML = N'<XML><Row    RowNo="1" FieldName="department" Type="50004" CCTabName="105" DefaultValue="" ProbableValues="" Display="True"  MAPACTION=''NEW''  CostCenterColID="" Mandatory="False" IsCostCenterUserDefined =''True''  ColumnCostCenterID='''' ColumnDataType=''INT''/></XML>',
-	CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),FIELDNAME NVARCHAR(300),DEFAULTVALUE NVARCHAR(300),Formula NVARCHAR(max),localRef bigint,lnkData bigint,
-	DTYPE NVARCHAR(50),COSTCENTERCOLID BIGINT,MAPACTION VARCHAR(300),COLSPAN INT,DISPLAY VARCHAR(10),
+	CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),FIELDNAME NVARCHAR(300),DEFAULTVALUE NVARCHAR(300),Formula NVARCHAR(max),localRef INT,lnkData INT,
+	DTYPE NVARCHAR(50),COSTCENTERCOLID INT,MAPACTION VARCHAR(300),COLSPAN INT,DISPLAY VARCHAR(10),
 	PROBABLEVALUES VARCHAR(MAX), MANDATORY smallint, COLUMNCOSTCENTERID INT, IsCostCenterUserDefined NVARCHAR(10), 
 	ColumnDataType NVARCHAR(10), SectionID INT,SectionSeqNumber INT,ListViewTypeID int,TextFormat int, Filter NVARCHAR(10)
-	,dependancy bigint,dependanton BIGINT,Isvisible bit,IsUnique int,IsnoTab bit,Decimals int,IgnoreChars BIGINT,WaterMark nvarchar(500))       
+	,dependancy INT,dependanton INT,Isvisible bit,IsUnique int,IsnoTab bit,Decimals int,IgnoreChars INT,WaterMark nvarchar(500),MinChar INT,MaxChar INT
+	,FieldExpression nvarchar(max),LabelColor nvarchar(500),Calc bit,EvalAfter nvarchar(200))  
 	
 	INSERT INTO #TBLTEMP      
 	SELECT  X.value('@FieldName','NVARCHAR(300)'),      
 	X.value('@DefaultValue','NVARCHAR(300)'),  
 	X.value('@Formula','NVARCHAR(max)'),       
-	X.value('@LocalRef','bigint'),       
-	X.value('@linkdata','bigint'),       
+	X.value('@LocalRef','INT'),       
+	X.value('@linkdata','INT'),       
 	X.value('@Type','NVARCHAR(300)'),      
-	X.value('@CostCenterColID','bigint'),      
+	X.value('@CostCenterColID','INT'),      
 	X.value('@MAPACTION','NVARCHAR(300)'),   
 	X.value('@ColumnSpan','INT'),     
 	X.value('@Display','NVARCHAR(10)'),      
@@ -81,14 +83,19 @@ BEGIN TRY
 	case when X.value('@CCTabName','INT')=0 THEN NULL ELSE X.value('@CCTabName','INT') end,    
 	X.value('@SectionSeqNumber','INT'),
 	X.value('@ListViewID','INT'),X.value('@TextFormat','INT'), X.value('@Filter','NVARCHAR(10)'),
-	X.value('@dependancy','bigint'),       
-	X.value('@dependanton','bigint'),       
+	X.value('@dependancy','INT'),       
+	X.value('@dependanton','INT'),       
 	isnull(X.value('@Isvisible','bit'),1),
 	X.value('@IsUnique','int')
 	,isnull(X.value('@IsnoTab','bit'),0)
 	,X.value('@Decimals','int')
-	,X.value('@IgnoreChars','BIGINT')
+	,X.value('@IgnoreChars','INT')
 	,X.value('@WaterMark','NVARCHAR(500)')
+	,X.value('@MinChar','int')
+	,X.value('@MaxChar','int')
+	,X.value('@FieldExpression','NVARCHAR(MAX)')
+	,X.value('@LabelColor','NVARCHAR(500)')
+	,X.value('@IsCalculate','BIT'),X.value('@EvalAfter','NVARCHAR(500)')
 	from @DATA.nodes('XML/Row') as DATA(X) 
 
 
@@ -129,14 +136,24 @@ BEGIN TRY
 		@ProbableValues=ProbableValues,@COLUMNCOSTCENTERID=COLUMNCOSTCENTERID, @Mandatory=Mandatory ,
 		@SectionName =  SectionID,@SectionSeqNumber=SectionSeqNumber,@COLUMNCCLISTVIEWTYPEID=ListViewTypeID
 		,@dependancy =dependancy,@dependanton =dependanton ,@Isvisible =Isvisible,@IsUnique=IsUnique,@IsnoTab=IsnoTab,@Decimals=Decimals
-		,@IgnoreChars=IgnoreChars,@WaterMark=WaterMark
+		,@IgnoreChars=IgnoreChars,@WaterMark=WaterMark,@MinChar=MinChar,@MaxChar=MaxChar,@FieldExpression=FieldExpression,@LabelColor=LabelColor
+		,@IsCalculate=Calc,@EvalAfter=EvalAfter
 		FROM #TBLTEMP with(nolock) WHERE ID=@I   
 
-		if(@localRef is not null and @localRef>50000 and @localRef<>26642 and @localRef<>26658)
+		if(@localRef is not null and (@localRef=2 or @localRef>50000) and @localRef<>26642 and @localRef<>26658)
 		begin
-			select  @localRef= CostCenterColID from ADM_CostCenterDef with(nolock)
-			where CostCenterID=@CostCenterID and                
-			SYSCOLUMNNAME='CCNID'+CONVERT(NVARCHAR,(@localRef-50000))   
+			if(@localRef>50000)
+			begin
+				select  @localRef= CostCenterColID from ADM_CostCenterDef with(nolock)
+				where CostCenterID=@CostCenterID and                
+				SYSCOLUMNNAME='CCNID'+CONVERT(NVARCHAR,(@localRef-50000)) 
+			end  
+			else if (@localRef=2)
+			begin
+				select  @localRef= CostCenterColID from ADM_CostCenterDef with(nolock)
+				where CostCenterID=@CostCenterID and COLUMNCOSTCENTERID=@localRef and iscolumninuse=1 and 
+				(SYSCOLUMNNAME like '%alpha%' or SYSCOLUMNNAME='AccountID')  
+			end
 		end
 
 		IF ((@MAPACTION='NEW'  or @MAPACTION='EDIT'  ) and @COLUMNCOSTCENTERID is not null and 
@@ -175,7 +192,7 @@ BEGIN TRY
 			BEGIN
 				if(@COSTCENTERID in(95,104,103,129))
 				BEGIN
-					declare @tablename nvarchar(50),@SQL nvarchar(max)
+					declare @tablename nvarchar(50)
 					if(@COSTCENTERID in(95,104) and @SectionName=2)
 						set @tablename='REN_ContractParticulars'
 					else if(@COSTCENTERID in(95,104) and @SectionName=3)
@@ -201,13 +218,36 @@ BEGIN TRY
 						where COSTCENTERCOLID=@COSTCENTERCOLID
 						
 						if not exists(select * from sys.columns where Object_id	=Object_id(@tablename) and name='CCNID'+CONVERT(NVARCHAR,(@COLUMNCOSTCENTERID-50000)) )
+						AND @COLUMNCOSTCENTERID>50000
 						BEGIN
-							set @SQL='alter table '+@tablename+' add CCNID'+CONVERT(NVARCHAR,(@COLUMNCOSTCENTERID-50000)) +' bigint'
+							set @SQL='alter table '+@tablename+' add CCNID'+CONVERT(NVARCHAR,(@COLUMNCOSTCENTERID-50000)) +' INT'
 							if(@tablename='REN_ContractParticulars')
-								set @SQL=@SQL+' alter table REN_Particulars add CCNID'+CONVERT(NVARCHAR,(@COLUMNCOSTCENTERID-50000)) +' bigint'
+								set @SQL=@SQL+' alter table REN_Particulars add CCNID'+CONVERT(NVARCHAR,(@COLUMNCOSTCENTERID-50000)) +' INT'
+								
+							print @SQL
 							exec(@SQL)
 						END
 					END
+				END
+				ELSE IF(@COSTCENTERID = 50051 AND @COLUMNCOSTCENTERID<>44)
+				BEGIN
+					if not exists(select * from sys.columns where Object_id	=Object_id('COM_DOCCCDATA') and name='dcCCNID'+CONVERT(NVARCHAR,(@COLUMNCOSTCENTERID-50000)) )
+					BEGIN
+						set @SQL='alter table COM_DocCCData add dcCCNID'+convert(nvarchar,@COLUMNCOSTCENTERID-50000)+' BIGINT default(1) not null
+						ALTER TABLE [COM_DocCCData] WITH CHECK ADD  CONSTRAINT [FK_COM_DocCCData_COM_CC'+convert(nvarchar,@COLUMNCOSTCENTERID)+'] FOREIGN KEY([dcCCNID'+convert						(nvarchar,@COLUMNCOSTCENTERID-50000)+']) REFERENCES [COM_CC'+convert(nvarchar,@COLUMNCOSTCENTERID)+'] ([NodeID])
+						ALTER TABLE [COM_DocCCData] CHECK CONSTRAINT [FK_COM_DocCCData_COM_CC'+convert(nvarchar,@COLUMNCOSTCENTERID)+']'
+					
+					Exec sp_executesql @SQL
+						
+					set @SQL='alter table COM_DocCCData_History add dcCCNID'+convert(nvarchar,@COLUMNCOSTCENTERID-50000)+' INT  default(1) not null'
+					print @SQL
+					Exec sp_executesql @SQL
+					END
+
+					SELECT @COSTCENTERCOLID=COSTCENTERCOLID        
+					FROM ADM_CostCenterDef with(nolock) WHERE COSTCENTERID=@COSTCENTERID  and      
+					SYSCOLUMNNAME='CCNID'+CONVERT(NVARCHAR,(@COLUMNCOSTCENTERID-50000)) 
+
 				END
 				ELSE
 				BEGIN
@@ -252,7 +292,7 @@ BEGIN TRY
 				ISEDITABLE=@Display,COLUMNSPAN=@COLSPAN, ISVISIBLE=@Isvisible,IsUnique=@IsUnique, USERCOLUMNNAME=@FIELDNAME,ISCOLUMNDELETED=0, Filter=@Filter,
 				USERCOLUMNTYPE='LISTBOX', COLUMNCOSTCENTERID=@COLUMNCOSTCENTERID, USERDEFAULTVALUE=@DefaultValue,Cformula=@Formula,LocalReference=@localRef,LinkData=@LnkData,
 				USERPROBABLEVALUES=@ProbableValues, ISMANDATORY=@MANDATORY, COLUMNCCLISTVIEWTYPEID=@COLUMNCCLISTVIEWTYPEID, SectionID = @SectionName,SectionSeqNumber=@SectionSeqNumber
-				,dependancy=@dependancy ,dependanton=@dependanton,IsnoTab=@IsnoTab,Decimal=@Decimals
+				,dependancy=@dependancy ,dependanton=@dependanton,IsnoTab=@IsnoTab,Decimal=@Decimals,Calculate=@IsCalculate,EvalAfter=@EvalAfter
 				WHERE COSTCENTERID=@COSTCENTERID AND COSTCENTERCOLID=@COSTCENTERCOLID
 					
 				UPDATE COM_LANGUAGERESOURCES SET RESOURCENAME=@FieldName, RESOURCEDATA=@FieldName
@@ -269,7 +309,8 @@ BEGIN TRY
 			SET ISCOLUMNINUSE=1,COLUMNSPAN=@COLSPAN, USERCOLUMNNAME=@FIELDNAME,TextFormat=@TextFormat, ISEDITABLE=@Display, USERDEFAULTVALUE=@DefaultValue,Cformula=@Formula,LocalReference=@localRef,LinkData=@LnkData,
 				USERCOLUMNTYPE=@Type,USERPROBABLEVALUES=@ProbableValues, ISMANDATORY=@MANDATORY, COLUMNDATATYPE=@ColumnDataType ,
 				SectionID = @SectionName,SectionSeqNumber=@SectionSeqNumber, filter=@Filter,IgnoreChar=@IgnoreChars,WaterMark=@WaterMark
-				,dependancy=@dependancy ,dependanton=@dependanton, ISVISIBLE=@Isvisible,IsUnique=@IsUnique,IsnoTab=@IsnoTab,Decimal=@Decimals, COLUMNCOSTCENTERID=@COLUMNCOSTCENTERID
+				,dependancy=@dependancy ,dependanton=@dependanton, ISVISIBLE=@Isvisible,IsUnique=@IsUnique,IsnoTab=@IsnoTab,Decimal=@Decimals, COLUMNCOSTCENTERID=@COLUMNCOSTCENTERID,MinChar=@MinChar,MaxChar=@MaxChar,FieldExpression=@FieldExpression,LabelColor=@LabelColor
+				,Calculate=@IsCalculate,EvalAfter=@EvalAfter
 			WHERE COSTCENTERID=@COSTCENTERID AND COSTCENTERCOLID=@COSTCENTERCOLID       
 			  
 			UPDATE COM_LANGUAGERESOURCES SET RESOURCENAME=@FieldName, RESOURCEDATA=@FieldName
@@ -288,7 +329,7 @@ BEGIN TRY
 				SELECT TOP 1  @COSTCENTERCOLID=COSTCENTERCOLID  FROM ADM_CostCenterDef with(nolock) WHERE COSTCENTERID=@COSTCENTERID AND ISCOLUMNINUSE=0 
 				 AND SYSCOLUMNNAME LIKE '%Alpha%' and IsColumnDeleted=0 AND COSTCENTERCOLID>224
 				 
-				IF((@COSTCENTERID IN(95,103,129,92,93,94,2,3) or @COSTCENTERID>50000) and (@CostCenterColID IS NULL or @CostCenterColID=0))
+				IF((@COSTCENTERID IN(2,3,92,93,94,95,103,104,129,83,86,88,89,65) or @COSTCENTERID>50000) and (@CostCenterColID IS NULL or @CostCenterColID=0))
 				BEGIN
 					 exec [SpADM_AddColumn] @COSTCENTERID,0,'',@COSTCENTERCOLID OUTPUT
 				END
@@ -297,7 +338,8 @@ BEGIN TRY
 			UPDATE ADM_CostCenterDef SET ISCOLUMNINUSE=1,COLUMNSPAN=@COLSPAN, TextFormat=@TextFormat,Filter=@Filter,
 			ISCOLUMNUSERDEFINED=1, ISVISIBLE=@Isvisible,IsUnique=@IsUnique, ISEDITABLE=@Display, USERCOLUMNNAME=@FIELDNAME, 
 			USERCOLUMNTYPE=@TYPE, USERDEFAULTVALUE=@DefaultValue,Cformula=@Formula,LocalReference=@localRef,LinkData=@LnkData, USERPROBABLEVALUES=@ProbableValues, ISMANDATORY=@MANDATORY, COLUMNDATATYPE=@ColumnDataType  , SectionID = @SectionName,SectionSeqNumber=@SectionSeqNumber
-			,dependancy=@dependancy ,dependanton=@dependanton,IsnoTab=@IsnoTab,Decimal=@Decimals,IgnoreChar=@IgnoreChars,WaterMark=@WaterMark
+			,dependancy=@dependancy ,dependanton=@dependanton,IsnoTab=@IsnoTab,Decimal=@Decimals,IgnoreChar=@IgnoreChars,WaterMark=@WaterMark,MinChar=@MinChar,MaxChar=@MaxChar,FieldExpression=@FieldExpression,LabelColor=@LabelColor
+			,Calculate=@IsCalculate,EvalAfter=@EvalAfter
 			WHERE COSTCENTERID=@COSTCENTERID AND COSTCENTERCOLID=@COSTCENTERCOLID   
 
 			UPDATE COM_LANGUAGERESOURCES SET RESOURCENAME=@FieldName, RESOURCEDATA=@FieldName      
@@ -316,7 +358,7 @@ BEGIN TRY
   
      
 	SET @StaticXMLData = @StaticXML
-	  
+	 
 	IF(@StaticXMLData IS NOT NULL)
 	BEGIN
 	 	UPDATE ADM_COSTCENTERDEF 
@@ -334,12 +376,19 @@ BEGIN TRY
 			,UserProbableValues=X.value('@ProbableValues','Nvarchar(max)')
 			,[Decimal]=X.value('@Decimals','int')
 			,UserColumnName = X.value('@Rename','NVARCHAR(500)')
-			,IgnoreChar=X.value('@IgnoreChars','BIGINT')
+			,IgnoreChar=X.value('@IgnoreChars','INT')
 			,WaterMark=X.value('@WaterMark','NVARCHAR(500)')
+			,MinChar=X.value('@MinChar','INT')
+			,MaxChar=X.value('@MaxChar','INT')
+			,FieldExpression=X.value('@FieldExpression','NVARCHAR(MAX)')
+			,LabelColor=X.value('@LabelColor','NVARCHAR(500)')
+			,Cformula=X.value('@Formula','NVARCHAR(Max)')
+			,Calculate=X.value('@IsCalculate','BIT')
+			,EvalAfter=X.value('@EvalAfter','NVARCHAR(500)')
 		from ADM_COSTCENTERDEF with(nolock)
 		left join @StaticXMLData.nodes('XML/Row') as Data(X)
-		 on ADM_COSTCENTERDEF.CostCenterColID=X.value('@CostCenterColID','bigint')  
-		where COSTCENTERID = @COSTCENTERID AND CostCenterColID = X.value('@CostCenterColID','bigint') 
+		 on ADM_COSTCENTERDEF.CostCenterColID=X.value('@CostCenterColID','INT')  
+		where COSTCENTERID = @COSTCENTERID AND CostCenterColID = X.value('@CostCenterColID','INT') 
 
 
 
@@ -349,8 +398,8 @@ BEGIN TRY
 			SET ColumnCCListViewTypeID=isnull(X.value('@ListViewTypeID','INT'),0)
 			from ADM_COSTCENTERDEF  with(nolock)
 			left join @StaticXMLData.nodes('XML/Row') as Data(X)
-			 on ADM_COSTCENTERDEF.CostCenterColID=X.value('@CostCenterColID','bigint')  
-			where COSTCENTERID = @COSTCENTERID AND CostCenterColID = X.value('@CostCenterColID','bigint') 
+			 on ADM_COSTCENTERDEF.CostCenterColID=X.value('@CostCenterColID','INT')  
+			where COSTCENTERID = @COSTCENTERID AND CostCenterColID = X.value('@CostCenterColID','INT') 
 			
 		if(@COSTCENTERID=16 or @COSTCENTERID=3 or @COSTCENTERID=95 or @COSTCENTERID=89
 		or @COSTCENTERID >50000 or @COSTCENTERID in(86, 83, 88, 89, 65, 73, 92, 93, 94, 95, 103, 104, 129))
@@ -358,20 +407,20 @@ BEGIN TRY
 			set UserDefaultValue=X.value('@DefaultValue','nvarchar(500)')  
 			from ADM_COSTCENTERDEF  with(nolock)
 			left join @StaticXMLData.nodes('XML/Row') as Data(X)
-			 on ADM_COSTCENTERDEF.CostCenterColID=X.value('@CostCenterColID','bigint')  
-			where COSTCENTERID = @COSTCENTERID AND CostCenterColID = X.value('@CostCenterColID','bigint') and X.value('@DefaultValue','nvarchar(500)') is not null
+			 on ADM_COSTCENTERDEF.CostCenterColID=X.value('@CostCenterColID','INT')  
+			where COSTCENTERID = @COSTCENTERID AND CostCenterColID = X.value('@CostCenterColID','INT') and X.value('@DefaultValue','nvarchar(500)') is not null
 			
-			select  X.value('@CostCenterColID','bigint')  ,X.value('@DefaultValue','nvarchar(500)')   
-			 from ADM_COSTCENTERDEF  with(nolock)
-			left join @StaticXMLData.nodes('XML/Row') as Data(X)
-			 on ADM_COSTCENTERDEF.CostCenterColID=X.value('@CostCenterColID','bigint')  
-			where COSTCENTERID = @COSTCENTERID AND CostCenterColID = X.value('@CostCenterColID','bigint') and X.value('@DefaultValue','nvarchar(500)') is not null
+			--select  X.value('@CostCenterColID','INT')  ,X.value('@DefaultValue','nvarchar(500)')   
+			-- from ADM_COSTCENTERDEF  with(nolock)
+			--left join @StaticXMLData.nodes('XML/Row') as Data(X)
+			-- on ADM_COSTCENTERDEF.CostCenterColID=X.value('@CostCenterColID','INT')  
+			--where COSTCENTERID = @COSTCENTERID AND CostCenterColID = X.value('@CostCenterColID','INT') and X.value('@DefaultValue','nvarchar(500)') is not null
 			 
 			
 	 	Update COM_LANGUAGERESOURCES
 	 	 SET RESOURCEDATA = X.value('@Rename','NVARCHAR(500)')
 		from @StaticXMLData.nodes('XML/Row') as Data(X) 
-		join ADM_COSTCENTERDEF c with(nolock) on  c.CostCenterColID = X.value('@CostCenterColID','bigint') 
+		join ADM_COSTCENTERDEF c with(nolock) on  c.CostCenterColID = X.value('@CostCenterColID','INT') 
 		 WHERE COM_LANGUAGERESOURCES.ResourceID=c.ResourceID and LANGUAGEID=@LangID AND C.COSTCENTERID=@COSTCENTERID
 
 		CREATE TABLE #TBL(ID INT identity(1,1), ColID int, SeqNum int,visible BIT,ColSpan int)
@@ -389,6 +438,7 @@ BEGIN TRY
 		
 		if(@PreferenceXml<>'')
 		BEGIN
+		
 			SET @DATA=@PreferenceXml
 			SELECT @XMLDATA=X.value('@Value','nvarchar(max)')
 			FROM @DATA.nodes('/PrefXML/Row') as DATA(X)
@@ -420,7 +470,7 @@ BEGIN TRY
 			if(@ColSpan is null)
 				set @ColSpan=1
 			
-			if(@COSTCENTERID > 50000  and @r<@ImgRow)
+			if((@COSTCENTERID in(92,93,94) or @COSTCENTERID > 50000)  and @r<@ImgRow)
 			begin
 				if(@c+@ColSpan>@ImgCol)
 				begin
@@ -445,22 +495,7 @@ BEGIN TRY
 				end
 			end
 			
-			if((@COSTCENTERID=92 OR @COSTCENTERID=93 OR @COSTCENTERID=94) and @r<4)
-			begin
-				if(@c+@ColSpan>3)
-				begin
-					set @r=@r+1
-					set @c=0
-				end
-			end
-			else
-			begin
-				if(@c+@ColSpan>4)
-				begin
-					set @r=@r+1
-					set @c=0
-				end
-			end
+			
 			
 			 
 		--SELECT @r,@c,@ColSpan,SysColumnName,costcentercolid FROM adm_costcenterdef where costcentercolid=@Colid
@@ -573,7 +608,7 @@ where COSTCENTERID = @COSTCENTERID AND CCTabID =  X.value('@CCTabID','int')
 --ADDED CODE ON DEC 30 BY HAFEEZ TO DELETE TABS
 --If Action is DELETE then delete tabs
 DELETE FROM ADM_COSTCENTERTAB
-WHERE CCTabID IN(SELECT X.value('@CCTabID','bigint')
+WHERE CCTabID IN(SELECT X.value('@CCTabID','INT')
 from @ExtraTabData.nodes('XML/Row') as ExtraTabData(X) 
 where COSTCENTERID = @COSTCENTERID  
 and X.value('@Action','nvarchar(300)')='DELETE')
@@ -584,23 +619,26 @@ and X.value('@Action','nvarchar(300)')='DELETE')
 			DECLARE @TEMPXML XML,@Dt FLOAT
 				SET @Dt=convert(float,getdate())
 				SET @TEMPXML=@FollowXML
-
-			DELETE FROM CRM_FollowUpCustomization WHERE CCID=@COSTCENTERID
+		if exists(select name from sys.tables where name='CRM_FollowUpCustomization')
+		begin
+			SET @SQL='DELETE FROM CRM_FollowUpCustomization WHERE CCID='+CONVERT(NVARCHAR,@COSTCENTERID)+'
 			INSERT INTO CRM_FollowUpCustomization(CCID,CCCOLID,NAME,ISVISIBLE,SYSCOLUMNNAME,COMPANYGUID,CREATEDBY,CREATEDDATE)
-			SELECT  @COSTCENTERID,
-					x.value('@CCCOLID','BIGINT'),
-					x.value('@Name','NVARCHAR(200)'),
-					x.value('@IsVisible','BIT'),
-					x.value('@Syscolumnname','NVARCHAR(200)'),
-					@CompanyGUID,
-					@UserName,
-					convert(float,@Dt)
-					from @TEMPXML.nodes('XML/Row') as data(x)
-					where  x.value('@CCCOLID','BIGINT')is not null and   x.value('@CCCOLID','BIGINT') <> ''
+			SELECT  '+CONVERT(NVARCHAR,@COSTCENTERID)+',
+					x.value(''@CCCOLID'',''INT''),
+					x.value(''@Name'',''NVARCHAR(200)''),
+					x.value(''@IsVisible'',''BIT''),
+					x.value(''@Syscolumnname'',''NVARCHAR(200)''),
+					'''+@CompanyGUID+''',
+					'''+@UserName+''',
+					'+CONVERT(NVARCHAR,convert(float,@Dt))+'
+					from @TEMPXML.nodes(''XML/Row'') as data(x)
+					where  x.value(''@CCCOLID'',''INT'')is not null and   x.value(''@CCCOLID'',''INT'') <> '''''
+			EXEC sp_executesql @SQL,N'@TEMPXML XML',@TEMPXML
+		END
   END
   
 	--Quick Add Screen XML
-	DECLARE @QXML XML--, @TblQuick AS TABLE(ColID BIGINT,iOrder INT)
+	DECLARE @QXML XML--, @TblQuick AS TABLE(ColID INT,iOrder INT)
 	SET @QXML=@QuickXML
 	
 	IF NOT (@ParentCCID>0 AND  @COSTCENTERID=144)
@@ -620,7 +658,7 @@ and X.value('@Action','nvarchar(300)')='DELETE')
 	UPDATE adm_costcenterdef
 	SET  ShowInQuickAdd=1,QuickAddOrder=x.value('@Order','INT')
 	from adm_costcenterdef C with(nolock) 
-	INNER JOIN @QXML.nodes('QuickXML/Row') as data(x) ON x.value('@ColID','BIGINT')=C.CostCenterColID
+	INNER JOIN @QXML.nodes('QuickXML/Row') as data(x) ON x.value('@ColID','INT')=C.CostCenterColID
 	WHERE C.COSTCENTERID=@COSTCENTERID 
 
    --update grids properties
@@ -629,7 +667,7 @@ and X.value('@Action','nvarchar(300)')='DELETE')
 		   SectionSeqNumber = X.value('@TabOrder','INT'), 
 			UIWidth=X.value('@Width','NVARCHAR(50)')  
    FROM adm_costcenterdef C with(nolock)
-   INNER JOIN @GridData.nodes('/XML/Row') as Data(X) ON X.value('@CostCenterColID','bigint')=C.CostCenterColID  
+   INNER JOIN @GridData.nodes('/XML/Row') as Data(X) ON X.value('@CostCenterColID','INT')=C.CostCenterColID  
    WHERE C.COSTCENTERID=@COSTCENTERID 
    
     
@@ -668,18 +706,51 @@ and X.value('@Action','nvarchar(300)')='DELETE')
 		WHILE @I<=@COUNT
 		BEGIN
 			SELECT @KEY=[KEY],@VALUE=[VALUE] FROM @TEMP WHERE ID=@I
- 
-			UPDATE COM_CostCenterPreferences 
-			SET [Value]=@VALUE,
-				[ModifiedBy]=@UserName,
-				[ModifiedDate]=convert(float,getdate())
-			WHERE [Name]=@KEY AND CostCenterID=@CostCenterID
-		
+			--if(@KEY='ActivityFields' and @COSTCENTERID=144 and @ParentCCID between 40000 and 50000)
+			if(@KEY='ActivityFields' and @COSTCENTERID=144 and @ParentCCID between 40000 and 50000)
+			--IF (@KEY='ActivityFields' and @COSTCENTERID=144 and ((@ParentCCID between 40000 and 50000) )
+			BEGIN
+				UPDATE [com_documentpreferences] 
+				SET [PrefValue]=@VALUE,
+					[ModifiedBy]=@UserName,
+					[ModifiedDate]=convert(float,getdate())
+				WHERE [PrefName]=@KEY AND CostCenterID=@ParentCCID
+			END
+
+			ELSE IF (@KEY='ActivityFields' and @COSTCENTERID=144 and  @ParentCCID in (92,93,94,95))
+			BEGIN
+				UPDATE [COM_CostCenterPreferences] 
+				SET [Value]=@VALUE,
+					[ModifiedBy]=@UserName,
+					[ModifiedDate]=convert(float,getdate())
+				WHERE [Name]=@KEY AND CostCenterID=@ParentCCID
+			END
+			ELSE
+			BEGIN
+				UPDATE COM_CostCenterPreferences 
+				SET [Value]=@VALUE,
+					[ModifiedBy]=@UserName,
+					[ModifiedDate]=convert(float,getdate())
+				WHERE [Name]=@KEY AND CostCenterID=@CostCenterID
+			END
 			SET @I=@I+1
 		END 
 	END
 	
-	Create  TABLE #TEMPCOLIDS (ID INT IDENTITY(1,1),COLID BIGINT,ROWNO INT,COLUMNNO INT,ColumnSpan INT)
+	--External Function XML
+	delete from ADM_DocFunctions where CostCenterID=@COSTCENTERID
+	if(@ExtrnFuncXML<>'')
+	BEGIN
+		  SET @ExtFuntDATA=@ExtrnFuncXML        
+    
+		insert into ADM_DocFunctions(CostCenterID,CostCenterColID,Mode,Shortcut,SpName,IpParams,OpParams,Expression)
+		SELECT  @CostCenterID,X.value('@CostCenterColID','int'),X.value('@Mode','INT') ,X.value('@Shortcut','NVARCHAR(MAX)')
+            ,X.value('@SpName','NVARCHAR(MAX)'),X.value('@IpParams','NVARCHAR(MAX)'),X.value('@OpParams','NVARCHAR(MAX)'),X.value('@Expression','NVARCHAR(MAX)')
+        FROM @ExtFuntDATA.nodes('/XML/Row') as DATA(X)
+   
+	END 
+	
+	Create  TABLE #TEMPCOLIDS (ID INT IDENTITY(1,1),COLID INT,ROWNO INT,COLUMNNO INT,ColumnSpan INT)
 	Create TABLE #PRDIMENSIONS  (ROWSPAN INT,COLSPAN INT)
 	
 	--TO UPDATE PRODUCT IMAGE HEIGHT/WIDTH
@@ -688,9 +759,9 @@ and X.value('@Action','nvarchar(300)')='DELETE')
 			
 			
 			SELECT @XMLDATA=isnull(VALUE,'') FROM COM_CostCenterPreferences with(nolock) WHERE CostCenterID=3 AND Name='ProductImageDimensions'
-				INSERT INTO #PRDIMENSIONS
-				SELECT X.value('@RowSpan','int'),X.value('@ColumnSpan','int') from @XMLDATA.nodes('XML') as DATA(X)
-			IF((select COUNT(*) from #PRDIMENSIONS)>0)
+			INSERT INTO #PRDIMENSIONS
+			SELECT X.value('@RowSpan','int'),X.value('@ColumnSpan','int') from @XMLDATA.nodes('XML') as DATA(X)
+			IF((select COUNT(*) from #PRDIMENSIONS with(nolock))>0)
 			BEGIN
 				  
 			INSERT INTO #TEMPCOLIDS
@@ -699,13 +770,13 @@ and X.value('@Action','nvarchar(300)')='DELETE')
 			 AND CostCenterColID IN (261,262,263,264,264,266,265,281,282)
 			 ORDER BY RowNo,ColumnNo
 	  
-			select @imgrow=ROWSPAN,@imgcol=COLSPAN from #PRDIMENSIONS 
-			SELECT @I=1 , @COUNT=COUNT(*) FROM #TEMPCOLIDS
+			select @imgrow=ROWSPAN,@imgcol=COLSPAN from #PRDIMENSIONS with(nolock) 
+			SELECT @I=1 , @COUNT=COUNT(*) FROM #TEMPCOLIDS with(nolock)
 			set @r=0
 			set @c=0 
 			WHILE @I<=@COUNT
 			BEGIN
-			Select @Colid=COLID,@ColSpan=ColumnSpan from #TEMPCOLIDS where ID=@I
+			Select @Colid=COLID,@ColSpan=ColumnSpan from #TEMPCOLIDS with(nolock) where ID=@I
 			 
 			if(@ColSpan is null or @ColSpan=0)
 				 set @ColSpan=1  
@@ -784,4 +855,5 @@ BEGIN CATCH
  SET NOCOUNT OFF        
  RETURN -999         
 END CATCH
+
 GO

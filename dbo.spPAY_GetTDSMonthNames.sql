@@ -3,12 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_GetTDSMonthNames]
-	@EmpSeqNo [bigint],
+	@EmpSeqNo [int],
 	@Year [int],
 	@FromMonth [datetime]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
-DECLARE @TDSCompID BIGINT,@TDSSNo INT,@TDSAmt FLOAT,@iQ INT,@iQNo INT
+DECLARE @TDSCompID INT,@TDSSNo INT,@TDSAmt FLOAT,@iQ INT,@iQNo INT
 DECLARE @PayMonth DATETIME,@ToMonth DATETIME,@dtmp DATETIME
 DECLARE @sQ NVARCHAR(MAX)
 DECLARE @SurChr FLOAT,@EduCess FLOAT,@SecEduCess FLOAT
@@ -33,7 +33,7 @@ FROM INV_DocDetails a WITH(NOLOCK)
 JOIN COM_DocCCData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
 JOIN COM_DocNumData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
 JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
-WHERE a.CostCenterID=40074 and a.StatusID=369 AND CONVERT(INT,d.dcAlpha1)=2019 
+WHERE d.tCostCenterID=40074 and a.StatusID=369 AND CONVERT(INT,d.dcAlpha1)=2019 
 --SELECT @SurChr,@EduCess,@SecEduCess
 
 SELECT @PayMonth=CONVERT(DATETIME,MAX(PayrollDate)) FROM COM_CC50054 WITH(NOLOCK) WHERE CONVERT(DATETIME,PayrollDate)<=@FromMonth
@@ -50,7 +50,7 @@ SET @sQ='	SELECT CONVERT(DATETIME,a.DueDate),c.dcCalcNum'+CONVERT(NVARCHAR,@TDSS
 				ORDER BY a.DueDate '
 
 	INSERT INTO @TDSMon
-	EXEC (@sQ)
+	EXEC sp_executesql @sQ
 
 --SELECT * FROM @TDSMon
 
@@ -103,5 +103,4 @@ SET @iQ=@iQ+1
 END
 
 SELECT * FROM @TABMONTHQUARTER
-
 GO

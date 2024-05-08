@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_SetImportData]
-	@COSTCENTERID [bigint],
+	@COSTCENTERID [int],
 	@Code [nvarchar](max),
 	@Name [nvarchar](max),
 	@XML [nvarchar](max),
@@ -12,12 +12,10 @@ CREATE PROCEDURE [dbo].[spREN_SetImportData]
 	@ExtraXML [nvarchar](max),
 	@ContractXML [nvarchar](max),
 	@PayTermsXML [nvarchar](max) = null,
-	@RcptXML [nvarchar](max) = null,
-	@PDRcptXML [nvarchar](max) = null,
-	@SIVXML [nvarchar](max) = null,
-	@RentRcptXML [nvarchar](max) = null,
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
 	@UserName [nvarchar](50),
-	@UserID [bigint],
+	@UserID [int],
 	@RoleID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -26,14 +24,14 @@ BEGIN TRANSACTION
 BEGIN TRY    
 SET NOCOUNT ON     
   --Declaration Section 
-  
+
 	DECLARE @return_value int,@Dt float,@ParentName nvarchar(50)     
-	DECLARE @HasAccess BIT,@DATA XML,@CCID INT,@UnitID BIGINT, @TenantID BIGINT
+	DECLARE @HasAccess BIT,@DATA XML,@CCID INT,@UnitID INT, @TenantID INT
 	SET @DATA=@XML    
 	SET @Dt=CONVERT(FLOAT,GETDATE())--Setting Current Date      
 	DECLARE @PrntNodeID INT ,@TypeName NVARCHAR(max)
-	DECLARE @TenantName NVARCHAR(max),@PropertyID BIGINT ,@PropertyName NVARCHAR(max),@StatusID BIGINT  
-	DECLARE @IsGroup BIT,@Parent NVARCHAR(max),@SelectedNodeID BIGINT
+	DECLARE @TenantName NVARCHAR(max),@PropertyID INT ,@PropertyName NVARCHAR(max),@StatusID INT  
+	DECLARE @IsGroup BIT,@Parent NVARCHAR(max),@SelectedNodeID INT
 	DECLARE @EXTRAFIELDXML XML  
 
 	SET @EXTRAFIELDXML =  @ExtraXML  
@@ -54,7 +52,8 @@ SET NOCOUNT ON
     
     IF((@COSTCENTERID = 92 AND @Code='Property Particulars') OR (@COSTCENTERID = 93 AND @Code='Unit Particulars'))  
 	BEGIN 
-		select @SelectedNodeID=ISNULL(X.value('@ParticularID','BIGINT'),0)
+
+		select @SelectedNodeID=ISNULL(X.value('@ParticularID','INT'),0)
 		,@ExtraFields=isnull(X.value('@ExtraFields ','nvarchar(max)'),'')
 		from @DATA.nodes('Row') as data(X)  
 		
@@ -106,7 +105,7 @@ SET NOCOUNT ON
 	END 
 	ELSE IF(@COSTCENTERID = 93 AND @Code='Unit Rates')  
 	BEGIN 
-		select @SelectedNodeID=ISNULL(X.value('@ParticularID','BIGINT'),0)
+		select @SelectedNodeID=ISNULL(X.value('@ParticularID','INT'),0)
 		,@ExtraFields=isnull(X.value('@ExtraFields ','nvarchar(max)'),'')
 		from @DATA.nodes('Row') as data(X)  
 		
@@ -148,7 +147,7 @@ SET NOCOUNT ON
 	END 
 	ELSE IF(@COSTCENTERID = 92)  
 	BEGIN 
-		select @StatusID=ISNULL(X.value('@StatusID','BIGINT'),422)
+		select @StatusID=ISNULL(X.value('@StatusID','INT'),422)
 		,@IsGroup=ISNULL(X.value('@IsGroup','BIT'),0),@Parent =X.value('@ParentID','NVARCHAR(max)')
 		from @DATA.nodes('Row') as data(X)  
 		
@@ -191,6 +190,7 @@ SET NOCOUNT ON
 		
 		IF @PropertyID = 0
 		BEGIN	
+	
 			EXEC @return_value = [dbo].[spREN_setProperty]  
 				@PropertyID = @PropertyID,  
 				@Code = @Code,  
@@ -198,7 +198,7 @@ SET NOCOUNT ON
 				@Status = @StatusID,  
 				@IsGroup = @IsGroup,  
 				@SelectedNodeID = @SelectedNodeID,  
-				@DetailsXML = '<Row  ></Row>',  
+				@DetailsXML = N'', 
 				@DepositXML = N'',  
 				@UnitXML = N'',  
 				@ParkingXML = N'',  
@@ -246,7 +246,7 @@ SET NOCOUNT ON
 	ELSE IF(@COSTCENTERID = 93)  
 	BEGIN 
 		DECLARE @TempGuid nvarchar(50)    
-		select @PropertyName = X.value('@PropertyID','NVARCHAR(max)'),@StatusID=ISNULL(X.value('@Status','BIGINT'),424)
+		select @PropertyName = X.value('@PropertyID','NVARCHAR(max)'),@StatusID=ISNULL(X.value('@Status','INT'),424)
 		,@IsGroup=ISNULL(X.value('@IsGroup','BIT'),0),@Parent =X.value('@ParentID','NVARCHAR(max)')
 		,@TenantName=X.value('@TenantID','NVARCHAR(max)')
 		from @DATA.nodes('Row') as data(X)  
@@ -270,6 +270,7 @@ SET NOCOUNT ON
 			
 		IF (@PropertyID = 0 OR @PropertyID IS NULL OR @PropertyID = '') --CHECKING FOR PROPERTY EXISTANCE  
 		BEGIN   
+		
 			EXEC @PropertyID = [dbo].[spREN_setProperty]  
 				@PropertyID = 0,  
 				@Code = @PropertyName,  
@@ -329,19 +330,7 @@ SET NOCOUNT ON
 	END  
 	ELSE IF(@COSTCENTERID = 94)  
 	BEGIN 
-		DECLARE @MiddleName NVARCHAR(max) ,@LastName NVARCHAR(max),@ContactPerson NVARCHAR(max),@TypeID NVARCHAR(max)   
-		DECLARE @Phone1 NVARCHAR(max) ,@Phone2 NVARCHAR(max) ,@Email NVARCHAR(max) ,@Fax NVARCHAR(max) ,@Profession NVARCHAR(max)  , @PositionID NVARCHAR(max)   
-		DECLARE @PosNodeID INT  , @PosTypeID INT  , @PosTypeName NVARCHAR(max) , @PosTypeCnt int   , @LeaseSignatory NVARCHAR(max),@PostingId bigint, @IDNumber NVARCHAR(max)
-
-		select  @StatusID=ISNULL(X.value('@StatusID','BIGINT'),462)
-		,@IsGroup=ISNULL(X.value('@IsGroup','BIT'),0),@Parent =X.value('@ParentID','NVARCHAR(max)')
-		,@MiddleName = X.value('@MiddleName','NVARCHAR(max)'),@LastName = X.value('@LastName','NVARCHAR(max)')  
-		,@ContactPerson = X.value('@ContactPerson','NVARCHAR(max)'),@Phone1 = X.value('@Phone1','NVARCHAR(max)')
-		,@Phone2 = X.value('@Phone2','NVARCHAR(max)'),@Email = X.value('@Email','NVARCHAR(max)')  
-		,@Fax = X.value('@Fax','NVARCHAR(max)'), @Profession = X.value('@Profession','NVARCHAR(max)') 
-		,@TypeID= X.value('@TypeID','NVARCHAR(max)') , @PositionID = X.value('@PositionID','NVARCHAR(max)') 
-		,@LeaseSignatory= X.value('@LeaseSignatory','NVARCHAR(max)') 
-		,@PostingId = X.value('@PostingID','bigint') ,@IDNumber= X.value('@IDNumber','NVARCHAR(max)') 
+		select @IsGroup=ISNULL(X.value('@IsGroup','BIT'),0),@Parent=ISNULL(X.value('@ParentID','NVARCHAR(100)'),'')
 		from @DATA.nodes('Row') as data(X)  
 			
 		SET @TenantID = 0 
@@ -361,27 +350,14 @@ SET NOCOUNT ON
 		EXEC @return_value = [spREN_SetTenant]  
 			@TenantID = @TenantID,  
 			@Code = @Code,  
-			@TypeID = @PrntNodeID,  
-			@PositionID = @PosTypeID,  
 			@FirstName = @Name,  
-			@MiddleName = @MiddleName,  
-			@LastName = @LastName,  
-			@LeaseCatagory = @LeaseSignatory,  
-			@ContactPerson = @ContactPerson,  
-			@PostingID = @PostingId,  
-			@Phone1 = @Phone1,  
-			@Phone2 = @Phone2,  
-			@Email = @Email,  
-			@Fax = @Fax,  
-			@IDNumber = @IDNumber,  
-			@Profession = @Profession,  
-			@TabsDetails = @ExtraFields,  
-			@Description = '',  
+			@TabsDetails = @ExtraFields,   
 			@SelectedNodeID = @SelectedNodeID,  
 			@IsGroup = @IsGroup,  
 			@CustomFieldsQuery =@ExtraUserDefinedFields,  
 			@CustomCostCenterFieldsQuery = @CostCenterFields,  
 			@AttachmentsXML = '', 
+			@AssignCCCCData=@ContractXML,
 			@CompanyGUID = 'CompanyGUID',  
 			@UserName = @UserName, 
 			@WID = 0,
@@ -393,9 +369,9 @@ SET NOCOUNT ON
 	ELSE IF(@COSTCENTERID = 95)  
 	BEGIN 
 
-		DECLARE @UnitName NVARCHAR(max),  @AccountantID bigint,  @LandlordID bigint    
+		DECLARE @UnitName NVARCHAR(max),  @AccountantID INT,  @LandlordID INT    
 		DECLARE @ContractDate DATETIME ,@StartDate DATETIME ,@EndDate DATETIME    
-		DECLARE @TotalAmount FLOAT, @ContractNumber int , @SalesmanID  bigint
+		DECLARE @TotalAmount FLOAT, @ContractNumber int , @SalesmanID  INT
 		DECLARE @ExpectedEndDate DATETIME,@GracePeriod FLOAT   ,@IsOPening BIT
 		set @UnitID =  0    
 		SET @PropertyID = 0   
@@ -405,8 +381,8 @@ SET NOCOUNT ON
 		SELECT @PropertyName = X.value('@PropertyName','NVARCHAR(max)') ,@IsOPening=isnull(X.value('@IsOPening','BIT'),1)  , @UnitName= X.value('@UnitName','NVARCHAR(max)')  
 		, @TenantName= X.value('@TenantName','NVARCHAR(max)'), @ContractDate= X.value('@ContractDate','DATETIME')  
 		, @StartDate= X.value('@StartDate','DATETIME'), @EndDate = X.value('@EndDate','DATETIME')  
-		, @TotalAmount = X.value('@TotalAmount','FLOAT')  , @SalesmanID = ISNULL(X.value('@SalesmanID ','BIGINT'),1) ,  @AccountantID = ISNULL(X.value('@AccountantID','BIGINT'),1)   
-		, @LandlordID = ISNULL(X.value('@LandlordID','BIGINT')  ,0), @ExpectedEndDate= X.value('@ExpectedEndDate','DATETIME'),@GracePeriod  = ISNULL(X.value('@GracePeriod','FLOAT'),0)
+		, @TotalAmount = X.value('@TotalAmount','FLOAT')  , @SalesmanID = ISNULL(X.value('@SalesmanID ','INT'),1) ,  @AccountantID = ISNULL(X.value('@AccountantID','INT'),1)   
+		, @LandlordID = ISNULL(X.value('@LandlordID','INT')  ,0), @ExpectedEndDate= X.value('@ExpectedEndDate','DATETIME'),@GracePeriod  = ISNULL(X.value('@GracePeriod','FLOAT'),0)
 		FROM @DATA.nodes('Row') as data(X)  
 		
 		if(@IsCode=1)
@@ -418,6 +394,7 @@ SET NOCOUNT ON
 
 		IF (@PropertyID = 0 OR @PropertyID IS NULL OR @PropertyID = '')  --CHECKING FOR PROPERTY EXISTANCE  
 		BEGIN   
+
 			EXEC @PropertyID = [dbo].[spREN_setProperty]  
 				@PropertyID = 0,  
 				@Code = @PropertyName,  
@@ -482,23 +459,9 @@ SET NOCOUNT ON
 		BEGIN   
 			EXEC @return_value = [spREN_SetTenant]  
 				@TenantID = 0,  
-				@Code = @TenantName,  
-				@TypeID = 129,  
-				@PositionID = 134,  
-				@FirstName = @TenantName,  
-				@MiddleName = NULL,  
-				@LastName = NULL,  
-				@LeaseCatagory = NULL,  
-				@ContactPerson = NULL,  
-				@PostingID = null,  
-				@Phone1 = NULL,  
-				@Phone2 = NULL,  
-				@Email = NULL,  
-				@Fax = NULL,  
-				@IDNumber = NULL,  
-				@Profession = NULL,  
-				@TabsDetails = NULL,  
-				@Description = @TenantName,  
+				@Code = @TenantName,   
+				@FirstName = @TenantName,   
+				@TabsDetails = 'TypeID = 129,PositionID = 134,',  
 				@SelectedNodeID = 1,  
 				@IsGroup = 0,  
 				@CustomFieldsQuery = N'',  
@@ -588,6 +551,8 @@ SET NOCOUNT ON
 			@IsOPening=@IsOPening,
 			@parContractID =0,
 			@IsExtended=0,
+			@SysInfo =@SysInfo, 
+			@AP =@AP,
 			@CompanyGUID = 'CompanyGUID',  
 			@GUID = 'GUID',  
 			@UserName = 'Admin',  
@@ -649,7 +614,7 @@ SET NOCOUNT ON
 			END
 			
 			declare @i int,@cnt int
-			declare @tab table(id int identity(1,1),nid bigint,cr bigint,dr bigint,adaccid bigint)
+			declare @tab table(id int identity(1,1),nid INT,cr INT,dr INT,adaccid INT)
 			insert into @tab
 			select NodeID,CreditAccID,DebitAccID,AdvanceAccountID 
 			from ren_contractparticulars WITH(NOLOCK) where ContractID=@return_value
@@ -662,7 +627,7 @@ SET NOCOUNT ON
 			BEGIN
 				select @TypeName=TableName from adm_features WITH(NOLOCK)  where FeatureID=@SelectedNodeID
 				set @TypeName='select @PrntNodeID=NodeID from '+@TypeName+' WITH(NOLOCK) where code=''Rent'' or name =''Rent'''
-				exec SP_executesql @TypeName,N'@PrntNodeID BIGINT OUTPUT',@PrntNodeID OUTPUT
+				exec SP_executesql @TypeName,N'@PrntNodeID INT OUTPUT',@PrntNodeID OUTPUT
 			END	
 			
 			while(@i<@cnt)
@@ -757,7 +722,5 @@ if(@return_value=-999)
  ROLLBACK TRANSACTION    
  SET NOCOUNT OFF      
  RETURN -999       
-END CATCH    
-  
-
+END CATCH
 GO

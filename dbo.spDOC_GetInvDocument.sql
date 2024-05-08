@@ -7,10 +7,10 @@ CREATE PROCEDURE [dbo].[spDOC_GetInvDocument]
 	@DocPrefix [nvarchar](50),
 	@DocNumber [nvarchar](500),
 	@IsPrevNext [int],
-	@DocID [bigint],
+	@DocID [int],
 	@LockWhere [nvarchar](max) = '',
 	@UserID [int] = 0,
-	@RoleID [bigint] = 0,
+	@RoleID [int] = 0,
 	@UserName [nvarchar](50),
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -20,10 +20,10 @@ SET NOCOUNT ON
   
 	--Declaration Section  
 	DECLARE @HasAccess bit,@VoucherNo NVARCHAR(100),@DocDate float,@doctype int,@sql nvarchar(max),@UserWise bit,@AssignWise bit,@isLinewise bit,@CrdtDate float,@OffLineStatus int
-	Declare @WID bigint,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@DimensionWise bit,@isPrinted bit,@InvDocDetID bigint,@tabName nvarchar(100)
-	Declare @PrefValue nvarchar(50),@Dimesion int,@CrAccID BIGINT,@WHERE nvarchar(500),@DbAccID BIGINT,@Type int,@escDays int,@EditPostedDoc BIT,@EditApprovedDoc BIT
+	Declare @WID INT,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@DimensionWise bit,@isPrinted bit,@InvDocDetID INT,@tabName nvarchar(100)
+	Declare @PrefValue nvarchar(50),@Dimesion int,@CrAccID INT,@WHERE nvarchar(500),@DbAccID INT,@Type int,@escDays int,@EditPostedDoc BIT,@EditApprovedDoc BIT,@EditRejectedDoc bit
 	Declare @docPref table(name nvarchar(100),value nvarchar(100))
-	DECLARE @DAllowLockData BIT,@AllowLockData BIT,@IsLock bit,@CreatedDate datetime,@DLockCC int,@LockCCValues nvarchar(max),@dim bigint,@LockedBY nvarchar(max),@guid nvarchar(max)
+	DECLARE @DAllowLockData BIT,@AllowLockData BIT,@IsLock bit,@CreatedDate datetime,@DLockCC int,@LockCCValues nvarchar(max),@dim INT,@LockedBY nvarchar(max),@guid nvarchar(max),@DisRej bit
 	
 	--SP Required Parameters Check  
 	IF (@CostCenterID < 1)  
@@ -42,11 +42,8 @@ SET NOCOUNT ON
 	
 	insert into @docPref
 	SELECT Name,Value FROM ADM_GlobalPreferences WITH(NOLOCK)  
-	WHERE Name in('DimensionwiseDocuments','CanApproveFunction','EditApprovedDocuments','ShowLinkedDocEdit','enableChequeReturnHistory','DocSave','AutoProduceDoc')
+	WHERE Name in('DimensionwiseDocuments','CanApproveFunction','EditApprovedDocuments','ShowLinkedDocEdit','enableChequeReturnHistory','DocSave','AutoProduceDoc','ShowAttachmentExtraFieldsInDocuments')
 	
-
-
-
 	if(@DocID>0)
 	BEGIN
 		SELECT @InvDocDetID=InvDocDetailsID,@VoucherNo=VoucherNo,@DocDate=DocDate,@doctype=Documenttype,@DbAccID=DebitAccount,
@@ -57,6 +54,9 @@ SET NOCOUNT ON
 	ELSE
 	BEGIN
 		SET @UserWise=dbo.fnCOM_HasAccess(@RoleID,43,137)
+		IF(@UserWise=0)
+			SET @UserWise=dbo.fnCOM_HasAccess(@RoleID,@CostCenterID,137)
+			
 		SET @DimensionWise=dbo.fnCOM_HasAccess(@RoleID,43,145) 
 		SET @AssignWise=dbo.fnCOM_HasAccess(@RoleID,@CostCenterID,221) 
 
@@ -68,7 +68,7 @@ SET NOCOUNT ON
 			if(@PrefValue is not null and @PrefValue<>'')    
 			begin    		
 				begin try    
-					select @Dimesion=convert(bigint,@PrefValue)    
+					select @Dimesion=convert(INT,@PrefValue)    
 				end try    
 				begin catch    
 					set @Dimesion=0    
@@ -98,7 +98,7 @@ SET NOCOUNT ON
 				 set @sql=@sql+' join '+@tabName+' DCCMj with(nolock) on  CCM.NodeID= DCCMj.NodeID 
 								 join '+@tabName+' DCG   with(nolock) on  DCG.lft between   DCCMj.lft and  DCCMj.rgt and DCG.NodeID=b.DcccNID'+convert(nvarchar,(@Dimesion-50000))
 			END                                  
-			set @sql=@sql+' WHERE a.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND DocPrefix='''+@DocPrefix+''' AND convert(bigint,DocNumber)'
+			set @sql=@sql+' WHERE a.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND DocPrefix='''+@DocPrefix+''' AND convert(INT,DocNumber)'
 			
 			if(@IsPrevNext=0)
 				set @sql=@sql+' = '
@@ -132,7 +132,7 @@ SET NOCOUNT ON
 				 set @sql=@sql+' join '+@tabName+' DCCMj with(nolock) on  CCM.NodeID= DCCMj.NodeID 
 								 join '+@tabName+' DCG   with(nolock) on  DCG.lft between   DCCMj.lft and  DCCMj.rgt and DCG.NodeID=b.DcccNID'+convert(nvarchar,(@Dimesion-50000))
 			END  
-			set @sql=@sql+' WHERE a.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND DocPrefix='''+@DocPrefix+''' AND convert(bigint,DocNumber)' 
+			set @sql=@sql+' WHERE a.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND DocPrefix='''+@DocPrefix+''' AND convert(INT,DocNumber)' 
 			
 			if(@IsPrevNext=0)
 				set @sql=@sql+' = '
@@ -153,7 +153,7 @@ SET NOCOUNT ON
 				 where parentcostcenterid=7 and parentnodeid='+convert(nvarchar,@UserID)+'  
 				 and costcenterid=7))  '
 			 	
-			set @sql=@sql+' ORDER BY convert(bigint,DocNumber)       '
+			set @sql=@sql+' ORDER BY convert(INT,DocNumber)       '
 			if(@IsPrevNext=2) 
 				set @sql=@sql+' desc '	
 			 set @sql=@sql+' END  
@@ -188,12 +188,13 @@ SET NOCOUNT ON
 
    insert into @docPref
    SELECT PrefName,PrefValue  FROM [COM_DocumentPreferences]  WITH(NOLOCK) 
-   WHERE CostCenterID=@CostCenterID AND PrefName in('AuditTrial','Activities','TempInfo','UseQtyAdjustment'
+   WHERE CostCenterID=@CostCenterID AND PrefName in('AuditTrial','Activities','TempInfo','UseQtyAdjustment','DocQtyAdjustment'
    ,'Notes','Attachments','AllowAdjToDownPmt','Autopostdocument','Enable Payment Terms','EnableRevision','PostVoucherDocument','OverrideLock'
    ,'CopyPaymentTerms','Lock Data Between','NoWorkflowPostedDocs','PrimaryAddress','ShippingAddress','BillingAddress','ShowLinkStatus','UseasAssemble/DisAssembly','LockCostCenters','LockCostCenterNodes')
    
    set @EditPostedDoc=0
    set @EditApprovedDoc=0
+   set @EditRejectedDoc=0
    
    if exists(select WorkFlowID from COM_WorkFlowDef WITH(NOLOCK) where CostCenterID=@CostCenterID and IsLineWise=1)
 	BEGIN
@@ -208,6 +209,8 @@ SET NOCOUNT ON
 				
 			if dbo.fnCOM_HasAccess(@RoleID,@CostCenterID,433) =1
 				set @EditApprovedDoc=1
+			if dbo.fnCOM_HasAccess(@RoleID,@CostCenterID,174) =1
+				set @EditRejectedDoc=1
 		END	
 		else
 			set @isLinewise=0
@@ -230,11 +233,11 @@ SET NOCOUNT ON
 			 ,a.[DocAbbr]  
 			 ,a.[DocPrefix]  
 			 ,a.[DocNumber]  
-			 ,CONVERT(DATETIME,a.[DocDate]) AS DocDate  
-			 ,CONVERT(DATETIME,a.[DueDate]) AS DueDate  
+			 ,convert(nvarchar,CONVERT(DATETIME,a.[DocDate]),100) AS DocDate  
+			 ,convert(nvarchar,CONVERT(DATETIME,a.[DueDate]),100) AS DueDate  
 			 ,a.[StatusID]  
 			 ,a.[BillNo]  
-		   ,CONVERT(DATETIME,a.BILLDATE) AS BillDate  
+		     ,convert(nvarchar,CONVERT(DATETIME,a.BILLDATE),100) AS BillDate  
 			 ,a.[LinkedInvDocDetailsID]  
 			 ,a.LinkedFieldName  
 			 ,a.LinkedFieldValue  
@@ -259,22 +262,22 @@ SET NOCOUNT ON
 			 ,a.[ExchangeRate]  			
 			 ,@guid [GUID],A.CreatedBy  
 			 ,CONVERT(DATETIME,A.[CreatedDate]) AS CreatedDate  
-			 ,A.[ModifiedBy],WorkflowID  
+			 ,A.[ModifiedBy],A.WorkflowID  
 			 ,CONVERT(DATETIME,A.[ModifiedDate]) AS ModifiedDate  
 		   ,UOMConversion  ,CanRecur
-		   ,UOMConvertedQty,grossfc,DynamicInvDocDetailsID,vouchertype,convert(datetime,a.ActDocDate) ActDocDate, 
-			RefNo,RefCCID,RefNodeid,LinkStatusID ,LinkStatusRemarks,ParentSchemeID,WorkFlowLevel
-			,case when @isLinewise=1 and @PrefValue='true' THEN dbo.fnExt_CanApprove(a.InvDocDetailsID,a.CostCenterID,WorkflowID,WorkFlowLevel,a.StatusID ,a.CreatedDate,@UserID,@RoleID) 
-			when @isLinewise=1 and @doctype >= 51 AND @doctype <= 199 AND @doctype != 64 then dbo.fnPay_CanApprove(a.InvDocDetailsID,a.DocumentType,@UserName,a.CostCenterID,WorkflowID,WorkFlowLevel,a.StatusID ,a.CreatedDate,@UserID,@RoleID)
-			WHEN @isLinewise=1 THEN dbo.fnRPT_CanApprove(a.CostCenterID,WorkflowID,WorkFlowLevel,a.StatusID ,a.CreatedDate,@UserID,@RoleID) 
+		   ,UOMConvertedQty,grossfc,DynamicInvDocDetailsID,VoucherType,convert(datetime,a.ActDocDate) ActDocDate, 
+			RefNo,RefCCID,RefNodeid,LinkStatusID ,LinkStatusRemarks,ParentSchemeID,A.WorkFlowLevel
+			,case when @isLinewise=1 and @PrefValue='true' THEN dbo.fnExt_CanApprove(a.InvDocDetailsID,a.CostCenterID,A.WorkflowID,A.WorkFlowLevel,a.StatusID ,a.CreatedDate,@UserID,@RoleID) 
+			when @isLinewise=1 and @doctype >= 51 AND @doctype <= 199 AND @doctype != 64 then dbo.fnPay_CanApprove(a.InvDocDetailsID,a.DocumentType,@UserName,a.CostCenterID,A.WorkflowID,A.WorkFlowLevel,a.StatusID ,a.CreatedDate,@UserID,@RoleID)
+			WHEN @isLinewise=1 THEN dbo.fnRPT_CanApprove(a.CostCenterID,A.WorkflowID,A.WorkFlowLevel,a.StatusID ,a.CreatedDate,@UserID,@RoleID) 
 			ELSE 0 end as CanApprove
-			,case when @isLinewise=1 THEN dbo.fnDoc_CanEdit(a.InvDocDetailsID,a.DocumentType,@UserName,a.CostCenterID,WorkflowID,WorkFlowLevel,a.StatusID,a.CreatedDate ,@UserID,@RoleID,@EditPostedDoc,@EditApprovedDoc) 
+			,case when @isLinewise=1 THEN dbo.fnDoc_CanEdit(a.InvDocDetailsID,a.DocumentType,@UserName,a.CostCenterID,A.WorkflowID,A.WorkFlowLevel,a.StatusID,a.CreatedDate ,@UserID,@RoleID,@EditPostedDoc,@EditApprovedDoc,@EditRejectedDoc) 
 			ELSE 1 end as CanEdit
 			FROM  [INV_DocDetails] a WITH(NOLOCK)  
 			join dbo.INV_Product p WITH(NOLOCK) on  a.ProductID=p.ProductID  
 			left join COM_UOM u WITH(NOLOCK) on u.UOMID=a.Unit  
 			WHERE a.CostCenterID=@CostCenterID AND DocID=@DocID  
-			order by a.DocSeqNo,a.vouchertype,a.dynamicinvdocdetailsid
+			order by a.DocSeqNo,a.VoucherType,a.dynamicinvdocdetailsid
     
 	   IF(@doctype=62 OR @doctype=58)
 	   BEGIN
@@ -285,19 +288,19 @@ SET NOCOUNT ON
 	   SELECT A.* FROM  [COM_DocCCData] A WITH(NOLOCK)  
 	   join [INV_DocDetails] D WITH(NOLOCK) on A.InvDocDetailsID=D.InvDocDetailsID     
 	   WHERE CostCenterID=@CostCenterID AND DocID=@DocID  
-	   order by D.DocSeqNo,D.vouchertype  ,d.dynamicinvdocdetailsid
+	   order by D.DocSeqNo,D.VoucherType  ,d.dynamicinvdocdetailsid
 	     
 	   --GETTING DOCUMENT EXTRA NUMERIC FEILD DETAILS  
 	   SELECT A.* FROM [COM_DocNumData] A WITH(NOLOCK)  
 	   join [INV_DocDetails] D WITH(NOLOCK) on A.InvDocDetailsID=D.InvDocDetailsID     
 	   WHERE CostCenterID=@CostCenterID AND DocID=@DocID  
-	   order by D.DocSeqNo,D.vouchertype  ,d.dynamicinvdocdetailsid
+	   order by D.DocSeqNo,D.VoucherType  ,d.dynamicinvdocdetailsid
 	  
 	   --GETTING DOCUMENT EXTRA TEXT FEILD DETAILS  
 	   SELECT A.* FROM [COM_DocTextData] A WITH(NOLOCK)  
 	   join [INV_DocDetails] D WITH(NOLOCK) on A.InvDocDetailsID=D.InvDocDetailsID     
 	   WHERE CostCenterID=@CostCenterID AND DocID=@DocID  
-	   order by D.DocSeqNo,D.vouchertype ,d.dynamicinvdocdetailsid 
+	   order by D.DocSeqNo,D.VoucherType ,d.dynamicinvdocdetailsid 
   
     
 	    --GETTING SerialStock  
@@ -368,23 +371,23 @@ SET NOCOUNT ON
 			END
 			
 			if(@Userlevel is null )  
-				SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow]   WITH(NOLOCK)   
+				SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow]   WITH(NOLOCK)   
 				where WorkFlowID=@WID and  UserID =@UserID and LevelID>=@Level
 				order by LevelID desc
 
 			if(@Userlevel is null )  
-				SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow]  WITH(NOLOCK)    
+				SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow]  WITH(NOLOCK)    
 				where WorkFlowID=@WID and  RoleID =@RoleID and LevelID>=@Level
 				order by LevelID desc
 
 			if(@Userlevel is null )       
-				SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow] W WITH(NOLOCK)
+				SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow] W WITH(NOLOCK)
 				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
 				where g.UserID=@UserID and WorkFlowID=@WID and LevelID>=@Level
 				order by LevelID desc
 
 			if(@Userlevel is null )  
-				SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow] W WITH(NOLOCK)
+				SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow] W WITH(NOLOCK)
 				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
 				where g.RoleID =@RoleID and WorkFlowID=@WID and LevelID>=@Level
 				order by LevelID desc
@@ -451,23 +454,23 @@ SET NOCOUNT ON
 		begin  
 			if(@Userlevel is null )  
 			BEGIN
-				SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow]   WITH(NOLOCK)   
+				SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow]   WITH(NOLOCK)   
 				where WorkFlowID=@WID and  UserID =@UserID
 				order by LevelID
 				
 				if(@Userlevel is null )  
-					SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow]  WITH(NOLOCK)    
+					SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow]  WITH(NOLOCK)    
 					where WorkFlowID=@WID and  RoleID =@RoleID
 					order by LevelID
 
 				if(@Userlevel is null )       
-					SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow] W WITH(NOLOCK)
+					SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow] W WITH(NOLOCK)
 					JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
 					where g.UserID=@UserID and WorkFlowID=@WID
 					order by LevelID
 
 				if(@Userlevel is null )  
-					SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow] W WITH(NOLOCK)
+					SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow] W WITH(NOLOCK)
 					JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
 					where g.RoleID =@RoleID and WorkFlowID=@WID
 					order by LevelID
@@ -481,23 +484,23 @@ SET NOCOUNT ON
 		
 		if(@Userlevel is null and @WID>0 )  
 		BEGIN
-				SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow]   WITH(NOLOCK)   
+				SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow]   WITH(NOLOCK)   
 				where WorkFlowID=@WID and  UserID =@UserID
 				order by LevelID
 				
 				if(@Userlevel is null )  
-					SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow]  WITH(NOLOCK)    
+					SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow]  WITH(NOLOCK)    
 					where WorkFlowID=@WID and  RoleID =@RoleID
 					order by LevelID
 
 				if(@Userlevel is null )       
-					SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow] W WITH(NOLOCK)
+					SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow] W WITH(NOLOCK)
 					JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
 					where g.UserID=@UserID and WorkFlowID=@WID
 					order by LevelID
 
 				if(@Userlevel is null )  
-					SELECT @Userlevel=LevelID,@Type=type FROM [COM_WorkFlow] W WITH(NOLOCK)
+					SELECT @Userlevel=LevelID,@Type=type,@DisRej=DisableReject FROM [COM_WorkFlow] W WITH(NOLOCK)
 					JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
 					where g.RoleID =@RoleID and WorkFlowID=@WID
 					order by LevelID
@@ -531,10 +534,10 @@ SET NOCOUNT ON
 		WHERE Name='Lock Data Between'
 		
 		set @DLockCC=0	
-		SELECT @DLockCC=CONVERT(BIGINT,Value) FROM @docPref 
+		SELECT @DLockCC=CONVERT(INT,Value) FROM @docPref 
 		where Name='LockCostCenters' and isnumeric(Value)=1
 		
-		declare @tble table(NIDs BIGINT)  
+		declare @tble table(NIDs INT)  
 		
 		if(@DAllowLockData=1 and @DLockCC>50000)
 		BEGIN
@@ -547,7 +550,7 @@ SET NOCOUNT ON
 					join COM_DocCCData b WITH(NOLOCK) on a.INVDocDetailsID=b.INVDocDetailsID
 				   where  a.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND a.docid='+convert(nvarchar,@DocID)
 							   
-				   EXEC sp_executesql @sql,N'@dim BIGINT OUTPUT',@dim output
+				   EXEC sp_executesql @sql,N'@dim INT OUTPUT',@dim output
 		END	
 			
 		IF exists(select LockID from ADM_LockedDates WITH(NOLOCK) where isEnable=1 
@@ -588,14 +591,14 @@ SET NOCOUNT ON
 		  END
 		
 				
-		select @canApprove canapprove,@canEdit CanEdit,@WHERE 'Status',@WID LinkDefID,@isPrinted IsPrinted,@IsLock IsLock,@Userlevel userlevel,@level Wlevel,@Type WType,@LockedBY LockedBY,@OffLineStatus OffLineStatus--6
+		select @canApprove canapprove,@canEdit CanEdit,@WHERE 'Status',@WID LinkDefID,@isPrinted IsPrinted,@IsLock IsLock,@Userlevel userlevel,@level Wlevel,@Type WType,@LockedBY LockedBY,@OffLineStatus OffLineStatus,@DisRej DisableReject--6
 
 
 		IF exists (SELECT Value  FROM @docPref 
 		WHERE Name='Notes' and Value='true')
 		BEGIN
 		   --GETTING NOTES  
-		   SELECT [NoteID],[Note],[CostCenterID],Convert(DateTime,CreatedDate) CreatedDate FROM COM_Notes WITH(NOLOCK)      
+		   SELECT [NoteID],[Note],[CostCenterID],CreatedBy,Convert(DateTime,CreatedDate) CreatedDate,ModifiedBy,CONVERT(DATETIME,ModifiedDate) ModifiedDate FROM COM_Notes WITH(NOLOCK)      
 		   WHERE FeatureID=@CostCenterID AND FeaturePK=@DocID   
 		END
 		ELSE
@@ -604,10 +607,16 @@ SET NOCOUNT ON
 		IF exists (SELECT Value  FROM @docPref  
 		WHERE Name='Attachments' and Value='true')
 		BEGIN
-		   --GETTING ATTACHMENTS  
-		   SELECT [FileID],[FilePath],[ActualFileName],[RelativeFileName],[FileExtension],[IsProductImage],AllowInPrint,RowSeqNo,ColName,IsDefaultImage  
-			,LocationID,[FileDescription],[CostCenterID],GUID,CreatedBy,CONVERT(DATETIME,CreatedDate) CreatedDate,CONVERT(DATETIME,ValidTill) ValidTill,RefNo FROM  COM_Files WITH(NOLOCK)   
-		   WHERE FeatureID=@CostCenterID AND FeaturePK=@DocID   
+			--GETTING ATTACHMENTS BASED ON GLOBALPREFERENCE
+			IF exists (SELECT Value  FROM @docPref  WHERE Name='ShowAttachmentExtraFieldsInDocuments' and Value='true')
+				EXEC [spCOM_GetAttachments] @CostCenterID,@DocID,@UserID
+			ELSE
+			BEGIN
+			   --GETTING ATTACHMENTS  
+			   SELECT [FileID],[FilePath],[ActualFileName],[RelativeFileName],[FileExtension],[IsProductImage],AllowInPrint,RowSeqNo,ColName,IsDefaultImage  
+				,LocationID,[FileDescription],[CostCenterID],GUID,CreatedBy,CONVERT(DATETIME,CreatedDate) CreatedDate,CONVERT(DATETIME,ValidTill) ValidTill,RefNo,status FROM  COM_Files WITH(NOLOCK)   
+			   WHERE FeatureID=@CostCenterID AND FeaturePK=@DocID   
+			END
 		END
 		ELSE
 			SELECT 1 WHERE 1<>1
@@ -615,7 +624,7 @@ SET NOCOUNT ON
         IF exists (SELECT Value  FROM @docPref  
 		WHERE Name='Activities' and Value='true')
 		BEGIN 
-			IF(EXISTS(SELECT CostCenterID FROM CRM_Activities WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND NodeID=@DocID))
+			IF EXISTS (SELECT CostCenterID FROM CRM_Activities WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND NodeID=@DocID)
 				EXEC spCRM_GetFeatureByActvities @DocID,@CostCenterID,'',@UserID,@LangID  
 			ELSE
 				SELECT 1 WHERE 1<>1 
@@ -658,10 +667,7 @@ SET NOCOUNT ON
 			SELECT [InvTempInfoID]  
 			  ,a.[InvDocDetailsID]  
 			  ,[ProductCode]  
-			  ,[Manufacturer]  
-			  ,[Part]  
-			  ,[PurchasePrice]  
-			  ,[Vehicles] FROM [INV_TempInfo] A WITH(NOLOCK)  
+			  ,[PurchasePrice] FROM [INV_TempInfo] A WITH(NOLOCK)  
 			join [INV_DocDetails] D WITH(NOLOCK) on A.InvDocDetailsId=D.InvDocDetailsID       
 			WHERE CostCenterID=@CostCenterID AND DocID=@DocID   
 		END
@@ -701,23 +707,31 @@ SET NOCOUNT ON
 			,[days]  
 			,convert(datetime,[DueDate]) as [DueDate]  
 			,[Percentage]  
-			,[Remarts],Period,BasedOn,convert(datetime,BaseDate) as BaseDate,a.ProfileID,b.ProfileName,a.dimccid,a.dimNodeid   from [COM_DocPayTerms] a WITH(NOLOCK)  
+			,[Remarts],Period,BasedOn,convert(datetime,BaseDate) as BaseDate,a.ProfileID,b.ProfileName,a.dimccid,a.dimNodeid,DateNo,Remarks1
+			from [COM_DocPayTerms] a WITH(NOLOCK)  
 			left join Acc_PaymentDiscountProfile b WITH(NOLOCK) on a.ProfileID=b.ProfileID
 			where voucherno=@VoucherNo  
+			order by DocPaytermID
 	   END
 		ELSE
 			SELECT 1 WHERE 1<>1
 	   	
 		if(@doctype=35)  
 		begin  
-			select c.CaseID,CaseNumber,Convert(datetime,CreateDate) CaseDate,R.ResourceData Status,ContractLineID,AssignedTo,userName AccountName, convert(datetime,StartDate) StartDate,convert(datetime,EndDate) EndDate,StartTime,EndTime,a.Remarks FROM CRM_Cases c WITH(NOLOCK)  
-			JOIN CRM_Activities a WITH(NOLOCK) on c.CaseID=a.NodeID and a.CostCenterID=73  
-			left join COM_Status S WITH(NOLOCK)  on a.StatusID=s.StatusID  
-			left join adm_users u WITH(NOLOCK)  on u.UserID=c.AssignedTo  
-			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON S.ResourceID=R.ResourceID AND R.LanguageID=@LangID     
-
-			WHERE SvcContractID=@DocID  
-
+			IF EXISTS (SELECT * FROM SYS.TABLES WITH(NOLOCK) WHERE NAME='CRM_Cases')
+			BEGIN
+				SET @SQL='select c.CaseID,CaseNumber,Convert(datetime,CreateDate) CaseDate,R.ResourceData Status,ContractLineID,AssignedTo,userName AccountName, convert(datetime,StartDate) StartDate,convert(datetime,EndDate) EndDate,StartTime,EndTime,a.Remarks 
+				FROM CRM_Cases c WITH(NOLOCK)  
+				JOIN CRM_Activities a WITH(NOLOCK) on c.CaseID=a.NodeID and a.CostCenterID=73  
+				left join COM_Status S WITH(NOLOCK)  on a.StatusID=s.StatusID  
+				left join adm_users u WITH(NOLOCK)  on u.UserID=c.AssignedTo  
+				LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON S.ResourceID=R.ResourceID AND R.LanguageID='+CONVERT(NVARCHAR,@LangID)+'     
+				WHERE SvcContractID='+CONVERT(NVARCHAR,@DocID)  
+				EXEC (@SQL)
+			END	
+			ELSE
+				SELECT 1 WHERE 1<>1
+				
 			select CON.*,C1.Name as SalutationName,C1.NodeID as Salutation , C2.Name as Role,S.Status ,doc.CreditAccount CustomerID, acc.AccountName Customer from com_contacts CON WITH(NOLOCK) 
 			left join com_lookup C1 WITH(NOLOCK) on CON.SalutationID=C1.NodeID and C1.lookuptype =20  
 			left join com_lookup C2 WITH(NOLOCK) on CON.RoleLookUpID=C1.NodeID
@@ -732,6 +746,19 @@ SET NOCOUNT ON
 		BEGIN
 			SELECT  [Type],[Amount],[DBColumnName],[CardNo],[CardName],ApprovalCode,convert(datetime,ExpDate) [ExpDate],VoucherNodeID,Currency,ExchangeRate,AmountFC,BankName,CardType FROM COM_PosPayModes  WITH(NOLOCK)  where DocID=@DocID
 			SELECT  [CurrencyID],[Notes],[NotesTender],[Change],[ChangeTender] FROm COM_DocDenominations WITH(NOLOCK)  where DocID=@DocID
+		END
+		ELSE IF (@doctype=202)
+		BEGIN
+		  SET @SQL='select distinct b.DocID,b.InvDocDetailsID DocDetailsID,convert(datetime,b.docdate) StartDate,convert(datetime,b.docdate) EndDate,StartTime,EndTime,R.ResourceData Status,AssignUserID AssignedTo,userName AccountName,a.Remarks,c.CostCenterID,b.RefNodeID   
+		  from INV_DocDetails c WITH(NOLOCK)   
+		  join INV_DocDetails b WITH(NOLOCK) on c.InvDocDetailsId=b.refnodeid and b.refccid=300      
+		  JOIN CRM_Activities a WITH(NOLOCK) on b.DocID=a.NodeID 
+		  left join COM_Status S WITH(NOLOCK)  on a.StatusID=s.StatusID    
+		  left join adm_users u WITH(NOLOCK)  on u.UserID=a.AssignUserID    
+		  LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON S.ResourceID=R.ResourceID AND R.LanguageID='+CONVERT(NVARCHAR,@LangID)+'       
+		  WHERE c.DocID='+CONVERT(NVARCHAR,@DocID) +'  and c.CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)  
+		EXEC (@SQL)  
+		SELECT 1 WHERE 1<>1  
 		END
 		else  
 		begin  
@@ -793,18 +820,17 @@ SET NOCOUNT ON
 		END	
 		ELSE
 			SELECT 1 WHERE 1<>1	
-			
+		
 		if exists (SELECT Value  FROM @docPref  
-		WHERE Name='UseQtyAdjustment' and Value='true')
-		BEGIN
-			select a.InvDocDetailsID,a.Fld1,a.Fld2,a.Fld3,a.Fld4,a.Fld5,a.Fld6,a.Fld7,a.Fld8,a.Fld9,a.Fld10,a.Islinked
-			 from   COM_DocQtyAdjustments a WITH(NOLOCK)  
-			join INV_DocDetails b WITH(NOLOCK) on a.InvDocDetailsID=b.InvDocDetailsID
-			WHERE b.CostCenterID=@CostCenterID AND b.DocID=@DocID
+		WHERE Name in ('UseQtyAdjustment','DocQtyAdjustment') and Value='true')
+		BEGIN	
+			select a.*
+			from COM_DocQtyAdjustments a WITH(NOLOCK)  
+			WHERE a.DocID=@DocID
 		END	
 		ELSE
 			SELECT 1 WHERE 1<>1	
-		
+			
 		select a.InvDocDetailsID,a.BinID,a.Quantity,a.Remarks,a.RefInvDocDetailsID
 		from   INV_BinDetails a WITH(NOLOCK)  
 		join INV_DocDetails b WITH(NOLOCK) on a.InvDocDetailsID=b.InvDocDetailsID
@@ -862,7 +888,9 @@ SET NOCOUNT ON
 		ELSE
 			SELECT 1 WHERE 1<>1
 		
-			
+		select CostCenterID, DocumentType, DocumentTypeID, PrefName, PrefValue , PrefDefalutValue 
+		from COM_DocumentPreferences with (nolock) where CostCenterID=40220 and PrefName = 'BidQuotationDocument'
+		
 		--CHECK AUDIT TRIAL ALLOWED AND INSERTING AUDIT TRIAL DATA    
 		IF exists (SELECT Value  FROM @docPref  
 		WHERE Name='AuditTrial' and Value='true')

@@ -34,7 +34,7 @@ SET NOCOUNT ON
 
 			exec (@SQL)
 
-			
+			--SELECT * FROM SVC_SERVICECOSTCENTERMAP
 		END
 		ELSE IF (@ServiceTypeID >0)
 		BEGIN
@@ -43,6 +43,8 @@ SET NOCOUNT ON
 			SELECT ServiceName, ServiceTypeID, Description, StatusID, Locations, Technicians  FROM CRM_ServiceTypes WHERE SERVICETYPEID=@ServiceTypeID
 			--Getting Reasons
 			SELECT * FROM CRM_ServiceReasons WHERE SERVICETYPEID=@ServiceTypeID
+			--Getting Locations Data
+			--SELECT * FROM SVC_SERVICECOSTCENTERMAP WHERE SERVICETYPEID=@ServiceTypeID
 			
 			--Getting Files
 			SELECT * FROM  COM_Files WITH(NOLOCK) WHERE FeatureID=82 and  FeaturePK=@ServiceTypeID
@@ -70,5 +72,7 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH
+END CATCH  
+
+
 GO

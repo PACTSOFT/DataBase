@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_SetUserFromContact]
-	@ContactID [bigint],
+	@ContactID [int],
 	@iVendorMax [int],
 	@iCustomerMax [int],
 	@CompanyGUID [nvarchar](50),
@@ -20,13 +20,14 @@ BEGIN TRY
 	SET NOCOUNT ON;
 	print 't'
 	--Declaration Section 
-	DECLARE @CostCenterID BIGINT,@AccountType INT,@Hasaccesss BIT,@pwd nvarchar(max),
-			@LoginUserID nvarchar(max),@Name nvarchar(max),
+	DECLARE @CostCenterID INT,@AccountType INT,@Hasaccesss BIT,@pwd nvarchar(max),
+			@LoginUserID nvarchar(max),
 			@LoginRoleID int,@Email1 nvarchar(max),@Code nvarchar(max),
 			@TempGuid NVARCHAR(50),@UpdateSql NVARCHAR(max),@ContactUserID INT,@TEMPDOJ DATETIME, @tStatus INT,@HistoryStatus NVARCHAR(300),@Audit NVARCHAR(100)
 			
-	
-	select @AccountType=A.AccountTypeID,@LoginUserID=AccountCode+'_'+C.FirstName, @pwd=AccountCode, @Code =C.FirstName
+	--@LoginUserID=AccountCode+'_'+C.FirstName,
+	select @AccountType=A.AccountTypeID,@LoginUserID=C.Email1, @pwd=AccountCode, @Code =C.FirstName , @LoginRoleID =C.RoleLookUpID
+	,@UpdateSql='FirstName=N'''+ISNULL(C.FirstName,'')+''',MiddleName=N'''+ISNULL(C.MiddleName,'')+''',LastName=N'''+ISNULL(C.LastName,'')+''',Address1=N'''+ISNULL(C.Address1,'')+''',Address2=N'''+ISNULL(C.Address2,'')+''',Address3=N'''+ISNULL(C.Address3,'')+''',City='''+ISNULL(C.City,'')+''',State=N'''+ISNULL(C.State,'')+''',Zip=N'''+ISNULL(C.Zip,'')+''',Country=N'''+ISNULL(C.Country,'')+''',Phone1=N'''+ISNULL(C.Phone1,'')+''',Phone2=N'''+ISNULL(C.Phone2,'')+''',Fax=N'''+ISNULL(C.Fax,'')+''',Website=N'''',Description=N'''',Email1=N'''+ISNULL(C.Email1,'')+''','
 	from COM_Contacts C with(nolock)
 	join ACC_Accounts A with(nolock) on A.AccountID=C.FeaturePK and C.FeatureID=2
 	where ContactID=@ContactID 
@@ -34,7 +35,7 @@ BEGIN TRY
 	
 	if(@AccountType=6)--Vendor
 	begin
-		SELECT @LoginRoleID=RoleID FROM ADM_PRoles with(nolock) WHERE RoleType=2
+		--SELECT @LoginRoleID=RoleID FROM ADM_PRoles with(nolock) WHERE RoleType=2
 		
 		if (select count(*) from (
 			select U.UserID from adm_Proles R with(nolock)
@@ -75,10 +76,32 @@ BEGIN TRY
 		set @LoginUserID='User name already exists-"'+@LoginUserID+'"'
 		RAISERROR(@LoginUserID,16,1)
 	END
-
-	SET @UpdateSql='FirstName='''+@Name+''',MiddleName='''',LastName='''',Address1='''',Address2='''',Address3='''',City='''',State='''',Zip='''',Country='''',Phone1='''',Phone2='''',Fax='''',Website='''',Description='''',Email1='''+@Email1+''','
-	EXEC @ContactUserID = spADM_SetUser @SaveUserID=0 ,@RoleId=@LoginRoleID,@SaveUserName=@LoginUserID ,@Pwd=@Code ,@Status=1 ,@DefLanguage='1' ,@Query=@UpdateSql ,@CompanyIndex=@CompIndex ,
-	@CompanyUserXML='' ,@RestrictXML='<XML></XML>' ,@DefaultScreenXML='' ,@LicenseCnt=0 ,@LincenseXML='' ,@ImageXML='',@RolesXML='',@CompanyGUID='admin' ,@GUID='GUID' ,@UserName=@UserName ,@UserID=1,@LoginRoleID=@RoleID ,@LangID=1
+	
+	EXEC @ContactUserID = spADM_SetUser 
+		@SaveUserID=0 ,
+		@RoleId=@LoginRoleID,
+		@SaveUserName=@LoginUserID ,
+		@Pwd=@Code ,@Status=1 ,
+		@DefLanguage='1' ,@IsOffline = NULL,
+		@Query=@UpdateSql ,
+		@CompanyIndex=@CompIndex ,
+		@CompanyUserXML='' ,
+		@RestrictXML='<XML></XML>' ,
+		@DefaultScreenXML='' ,
+		@LicenseCnt=0 ,
+		@LincenseXML='' ,
+		@AttachmentsXML='',
+		@RolesXML='',
+		@CompanyGUID='admin' ,
+		@GUID='GUID' ,
+		@UserName=@UserName ,
+		@UserID=1,
+		@LoginRoleID=@RoleID ,
+		@LangID=1
+	
+		if(@ContactUserID=-999)
+			return @ContactUserID
+		
 	UPDATE ADM_Users SET IsNewLogin=1 WHERE UserName=@LoginUserID AND Password=@pwd
 
 	update COM_Contacts set UserID=@ContactUserID
@@ -93,13 +116,17 @@ BEGIN TRY
 	SET NOCOUNT OFF; 
 	RETURN @ContactID   
 END TRY    
-BEGIN CATCH    
+BEGIN CATCH  
+
+if(@ContactUserID=-999)
+			return @ContactUserID
+		  
 	--Return exception info Message,Number,ProcedureName,LineNumber    
 	IF ERROR_NUMBER()=50000  
 	BEGIN  
 	IF ISNUMERIC(ERROR_MESSAGE())=1
 	BEGIN
-		--SELECT * FROM COM_CC50051 WITH(NOLOCK) WHERE NodeID=@NodeID    
+		    
 		SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(NOLOCK)   
 		WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID  	
 	END

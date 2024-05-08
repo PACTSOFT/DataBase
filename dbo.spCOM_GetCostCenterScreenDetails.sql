@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetCostCenterScreenDetails]
 	@CostCenterID [int],
-	@UserID [bigint],
+	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1,
 	@CompanyID [int] = 0
@@ -14,8 +14,8 @@ BEGIN TRANSACTION
 BEGIN TRY                                
 SET NOCOUNT ON;                              
 	--Declaration Section                              
-	DECLARE @HasAccess BIT,@DocViewID bigint, @SQL NVARCHAR(MAX),@TableName varchar(300)
-	DECLARE @code nvarchar(200),@no bigint,@GridviewID bigint,@temp varchar(300)
+	DECLARE @HasAccess BIT,@DocViewID INT, @SQL NVARCHAR(MAX),@TableName varchar(300)
+	DECLARE @code nvarchar(200),@no INT,@GridviewID INT,@temp varchar(300)
 	                         
 	                        
 	--SP Required Parameters Check                              
@@ -43,12 +43,14 @@ SET NOCOUNT ON;
 	C.IsCostCenterUserDefined,C.IsColumnUserDefined,C.ColumnCostCenterID,C.FetchMaxRows,C.SectionID,C.SectionName , C.RowNo,C.ColumnNo, C.ColumnSpan,C.TextFormat,C.SectionSeqNumber
 	,c.dependancy,c.dependanton,IGC.Name IgnoreChars,C.WaterMark
     ,(select isnull(IsColumnInUse,0) FROM ADM_CostCenterDef with(nolock) where costcenterid=C.ColumnCostCenterID and  syscolumnname='ccnid'+convert(nvarchar,(c.dependanton-50000))) as filterinuse,
-    C.SysTableName,C.UIWidth,C.LocalReference,C.LinkData,C.IsnoTab,C.Decimal,DD.DistributeOn,LR.SysColumnName as ReservedWordType
+    C.SysTableName,C.UIWidth,C.LocalReference,C.LinkData,C.IsnoTab,C.Decimal,DD.DistributeOn,LR.SysColumnName as ReservedWordType,C.MinChar,C.MaxChar,isnull(C.FieldExpression,'') FieldExpression,isnull(C.LabelColor,'') LabelColor
+    ,DF.Mode,DF.SpName,DF.Shortcut,DF.IpParams,DF.OpParams,DF.Expression,c.Calculate,c.Cformula,C.EvalAfter
 	FROM ADM_CostCenterDef C WITH(NOLOCK)                              
 	LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
 	LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterID=C.CostCenterID AND DD.CostCenterColID=C.CostCenterColID 
 	LEFT JOIN ADM_CostCenterDef LR WITH(NOLOCK) ON LR.CostCenterID=79 AND LR.CostCenterColID=C.LinkData  
-	LEFT JOIN [COM_Lookup] IGC WITH(NOLOCK) ON  IGC.[NodeID]=  c.IgnoreChar                            
+	LEFT JOIN [COM_Lookup] IGC WITH(NOLOCK) ON  IGC.[NodeID]=  c.IgnoreChar       
+	LEFT JOIN ADM_DocFunctions DF WITH(NOLOCK) ON  DF.CostCenterColID=  C.CostCenterColID AND DF.CostCenterID=C.CostCenterID                     
 	WHERE C.CostCenterID = @CostCenterID  and C.SysColumnName not in ('Depth','ParentID')                             
 	AND (((C.IsColumnUserDefined=1 OR C.IsCostCenterUserDefined=1) AND C.IsColumnInUse=1 AND C.ISCOLUMNDELETED=0) OR C.IsColumnUserDefined=0)                              
 	ORDER BY C.SectionID,C.SectionSeqNumber--,C.CostCenterColID
@@ -154,10 +156,10 @@ SET NOCOUNT ON;
 		                      
 		select UOMID,UnitName,BaseName,BaseID from COM_UOM  WITH(NOLOCK) WHERE (PRODUCTID=0 OR PRODUCTID IS NULL) AND (ISPRODUCTWISE=0 OR IsProductWise IS NULL)                        
     
-		declare @GrpImage bit,@ImageDimCCID bigint
+		declare @GrpImage bit,@ImageDimCCID INT
 		SELECT @GrpImage=convert(bit,Value) from  COM_CostCenterPreferences WITH(NOLOCK) WHERE                        
 		CostCenterID=3 and Name='InheritGroupImage'     
-		SELECT @ImageDimCCID=convert(bigint,isnull(Value,0)) from  COM_CostCenterPreferences WITH(NOLOCK) WHERE                        
+		SELECT @ImageDimCCID=convert(INT,isnull(Value,0)) from  COM_CostCenterPreferences WITH(NOLOCK) WHERE                        
 		CostCenterID=3 and Name='InheritDimensionImage'                   
 		if(@GrpImage=1)
 			 SELECT * FROM  COM_Files WITH(NOLOCK) 
@@ -208,19 +210,12 @@ SET NOCOUNT ON;
 		FROM COM_Currency WITH(NOLOCK)
 
 		select * from Acc_PaymentDiscountProfile WITH(NOLOCK) 
-	END--End ACCOUNT                              
-	ELSE IF @CostCenterID=31--Start Attributes                              
-	BEGIN 
-		--Getting Product Groups.                              
-		SELECT NodeID,AttAlpha1                               
-		FROM COM_Attributes WITH(NOLOCK)                              
-		WHERE IsGroup = 1                                 
-	END
+	END--End ACCOUNT    
 	ELSE IF @CostCenterID=12
 	BEGIN 
 		if exists(SELECT Name,Value from COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID and Name='UseCurrencyLookup' and Value='True')
 		begin
-			select NodeID CurrLookupID,Code,Name from COM_Lookup with(nolock) where LookupType=69 order by Name
+			select NodeID CurrLookupID,Code,Name,AliasName Change from COM_Lookup with(nolock) where LookupType=69 order by Name
 		end
 		else
 		begin
@@ -272,57 +267,12 @@ SET NOCOUNT ON;
 	END                                                                                
 	ELSE IF @CostCenterID=84                  
 	BEGIN 
-		SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID                         
+	SET @SQL='SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+'                        
 		SELECT SVcContractID,DOCID,StatusID                         
 		FROM CRM_ServiceContract WITH(NOLOCK)                              
-		WHERE IsGroup = 1                            
+		WHERE IsGroup = 1' 
+	EXEC (@SQL)                           
 	END                          
-	ELSE IF @CostCenterID=51                                                
-	BEGIN 
-		SELECT CustomerTypeID,ResourceData,CustomerType,Status                               
-		FROM SVC_CustomerTypes A WITH(NOLOCK)                               
-		JOIN COM_LanguageResources R WITH(NOLOCK) ON A.ResourceID=R.ResourceID                              
-		WHERE LanguageID=@LangID                                   
-		
-		SELECT CUSTOMERID,CUSTOMERCODE, CUSTOMERNAME,AliasName                               
-		FROM SVC_Customers WITH(NOLOCK)                              
-		WHERE IsGroup = 1      
-		                       
-		--Getting Preference                              
-		SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID                              
-		                             
-		EXEC [spCOM_GetCode] @CostCenterID,'PARENT',@code OUTPUT,@no OUTPUT                      
-		SELECT @code                              
-		                         
-		select * from com_lookup with(nolock)                      
-	END                       
-	ELSE IF @CostCenterID=68                                 
-	BEGIN 
-		SELECT * FROM SVC_InsuranceDetails WITH(NOLOCK)   
-		                                                       
-		--Getting Preference                              
-		SELECT Name,Value from COM_CostCenterPreferences with(nolock)
-		                              
-		EXEC [spCOM_GetCode] @CostCenterID,'PARENT',@code OUTPUT,@no OUTPUT                              
-		SELECT @code                                                                         
-	END                   
-	ELSE IF @CostCenterID=52 --Vehicle---                          
-	BEGIN 
-		select * From SVC_Vehicle with(nolock)                        
-	END                                             
-	ELSE IF @CostCenterID=54 --BreakDownvehicle & FollowUp                       
-	BEGIN 
-		select * From SVC_BreakDownTicket with(nolock)                        
-		select * from COM_Status with(nolock) where CostCenterID=54                        
-		select * from COM_Status with(nolock) where CostCenterID=143                        
-		select * from COM_Lookup with(nolock) where LookupType=9                        
-		select * from COM_Lookup with(nolock) where LookupType=8                         
-		select * from COM_Lookup with(nolock) where LookupType=11                         
-		select * from COM_CC50013 with(nolock)
-		select * from COM_CC50017 with(nolock)
-		select * from COM_CC50014 with(nolock)
-		select * from COM_CC50022 with(nolock)
-	END                           
 	ELSE IF @CostCenterID=144                        
 	BEGIN 
 		SELECT FeatureID, Name FROM ADM_Features with(nolock) WHERE  (FeatureID >= 50001) AND (IsEnabled = 1) OR (FeatureID < 50001) ORDER BY Name                                           
@@ -430,15 +380,17 @@ SET NOCOUNT ON;
 		LEFT JOIN ADM_CostCenterDef CR with(nolock) ON CR.CostCenterColID = DD.CrRefID  and  DD.CrRefID IS NOT NULL                        
 		WHERE C.CostCenterID in(@RctCCID,@IssCCID) and ( (C.SysColumnName='ProductID' and C.UserColumnName='Product Name' ) or C.SysColumnName='Gross' or  C.SysColumnName='DebitAccount' or C.SysColumnName='CreditAccount')                        
 
+		SET @SQL='
 		select distinct PRD_ProductionMethod.BOMID,PRD_ProductionMethod.Particulars,PRD_BillOfMaterial.BOMName,PRD_ProductionMethod.SequenceNo from PRD_ProductionMethod with(nolock)                        
-		left join PRD_BillOfMaterial with(nolock) on PRD_ProductionMethod.BOMID=PRD_BillOfMaterial.BOMID  order by PRD_ProductionMethod.SequenceNo                                            
+		left join PRD_BillOfMaterial with(nolock) on PRD_ProductionMethod.BOMID=PRD_BillOfMaterial.BOMID  order by PRD_ProductionMethod.SequenceNo'
+		EXEC (@SQL)                                            
 	END       
 	ELSE IF @CostCenterID=117
 	BEGIN 
 		SELECT DashBoardID,DashBoardName,DashBoardName from ADM_DashBoard with(nolock) where IsGroup=1
 	END                     
 	ELSE IF @CostCenterID<>7 and @CostCenterID<>84 and @CostCenterID<>61 and @CostCenterID<>12 and @CostCenterID<>74 and @CostCenterID<>71 and @CostCenterID<>75 and @CostCenterID<>77 and @CostCenterID<>72 and                         
-	@CostCenterID<>80 and @CostCenterID<>81 and  @CostCenterID<>83 and @CostCenterID<>65 and @CostCenterID<>68 and @CostCenterID<>114             and @CostCenterID<>124           
+	@CostCenterID<>81 and  @CostCenterID<>83 and @CostCenterID<>65 and @CostCenterID<>68 and @CostCenterID<>114             and @CostCenterID<>124           
 	and @CostCenterID<>93 and @CostCenterID<>95 and @CostCenterID<>251 and @CostCenterID<>252 and @CostCenterID<>253 and @CostCenterID<>254 and @CostCenterID<>255 and @CostCenterID<>110 and @CostCenterID<>103 and @CostCenterID<>129 and @CostCenterID<>104  and @CostCenterID<>73 and @CostCenterID<>88 and @CostCenterID<>86 and @CostCenterID<>89 and @CostCenterID<>92 and @CostCenterID<>94 and @CostCenterID<>119-- FOR ANY COSTCENTER TO GET GROUPS.                          
 	AND @CostCenterID<>40054 AND @CostCenterID<>1000 AND @CostCenterID<>40088
 	BEGIN 
@@ -491,25 +443,16 @@ SET NOCOUNT ON;
 		WHERE IsGroup = 1                         
 	END                        
 	ELSE IF @CostCenterID=71                          
-	BEGIN 
+	BEGIN
+		SET @SQL=' 
 		SELECT RESOURCENAME,RESOURCECODE,COM_Status.Status FROM PRD_Resources with(nolock)
-		LEFT JOIN COM_STATUS with(nolock) ON PRD_Resources.StatusID=COM_Status.StatusID                         
-	                        
+		LEFT JOIN COM_STATUS with(nolock) ON PRD_Resources.StatusID=COM_Status.StatusID'                         
+	    EXEC (@SQL)                    
 		SELECT Name,Value from  COM_CostCenterPreferences WHERE CostCenterID=@CostCenterID                              
 	                                 
 		EXEC [spCOM_GetCode] @CostCenterID,'PARENT',@code OUTPUT,@no OUTPUT                              
 		SELECT @code                            
-	END                        
-	ELSE IF @CostCenterID=80                          
-	BEGIN 
-		SELECT RESOURCENAME,RESOURCECODE,COM_Status.Status FROM PRD_Resources with(nolock)                        
-		LEFT JOIN COM_STATUS with(nolock) ON PRD_Resources.StatusID=COM_Status.StatusID  where ResourceTypeID=2                        
-	                        
-		SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID                              
-	                                 
-		EXEC [spCOM_GetCode] @CostCenterID,'PARENT',@code OUTPUT,@no OUTPUT                              
-		SELECT @code                                                     
-	END                        
+	END                          
 	ELSE IF @CostCenterID=73                        
 	BEGIN 
 		--Get Contact Types, Salutations, Roles, Countries                        
@@ -540,30 +483,32 @@ SET NOCOUNT ON;
                          
 	END                        
 	ELSE IF @CostCenterID=81                          
-	BEGIN 
+	BEGIN
+	SET @SQL=' 
 		SELECT CTemplCode,CTemplName,COM_Status.Status FROM CRM_ContractTemplate with(nolock)                   
-		LEFT JOIN COM_STATUS with(nolock) ON CRM_ContractTemplate.StatusID=COM_Status.StatusID                         
-		                
-		SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID                
-		                         
+		LEFT JOIN COM_STATUS with(nolock) ON CRM_ContractTemplate.StatusID=COM_Status.StatusID'
+	EXEC (@SQL)
+	SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID                
 		EXEC [spCOM_GetCode] @CostCenterID,'PARENT',@code OUTPUT,@no OUTPUT                              
 		SELECT @code                              
 		                     
 		select * from com_lookup with(nolock) where LookupType=42                        
-	                  
-	END                        
+	END                       
 	ELSE IF @CostCenterID=83                        
 	BEGIN 
+	SET @SQL='
 		SELECT CustomerCode,CustomerName,COM_Status.Status FROM CRM_Customer with(nolock)                        
-		LEFT JOIN COM_STATUS with(nolock) ON CRM_Customer.StatusID=COM_Status.StatusID                         
-		                    
-		SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID                                                 
+		LEFT JOIN COM_STATUS with(nolock) ON CRM_Customer.StatusID=COM_Status.StatusID'                         
+	EXEC (@SQL)
+	   SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID                                                 
 	END              
 	ELSE IF @CostCenterID=88 or @CostCenterID=124                    
-	BEGIN 
+	BEGIN
+	SET @SQL=' 
 		SELECT Code,Name,COM_Status.Status FROM CRM_Campaigns with(nolock)                        
-		LEFT JOIN COM_STATUS with(nolock) ON CRM_Campaigns.StatusID=COM_Status.StatusID                         
-
+		LEFT JOIN COM_STATUS with(nolock) ON CRM_Campaigns.StatusID=COM_Status.StatusI'                         
+	EXEC(@SQL)
+	
 		SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID                           
 	END                          
 	ELSE IF @CostCenterID=86                        
@@ -624,15 +569,20 @@ SET NOCOUNT ON;
 		SELECT @Sql=@Sql+ convert(nvarchar,PropertyID)+',' FROM  [ADM_PropertyUserRoleMap] with(nolock)
 		where Userid  =  @UserID or RoleID=@RoleID
 	
-		declare @SNO bigint
+		declare @SNO INT
 		
 		IF (@CostCenterID=95 OR  @CostCenterID=104)
-			select @SNO=isnull(Max(SNO),0)+1  
-			from  REN_Contract WITH(NOLOCK)   WHERE   CostCenterID = @CostCenterID  
+		BEGIN
+			SET @SQL='select @SNO=isnull(Max(SNO),0)+1  
+			from  REN_Contract WITH(NOLOCK)   WHERE   CostCenterID ='+CONVERT(NVARCHAR,@CostCenterID)
+			EXEC sp_executesql @SQL,N'@SNO INT OUTPUT',@SNO OUTPUT
+		END
 		else IF (@CostCenterID=103 OR @CostCenterID=129)
-			select @SNO=isnull(Max(SNO),0)+1  
-			from  REN_Quotation WITH(NOLOCK)   WHERE   CostCenterID = @CostCenterID  AND StatusID<>430
-		
+		BEGIN
+		SET @SQL='select @SNO=isnull(Max(SNO),0)+1  
+			from  REN_Quotation WITH(NOLOCK) WHERE CostCenterID ='+CONVERT(NVARCHAR,@CostCenterID)+'AND StatusID<>430'
+			EXEC sp_executesql @SQL,N'@SNO INT OUTPUT',@SNO OUTPUT
+		END
 		IF (@SNO IS NULL OR @SNO='' OR @SNO=0)
 			SET @SNO=1
 			
@@ -647,7 +597,7 @@ SET NOCOUNT ON;
 		WHERE ACCOUNTTYPEID IN (1,2,3) and ACCOUNTID>0
 
 		select @TableName=TableName from adm_features where featureid=@GridviewID
-		set @Sql ='select NodeID,Name Particulars from '+@TableName+ ' with(nolock) where isgroup=0'                        
+		set @Sql ='select NodeID,Name Particulars from '+@TableName+ ' with(nolock) where isgroup=0 order by Name'                        
 		exec (@Sql)   
 
 		select @TableName=TableName from adm_features with(nolock) 
@@ -656,27 +606,36 @@ SET NOCOUNT ON;
 		set @Sql ='select NodeID,Name [Type] from '+@TableName+ ' with(nolock) where isgroup=0'             
 		exec (@Sql) 
 		
-		SELECT NodeID,Code FROM REN_PROPERTY with(nolock) WHERE IsGroup = 0 
-		        
-         if(@CostCenterID =95 or @CostCenterID =104)          
-			SELECT MAX(ContractNumber) + 1  ContractNumber , CONTRACTPREFIX  
+		SET @SQL='SELECT NodeID,Code FROM REN_PROPERTY with(nolock) WHERE IsGroup = 0' 
+		 EXEC (@SQL) 
+		       
+         if(@CostCenterID =95 or @CostCenterID =104) 
+		 BEGIN
+		 SET @SQL='SELECT MAX(ContractNumber) + 1  ContractNumber , CONTRACTPREFIX  
 			FROM REN_Contract with(nolock)         
-			WHERE COSTCENTERID = @CostCenterID 
-			GROUP BY CONTRACTPREFIX   
+			WHERE COSTCENTERID ='+CONVERT(NVARCHAR,@CostCenterID)+' 
+			GROUP BY CONTRACTPREFIX' 
+		EXEC (@SQL)
+		END  
 		else
-			SELECT MAX(Number) + 1  ContractNumber ,Prefix CONTRACTPREFIX  
+		BEGIN
+		SET @SQL='SELECT MAX(Number) + 1  ContractNumber ,Prefix CONTRACTPREFIX  
 			FROM REN_Quotation  with(nolock)        
-			WHERE COSTCENTERID = @CostCenterID            
-			GROUP BY Prefix   
-	END   
+			WHERE COSTCENTERID ='+CONVERT(NVARCHAR,@CostCenterID)+'           
+			GROUP BY Prefix' 
+		EXEC (@SQL)  
+	    END 
+	END
 	ELSE IF @CostCenterID=65                        
 	BEGIN 
 		--Get Contact Types, Salutations, Roles, Countries                        
 		SELECT * FROM COM_Lookup with(nolock) where lookuptype in (15,16,20,21)                        
 		SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=@CostCenterID                          
-	END                 
-
-	select * from com_costcentercodedef with(nolock) WHERE CostCenterID=@CostCenterID                                           
+	END    
+	 
+	select * from com_costcentercodedef with(nolock) 
+	WHERE CostCenterID=@CostCenterID   
+	order by IsName                                        
 	
 	IF @CostCenterID=3
 	BEGIN
@@ -693,7 +652,11 @@ SET NOCOUNT ON;
 	ELSE IF (@CostCenterID=65)
 	BEGIN
 		select * from COM_ContactTypes with(nolock) order by ContactTypeID 
-	END                     
+	END            
+	ELSE IF @CostCenterID=110                        
+	BEGIN                
+		SELECT Name,Value from  COM_CostCenterPreferences with(nolock) WHERE CostCenterID=2 AND Name='GSTValidation'                          
+	END                   
     ELSE IF (@CostCenterID=1000)
 	BEGIN
 		IF EXISTS (SELECT Value from  COM_CostCenterPreferences with(nolock) 
@@ -723,7 +686,7 @@ SET NOCOUNT ON;
 	BEGIN
 		select * from COM_Lookup with(nolock) where LookupType BETWEEN 101 AND 113
 	END
-	ELSE IF (@CostCenterID between 50001 and 50050)
+	ELSE IF (@CostCenterID >=50001 )
 	BEGIN
 		IF exists(select isnull(value,0) from COM_CostCenterPreferences with(nolock) 
 		where CostCenterID=76 and Name='JobDimension' and ISNUMERIC(value)=1 and Value=@CostCenterID)
@@ -747,7 +710,7 @@ SET NOCOUNT ON;
 		order by Q.ReportID
 	END
 	
-	if @CostCenterID in(2,3,95,103,129)
+	if @CostCenterID in(2,3,94,95,103,104,129) or @CostCenterID>50000
 	begin
 		select * from ADM_TypeRestrictions with(nolock) where CostCenterID=@CostCenterID
 	end
@@ -757,7 +720,7 @@ SET NOCOUNT ON;
 	--ADD COMMON QUERIES HERE --ADIL
 	
 	--Getting Workflows
-	if @CostCenterID in(2,3,73,76,92,93,94,95,103,104,129) or @CostCenterID>50000
+	if @CostCenterID in(2,3,73,76,92,93,94,95,103,104,129,86,89,72,83) or @CostCenterID>50000
 	   SELECT distinct [WorkFlowDefID],[CostCenterID],[Action],[Expression],a.WorkFlowID,a.LevelID,IsLineWise,IsExpressionLineWise  
 	   FROM [COM_WorkFlowDef]  a   WITH(NOLOCK)
 	   join COM_WorkFlow b WITH(NOLOCK) on a.WorkFlowID=b.WorkFlowID  and a.LevelID=b.LevelID
@@ -785,7 +748,7 @@ SET NOCOUNT ON;
      ,[FailureMessage]                      
      ,[ActionOptionID]                      
      ,[Mode]                      
-     ,[Expression],ViewFor ,Tabid,d.IsMandatory
+     ,[Expression],ViewFor ,Tabid,d.IsMandatory,ISNULL(FieldColor,'') FieldColor
     FROM [ADM_DocumentViewDef] d  with(nolock)                   
    left join ADM_CostCenterDef c with(nolock) on c.CostCenterColID=d.CostCenterColID where DocumentViewID=@DocViewID                      
    end                      
@@ -806,13 +769,13 @@ SET NOCOUNT ON;
      ,[FailureMessage]                      
      ,[ActionOptionID]                      
      ,[Mode]                      
-     ,[Expression],ViewFor ,Tabid,d.IsMandatory                     
+     ,[Expression],ViewFor ,Tabid,d.IsMandatory,ISNULL(FieldColor,'') FieldColor                    
     FROM [ADM_DocumentViewDef] d  with(nolock)                     
     left join ADM_CostCenterDef c with(nolock) on c.CostCenterColID=d.CostCenterColID where 1=2 --not to return any row just structure                      
    end                      
              
   --Getting Tab Order for Tabs                            
-  SELECT CCTab.CCTabID,CCTab.CCTabName,CCTab.CostCenterID,  R.ResourceData, CCTab.TabOrder,CCTab.IsVisible, CCTab.GroupOrder, CCTab.GroupVisible, CCTab.QuickViewCCID , CCTab.QuickViewID
+  SELECT CCTab.CCTabID,CCTab.CCTabName,CCTab.CostCenterID,  R.ResourceData, CCTab.TabOrder,CCTab.IsVisible, CCTab.GroupOrder, CCTab.GroupVisible, CCTab.QuickViewCCID , CCTab.QuickViewID, CCTab.CCIDValues
     from  ADM_CostCenterTab CCTab with(nolock)                          
   LEFT JOIN COM_LanguageResources R with(nolock) ON R.ResourceID=CCTab.ResourceID AND R.LanguageID= @LangID                             
  WHERE CostCenterID=@CostCenterID                       

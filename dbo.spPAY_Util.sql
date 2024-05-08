@@ -4,14 +4,14 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_Util]
 	@Type [int] = 0,
-	@Param1 [bigint],
+	@Param1 [int],
 	@Param2 [nvarchar](max) = NULL,
 	@Param3 [nvarchar](max) = NULL
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY  
 SET NOCOUNT ON;
-	declare @UserID int,@SQL nvarchar(max),@EmpID bigint,@DocDate float,@DueDate float,@DocID bigint,@EffectFrom float
+	declare @UserID int,@SQL nvarchar(max),@EmpID INT,@DocDate float,@DueDate float,@DocID INT,@EffectFrom float
 
 	IF @Type=1
 	BEGIN
@@ -142,7 +142,25 @@ SET NOCOUNT ON;
 					GROUP BY a.VoucherType
 					'
 		print @sQ
-		EXEC(@sQ)
+		EXEC sp_executesql @sQ
+
+		-- To Get Previous Document
+		SET @DocID=0
+		select top 1 @DocID=DocID from INV_DocDetails D with(nolock) 
+		join COM_DocCCDATA DCC with(nolock) on D.InvDocDetailsID=DCC.InvDocDetailsID
+		join COM_DocTextDATA TXT with(nolock) on D.InvDocDetailsID=TXT.InvDocDetailsID
+		where CostCenterID=@Param1 and DCC.dcCCNID51=@EmpID and CONVERT(DATETIME,D.DueDate)<CONVERT(DATETIME,@DueDate)
+		order by D.DueDate desc
+
+		--3
+		SELECT d.DocID,D.VoucherType,N.*,convert(float,T.dcAlpha1) BasicMonthly,convert(float,T.dcAlpha3) NetSalary,T.*
+		FROM INV_DocDetails D WITH(NOLOCK) LEFT JOIN
+		INV_DocDetails LD WITH(NOLOCK) ON LD.InvDocDetailsID=D.LinkedInvDocDetailsID LEFT JOIN
+		COM_DocTextData T WITH(NOLOCK) ON T.InvDocDetailsID=D.InvDocDetailsID LEFT JOIN
+		PAY_DocNumData N WITH(NOLOCK) ON N.InvDocDetailsID=D.InvDocDetailsID LEFT JOIN
+		COM_Currency C WITH(NOLOCK) ON C.CurrencyID=D.CurrencyID LEFT JOIN
+		COM_Status S WITH(NOLOCK) ON S.StatusID=D.StatusID 
+		where D.CostCenterID=@Param1 and D.DocID=@DocID
 
 		
 	END
@@ -160,7 +178,71 @@ SET NOCOUNT ON;
 		WHERE D.EmployeeID=@EmpID
 		ORDER BY EffectFrom DESC 
 	END
+	ELSE IF @Type=5
+	BEGIN
+
+		 SELECT  C.CostCenterID,R.ResourceData,C.UserColumnName,C.SysColumnName,C.SysTableName,C.UserColumnType,C.ColumnDataType,			
+			C.IsColumnUserDefined,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.UserProbableValues	--,LVC.CostCenterColID
+			FROM ADM_CostCenterDef C WITH(NOLOCK)
+			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=1
+			LEFT JOIN ADM_DocumentDef DD WITH(NOLOCK) ON DD.CostCenterColID=C.CostCenterColID 
+			WHERE C.IsColumnInUse=1 and C.CostCenterID in (50051) AND SysTableName not in('PAY_EmpPay')
+	END
+	ELSE IF @Type=6
+	BEGIN
 	
+		DECLARE @GEmpSeqNO INT
+		DECLARE @CCColums NVARCHAR(MAX),@Rcnt INt,@RId INT,@UserProbableValues NVARCHAR(MAX),@SysTableName NVARCHAR(MAX),@SysColName NVARCHAR(MAX),@ParentCostCenterID NVARCHAR(MAX)
+		DECLARE @TEMP TABLE(ID INT IDENTITY(1,1),SysColName NVARCHAR(MAX),UserProbableValues NVARCHAR(MAX),SysTableName NVARCHAR(MAX),ParentCostCenterID NVARCHAR(MAX))
+
+		SELECT @EmpID=DCC.dcCCNID51,@DocDate=D.DocDate,@DueDate=D.DueDate,@DocID=D.DocID from INV_DocDetails D with(nolock) 
+		join COM_DocCCDATA DCC with(nolock) on D.InvDocDetailsID=DCC.InvDocDetailsID
+		WHERE D.VoucherNo=@Param2
+
+		SET @CCColums=''
+		INSERT INTO @TEMP		
+		SELECT SysColumnName,ISNULL(UserProbableValues,''),ParentCostCenterSysName,ParentCostCenterID FROM ADM_CostCenterDef WHERE CostCenterID=50051 AND SysColumnName LIKE'CCNID%' AND IsColumnInUse=1
+		SET @RCnt=@@ROWCOUNT
+		SET @RId=1
+		WHILE(@RId<=@RCnt)
+		BEGIN
+	
+		SELECT @SysColName=SysColName,@UserProbableValues=ISNULL(UserProbableValues,''),@SysTableName=SysTableName,@ParentCostCenterID=ParentCostCenterID FROM @TEMP WHERE ID=@RId
+	
+		IF(LEN(@CCColums)>0)
+		BEGIN
+		SET @CCColums=@CCColums + ','
+		END
+
+		IF(@UserProbableValues='')
+		BEGIN
+		SET @CCColums=@CCColums+'(SELECT NAME FROM '+@SysTableName+' WITH(NOLOCK) WHERE NodeID=(ISNULL((SELECT '+ @SysColName +' FROM COM_CCCCDATA C WITH(NOLOCK) WHERE C.CostCenterID=50051 AND NODEID=C51.NODEID),1))) '+@SysColName
+		END
+		ELSE
+		BEGIN
+
+		SET @CCColums=@CCColums+'(SELECT TOP 1 Name FROM '+@SysTableName+' WITH(NOLOCK) WHERE NodeID=( ISNULL (
+															( SELECT CH1.HistoryNodeID FROM COM_HistoryDetails CH1 WITH(NOLOCK) 
+															WHERE CH1.CostCenterID=50051 AND CH1.NodeID=C51.NODEID AND CH1.HistoryCCID='+CONVERT(NVARCHAR,(@ParentCostCenterID)) +' AND CONVERT(DATETIME,'+CONVERT(NVARCHAR,@DocDate)+')  BETWEEN CONVERT(DATETIME,CH1.FromDate) AND CONVERT(DATETIME,ISNULL(CH1.ToDate,CONVERT(FLOAT,GETDATE()))) ),1) )  
+												   ) '+@SysColName
+		END
+
+		SET @RId=@RId+1
+	
+		END
+
+		SET @SQL=''
+
+
+			SELECT @GEmpSeqNO=GEmpSeqNO FROM PAY_LoanGuarantees WITH(NOLOCK) WHERE DocID=@DocID AND SNO=1
+			
+		SET @SQL='SELECT CONVERT(DATETIME,c51.DOJ) DOJ,CONVERT(DATETIME,c51.DOB) DOB,C51.*,'+@CCColums+' FROM COM_CC50051 C51 WITH(NOLOCK)
+			JOIN COM_CCCCData CC WITH(NOLOCK) ON CC.NodeID=C51.NodeID AND CC.CostCenterID=50051
+			WHERE C51.NodeID='+CONVERT(VARCHAR,@GEmpSeqNO)
+		PRINT @SQL
+		EXEC sp_executesql @SQL
+
+	END
 	
 SET NOCOUNT OFF;
 RETURN 1
@@ -180,4 +262,5 @@ SET NOCOUNT OFF
 RETURN -999   
 END CATCH
 
+----[spPAY_Util] 3,40054,'MPE-Dec/2019-1','4'
 GO

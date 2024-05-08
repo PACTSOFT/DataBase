@@ -10,11 +10,14 @@ CREATE PROCEDURE [dbo].[spADM_SetGlobalPreferences]
 	@LockedDatesXml [nvarchar](max) = NULL,
 	@RegisterPreferenceXML [nvarchar](max) = NULL,
 	@LWEmailXML [nvarchar](max) = NULL,
-	@CostCenterID [bigint],
+	@DSCGridXML [nvarchar](max) = NULL,
+	@BRSLockedDatesXml [nvarchar](max) = NULL,
+	@PenaltyDocXml [nvarchar](max) = NULL,
+	@CostCenterID [int],
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@RoleID [bigint],
+	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -24,7 +27,7 @@ SET NOCOUNT ON;
       
 	--Declaration Section    
 	DECLARE @DATA XML,@TempGuid NVARCHAR(max),@HasAccess BIT,@COUNT INT,@I INT,@KEY NVARCHAR(500),@VALUE NVARCHAR(MAX)    
-	declare @ColID bigint, @Rid bigint, @CCID int,@TabID int,@SQL nvarchar(MAX),@TblName nvarchar(50),@PMDim INT,@ProjMDim INT
+	declare @ColID INT, @Rid INT, @CCID int,@TabID int,@SQL nvarchar(MAX),@TblName nvarchar(50),@PMDim INT,@ProjMDim INT
 	declare @r int, @c int, @cnt int, @icnt int
 	DECLARE @TEMP TABLE (ID INT IDENTITY(1,1),[KEY] NVARCHAR(500),[VALUE] NVARCHAR(MAX))    
     declare @tab table (id int identity(1,1),val int)
@@ -69,6 +72,54 @@ SET NOCOUNT ON;
 			RAISERROR('-372',16,1)                  
 		end    
 	end	
+	else if(@KEY='EnableAttachments' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
+	BEGIN
+			update [com_documentpreferences]
+			set prefValue=@VALUE
+			where prefname='Attachments'
+	END
+	else if(@KEY='EnableActivities' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
+	BEGIN
+			update [com_documentpreferences]
+			set prefValue=@VALUE
+			where prefname='Activities'
+	END
+	else if(@KEY='Enablechequehold' and @VALUE!=(select top 1  [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
+	BEGIN
+			if not exists(select * from sys.columns 
+			where name ='HoldStatus' and object_id=object_id('ACC_DocDetails'))
+			BEGIN
+				alter table ACC_DocDetails add HoldStatus TinyINT
+				alter table ACC_DocDetails add HoldTillDate Float
+				
+				alter table ACC_DocDetails_History add HoldStatus TinyINT
+				alter table ACC_DocDetails_History add HoldTillDate Float
+				select @Rid=MAX(ResourceID) from COM_LanguageResources WiTH(NOLOCK)
+				
+				set @Rid=@Rid+1
+
+				INSERT INTO [com_languageresources] ([ResourceID],[ResourceName],[LanguageID],[LanguageName],[ResourceData],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[FEATURE])
+				VALUES(@Rid,'HoldTillDate',1,'English','HoldTill','A18AA097-DF5D-41CD-9AFF-22C66D20097A',NULL,'ADMIN',4.072966253163580e+004,NULL,NULL,'')
+
+				INSERT [dbo].[ADM_CostCenterDef] ([CostCenterID], [ResourceID], [CostCenterName], [SysTableName], [UserColumnName], [SysColumnName], [ColumnTypeSeqNumber], [UserColumnType], [ColumnDataType], [UserDefaultValue], [UserProbableValues], [ColumnOrder], [IsMandatory], [IsEditable], [IsVisible], [IsCostCenterUserDefined], [IsColumnUserDefined], [IsCCDeleted], [IsColumnDeleted], [ColumnCostCenterID], [ColumnCCListViewTypeID], [FetchMaxRows], [IsColumnGroup], [ColumnGroupNumber], [SectionSeqNumber], [SectionID], [SectionName], [RowNo], [ColumnNo], [ColumnSpan], [IsColumnInUse], [UIWidth], [CompanyGUID], [GUID], [Description], [CreatedBy], [CreatedDate], [ModifiedBy], [ModifiedDate], [IsUnique], [IsForeignKey], [ParentCostCenterID], [ParentCostCenterColID], [IsValidReportBuilderCol], [ParentCostCenterSysName], [ParentCostCenterColSysName], [ParentCCDefaultColID], [LinkData], [LocalReference], [Decimal], [TextFormat], [Filter], [IsRepeat], [LastValueVouchers], [IsnoTab], [dependancy], [dependanton], [IsTransfer], [DbFilter], [CrFilter], [ShowInQuickAdd], [QuickAddOrder], [Calculate], [Cformula], [IsReEvaluate], [IgnoreChar], [WaterMark])
+				VALUES (400, @Rid, N'Documents', N'Acc_DocDetails', N'HoldTill', N'HoldTillDate', NULL, N'DATE', N'DATE', NULL, NULL, 8, 1, 1, 1, 1, 0, 0, 0, 11, 1, NULL, 0, NULL, 10, 550, NULL, 8, 3, 1, 1, NULL, N'6711ABED-2B8C-4289-8FE5-E1FC04529975', N'700B4CF7-6194-4B3A-A7A2-7C6310F8CEAF', NULL, N'Admin', 4, NULL, NULL, 0, 0, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL)
+				
+				set @Rid=@Rid+1
+
+				INSERT INTO [com_languageresources] ([ResourceID],[ResourceName],[LanguageID],[LanguageName],[ResourceData],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[FEATURE])
+				VALUES(@Rid,'HoldStatus',1,'English','HoldStatus','A18AA097-DF5D-41CD-9AFF-22C66D20097A',NULL,'ADMIN',4.072966253163580e+004,NULL,NULL,'')
+
+				INSERT [dbo].[ADM_CostCenterDef] ([CostCenterID], [ResourceID], [CostCenterName], [SysTableName], [UserColumnName], [SysColumnName], [ColumnTypeSeqNumber], [UserColumnType], [ColumnDataType], [UserDefaultValue], [UserProbableValues], [ColumnOrder], [IsMandatory], [IsEditable], [IsVisible], [IsCostCenterUserDefined], [IsColumnUserDefined], [IsCCDeleted], [IsColumnDeleted], [ColumnCostCenterID], [ColumnCCListViewTypeID], [FetchMaxRows], [IsColumnGroup], [ColumnGroupNumber], [SectionSeqNumber], [SectionID], [SectionName], [RowNo], [ColumnNo], [ColumnSpan], [IsColumnInUse], [UIWidth], [CompanyGUID], [GUID], [Description], [CreatedBy], [CreatedDate], [ModifiedBy], [ModifiedDate], [IsUnique], [IsForeignKey], [ParentCostCenterID], [ParentCostCenterColID], [IsValidReportBuilderCol], [ParentCostCenterSysName], [ParentCostCenterColSysName], [ParentCCDefaultColID], [LinkData], [LocalReference], [Decimal], [TextFormat], [Filter], [IsRepeat], [LastValueVouchers], [IsnoTab], [dependancy], [dependanton], [IsTransfer], [DbFilter], [CrFilter], [ShowInQuickAdd], [QuickAddOrder], [Calculate], [Cformula], [IsReEvaluate], [IgnoreChar], [WaterMark])
+				VALUES (400, @Rid, N'Documents', N'Acc_DocDetails', N'HoldStatus', N'HoldStatus', NULL, N'INT', N'INT', NULL, NULL, 8, 1, 1, 1, 1, 0, 0, 0, 11, 1, NULL, 0, NULL, 10, 550, NULL, 8, 3, 1, 1, NULL, N'6711ABED-2B8C-4289-8FE5-E1FC04529975', N'700B4CF7-6194-4B3A-A7A2-7C6310F8CEAF', NULL, N'Admin', 4, NULL, NULL, 0, 0, NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, 0, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, NULL)
+
+			END
+	END
+	else if(@KEY='EnableNotes' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
+	BEGIN
+			update [com_documentpreferences]
+			set prefValue=@VALUE
+			where prefname='Notes'
+	END
 	else if(@KEY='Registers' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
 	BEGIN
 			update ADM_CostCenterDef
@@ -119,13 +170,13 @@ SET NOCOUNT ON;
 			update ADM_CostCenterDef
 			set UserColumnName=@TempGuid,ColumnCostCenterID=@VALUE,columncclistviewtypeid=1,Iscolumninuse=1,isvisible=1,UserColumnType='LISTBOX',sectionid=3,SectionSeqNumber=4
 			from adm_documenttypes b WITH(NOLOCK)
-			where ADM_CostCenterDef.CostCenterid=b.CostCenterid and documenttype=45 and syscolumnname='dcCCNid'+convert(nvarchar(max),(convert(bigint,@VALUE)-50000))
+			where ADM_CostCenterDef.CostCenterid=b.CostCenterid and documenttype=45 and syscolumnname='dcCCNid'+convert(nvarchar(max),(convert(INT,@VALUE)-50000))
 						
 			update COM_LanguageResources
 			set ResourceData=@TempGuid
 			from ADM_CostCenterDef a WITH(NOLOCK)
 			join adm_documenttypes b WITH(NOLOCK) on a.CostCenterid=b.CostCenterid
-			where COM_LanguageResources.ResourceID=a.ResourceID and  documenttype=45 and syscolumnname='dcCCNid'+convert(nvarchar(max),(convert(bigint,@VALUE)-50000))
+			where COM_LanguageResources.ResourceID=a.ResourceID and  documenttype=45 and syscolumnname='dcCCNid'+convert(nvarchar(max),(convert(INT,@VALUE)-50000))
 	END
 	else if(@KEY='DimensionwiseCurrency' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
 	BEGIN	
@@ -158,7 +209,13 @@ SET NOCOUNT ON;
 				alter table INV_docdetails add ExhgRtBC Float
 			END
 		
-	END  
+	END else if(@KEY='BillwiseCurrency' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
+	BEGIN 
+			if not exists(select a.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			where b.name='COM_Billwise' and a.name='AmountFC')
+				alter table COM_Billwise add AmountFC Float
+	END
 	else if(@KEY='BaseCurrency' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
 	BEGIN	
 			if exists(select DocID from ACC_DocDetails with(nolock))
@@ -215,7 +272,7 @@ SET NOCOUNT ON;
 		
 		if not exists(select * from sys.columns where Object_id	=Object_id('INV_ProductAvgRate') and name='DcCCNID'+convert(nvarchar(max),@PMDim))
 		BEGIN
-			set @SQL='alter table INV_ProductAvgRate add DcCCNID'+convert(nvarchar(max),@PMDim)+' bigint'
+			set @SQL='alter table INV_ProductAvgRate add DcCCNID'+convert(nvarchar(max),@PMDim)+' INT'
 			exec(@SQL)
 		END	
 	END
@@ -237,7 +294,7 @@ SET NOCOUNT ON;
 			
 			if not exists(select * from sys.columns where Object_id	=Object_id('Adm_DistributeCosts') and name='DcCCNID'+convert(nvarchar(max),@PMDim))
 			BEGIN
-				set @SQL='alter table Adm_DistributeCosts add DcCCNID'+convert(nvarchar(max),@PMDim)+' bigint'
+				set @SQL='alter table Adm_DistributeCosts add DcCCNID'+convert(nvarchar(max),@PMDim)+' INT'
 				exec(@SQL)
 			END
 		END	
@@ -264,7 +321,7 @@ SET NOCOUNT ON;
 				
 				if not exists(select * from sys.columns where Object_id	=Object_id('Adm_MapCosts') and name='DcCCNID'+convert(nvarchar(max),@PMDim))
 				BEGIN
-					set @SQL='alter table Adm_MapCosts add DcCCNID'+convert(nvarchar(max),@PMDim)+' bigint'
+					set @SQL='alter table Adm_MapCosts add DcCCNID'+convert(nvarchar(max),@PMDim)+' INT'
 					exec(@SQL)
 				END
 			END	
@@ -273,15 +330,40 @@ SET NOCOUNT ON;
 		set isvisible=1
 		where costcenterid=2 and syscolumnname='DistCost'
 	END
+	ELSE if(@KEY='ToCrossDimensions' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
+	BEGIN
+		delete from @tab
+		insert into @tab  
+		exec SPSplitString @VALUE,','  
+		
+		select @cnt=max(ID),@icnt=min(ID) from @tab
+		set @icnt=@icnt-1
+		while @icnt<@cnt
+		begin
+			set @icnt=@icnt+1
+			
+			Select @PMDim=val from @tab where ID=@icnt
+			if(@PMDim>50000)
+			BEGIN
+				set @PMDim=@PMDim-50000
+				
+				if not exists(select * from sys.columns where Object_id	=Object_id('ADM_CrossDimension') and name='DcCCNID'+convert(nvarchar(max),@PMDim))
+				BEGIN
+					set @SQL='alter table ADM_CrossDimension add DcCCNID'+convert(nvarchar(max),@PMDim)+' INT'
+					exec(@SQL)
+				END
+			END	
+		END			
+	END
 	ELSE if(@KEY='Location AverageRate' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
 	BEGIN
 		if not exists(select * from sys.columns where Object_id	=Object_id('INV_ProductAvgRate') and name='DcCCNID2')
-			alter table INV_ProductAvgRate add DcCCNID2 bigint
+			alter table INV_ProductAvgRate add DcCCNID2 INT
 	END
 	ELSE if(@KEY='Division AverageRate' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
 	BEGIN
 		if not exists(select * from sys.columns where Object_id	=Object_id('INV_ProductAvgRate') and name='DcCCNID1')
-			alter table INV_ProductAvgRate add DcCCNID1 bigint	
+			alter table INV_ProductAvgRate add DcCCNID1 INT	
 	END
 	ELSE if(@KEY='PosCoupons' and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
 	BEGIN
@@ -292,6 +374,10 @@ SET NOCOUNT ON;
 			set UserDefaultValue='476'
 			where CostCenterID=@VALUE and SysColumnName='StatusID'
 			
+			if not exists (select * from ADM_CostCenterDef with(nolock) where CostCenterID=@VALUE and SysColumnName='ccAlpha42')
+				exec [SpADM_AddColumn] @VALUE,0,'Alpha42',@ColID OUTPUT
+			if not exists (select * from ADM_CostCenterDef with(nolock) where CostCenterID=@VALUE and SysColumnName='ccAlpha43')
+				exec [SpADM_AddColumn] @VALUE,0,'Alpha43',@ColID OUTPUT
 			if not exists (select * from ADM_CostCenterDef with(nolock) where CostCenterID=@VALUE and SysColumnName='ccAlpha44')
 				exec [SpADM_AddColumn] @VALUE,0,'Alpha44',@ColID OUTPUT
 			if not exists (select * from ADM_CostCenterDef with(nolock) where CostCenterID=@VALUE and SysColumnName='ccAlpha45')
@@ -372,7 +458,30 @@ SET NOCOUNT ON;
 			set ResourceData='Type'
 			from ADM_CostCenterDef
 			where COM_LanguageResources.ResourceID=ADM_CostCenterDef.ResourceID and CostCenterID=@VALUE and SysColumnName='ccalpha44'
+
+			update ADM_CostCenterDef
+			set UserColumnName='Percentage',UserColumnType='NUMERIC',ColumnDataType='FLOAT',SectionSeqNumber=7, UserDefaultValue='',
+					IsVisible=1,SectionID=@TabID, RowNo=0, ColumnNo=3, ColumnSpan=1,IsColumnDeleted=0,IsColumnInUse=1, LinkData=0, LocalReference=0, TextFormat=0, 
+					dependancy=0, dependanton=0, cformula='',ShowInQuickAdd=1,QuickAddOrder=29
+			where CostCenterID=@VALUE and SysColumnName='ccalpha43'
 			
+			update COM_LanguageResources
+			set ResourceData='Percentage'
+			from ADM_CostCenterDef
+			where COM_LanguageResources.ResourceID=ADM_CostCenterDef.ResourceID and CostCenterID=@VALUE and SysColumnName='ccalpha43'
+
+			
+			update ADM_CostCenterDef
+			set UserColumnName='Min Amount',UserColumnType='NUMERIC',ColumnDataType='FLOAT',SectionSeqNumber=8, UserDefaultValue='',
+					IsVisible=1,SectionID=@TabID, RowNo=0, ColumnNo=3, ColumnSpan=1,IsColumnDeleted=0,IsColumnInUse=1, LinkData=0, LocalReference=0, TextFormat=0, 
+					dependancy=0, dependanton=0, cformula='',ShowInQuickAdd=1,QuickAddOrder=29
+			where CostCenterID=@VALUE and SysColumnName='ccalpha42'
+			
+			update COM_LanguageResources
+			set ResourceData='Min Amount'
+			from ADM_CostCenterDef
+			where COM_LanguageResources.ResourceID=ADM_CostCenterDef.ResourceID and CostCenterID=@VALUE and SysColumnName='ccalpha42'
+					
 			
 			
 			update com_status
@@ -699,12 +808,12 @@ SET NOCOUNT ON;
   ,DebitDays,DebitLimit,CodePrefix,CurrencyID,CompanyGUID,[GUID],[Description],CreatedBy,CreatedDate,CodeNumber,GroupSeqNoLength'+@SQL
 		EXEC(@SQL)
 		
-		set @SQL='ALTER TABLE ['+@TblName+'] ADD ProductID BIGINT default(1) not null
+		set @SQL='ALTER TABLE ['+@TblName+'] ADD ProductID INT default(1) not null
 		,DealerPrice float default(0) not null
 		,RetailPrice float default(0) not null
 		,EAN Nvarchar(100)
-		,CCNodeID BIGINT  default(1) not null
-		,InvDocDetailsID bigint
+		,CCNodeID INT  default(1) not null
+		,InvDocDetailsID INT
 		,MRP Float
 		,ProductType nvarchar(100)						
 		,AvgPrice float
@@ -788,7 +897,7 @@ SET NOCOUNT ON;
 	
 		set identity_insert [ADM_CostCenterDef] oFF
    END
-   ELSE if(@KEY='DimensionwiseBins' and ISNUMERIC(@VALUE)=1 and CONVERT(bigint,@VALUE)>50000 and @VALUE!=(select [Value] from  ADM_GlobalPreferences WHERE [Name]=@KEY))
+   ELSE if(@KEY='DimensionwiseBins' and ISNUMERIC(@VALUE)=1 and CONVERT(INT,@VALUE)>50000 and @VALUE!=(select [Value] from  ADM_GlobalPreferences WHERE [Name]=@KEY))
    BEGIN
 			select @TabID=CCTabID from ADM_CostCenterTab with(nolock) 
 			where CostCenterID=@VALUE and CCTabName='General'		
@@ -999,12 +1108,34 @@ SET NOCOUNT ON;
 	END
 	ELSE if(@KEY='PayrollProduct')
 	BEGIN
-	
+		
 		update Adm_CostCenterDef 
 		Set UserDefaultValue=ISNULL(@VALUE,'') Where (CostCenterID between 40051 And 40063) And SysColumnName='ProductID' And isnull(userdefaultvalue,'')<>ISNULL(@VALUE,'')
 		
 		update Adm_CostCenterDef 
 		Set UserDefaultValue=ISNULL(@VALUE,'') Where (CostCenterID between 40065 And 40091) And SysColumnName='ProductID' And isnull(userdefaultvalue,'')<>ISNULL(@VALUE,'')
+	END
+	ELSE if(@KEY='PayrollDefaultDrAccount')
+	BEGIN
+		if(ISNULL(@VALUE,0)>0)
+		BEGIN
+			update Adm_CostCenterDef 
+			Set UserDefaultValue=ISNULL(@VALUE,'') Where (CostCenterID between 40051 And 40063) And SysColumnName='DebitAccount' And isnull(userdefaultvalue,'')<>ISNULL(@VALUE,'')
+		
+			update Adm_CostCenterDef 
+			Set UserDefaultValue=ISNULL(@VALUE,'') Where (CostCenterID between 40065 And 40102) And SysColumnName='DebitAccount' And isnull(userdefaultvalue,'')<>ISNULL(@VALUE,'')
+		END
+	END
+	ELSE if(@KEY='PayrollDefaultCrAccount')
+	BEGIN
+		if(ISNULL(@VALUE,0)>0)
+		BEGIN
+			update Adm_CostCenterDef 
+			Set UserDefaultValue=ISNULL(@VALUE,'') Where (CostCenterID between 40051 And 40063) And SysColumnName='CreditAccount' And isnull(userdefaultvalue,'')<>ISNULL(@VALUE,'')
+		
+			update Adm_CostCenterDef 
+			Set UserDefaultValue=ISNULL(@VALUE,'') Where (CostCenterID between 40065 And 40102) And SysColumnName='CreditAccount' And isnull(userdefaultvalue,'')<>ISNULL(@VALUE,'')
+		END
 	END
 	ELSE if(@KEY='UseDailyAttRates')
 	BEGIN
@@ -1068,7 +1199,18 @@ SET NOCOUNT ON;
 			and (SysColumnName='CCNodeID' or SysColumnName='Particular' ) 
 		end 
 	end  
-    
+    else if((@KEY='Blockuserafterattempts' or @KEY='Blockuserforminutes' or @KEY='RestrictedAcessDimension') and @VALUE!=(select [Value] from  ADM_GlobalPreferences with(nolock) WHERE [Name]=@KEY))
+	begin
+		if(isnumeric(@VALUE)=1)
+		begin
+			if(@KEY='Blockuserafterattempts')
+				update PACT2C.dbo.ADM_Company set BlockCount=convert(int,@VALUE) where DBName=DB_Name()
+			else if(@KEY='Blockuserforminutes')
+				update PACT2C.dbo.ADM_Company set BlockMinutes=convert(int,@VALUE) where DBName=DB_Name()
+			else if(@KEY='RestrictedAcessDimension')
+				update PACT2C.dbo.ADM_Company set RestrictedDim=convert(int,@VALUE) where DBName=DB_Name()
+		end
+	end
 	
 	UPDATE ADM_GlobalPreferences     
 	SET [Value]=@VALUE,    
@@ -1131,7 +1273,15 @@ SET NOCOUNT ON;
 			join adm_costcenterdef b WITH(NOLOCK) on a.syscolumnname=replace(b.syscolumnname,'ccAlpha','dcalpha')
 			where a.costcenterid=40045 and b.costcenterid=@ProjMDim
 			and a.syscolumnname like 'dcalpha%' and a.iscolumninuse=1	
-			and b.syscolumnname in('ccAlpha12','ccAlpha13','ccAlpha14','ccAlpha15','ccAlpha16','ccAlpha17','ccAlpha18','ccAlpha19','ccAlpha20','ccAlpha21','ccAlpha22','ccAlpha23','ccAlpha24')
+			and b.syscolumnname in('ccAlpha12','ccAlpha13','ccAlpha14','ccAlpha18','ccAlpha19','ccAlpha20','ccAlpha21')
+
+			update b 
+			set usercolumnname=a.usercolumnname,iscolumninuse=1,isvisible=1,usercolumntype='TEXT',sectionid=@ColID,IsEditable=0
+			from adm_costcenterdef a WITH(NOLOCK)
+			join adm_costcenterdef b WITH(NOLOCK) on a.syscolumnname=replace(b.syscolumnname,'ccAlpha','dcalpha')
+			where a.costcenterid=40045 and b.costcenterid=@ProjMDim
+			and a.syscolumnname like 'dcalpha%' and a.iscolumninuse=1	
+			and b.syscolumnname in('ccAlpha15','ccAlpha16','ccAlpha17','ccAlpha22','ccAlpha23','ccAlpha24')
 
 			update adm_costcenterdef 
 			set usercolumnname=b.name,iscolumninuse=1,isvisible=1,sectionid=@ColID
@@ -1148,7 +1298,7 @@ SET NOCOUNT ON;
 			and (a.syscolumnname like 'ccalpha%' or a.syscolumnname like 'ccnid%') and a.iscolumninuse=1	
 			
 			
-			declare @TBLcols table(ID int identity(1,1),Colid BIGINT)
+			declare @TBLcols table(ID int identity(1,1),Colid INT)
 			insert into @TBLcols
 			select CostcenterCOlid from adm_costcenterdef WITH(NOLOCK)
 			where costcenterid=@ProjMDim and iscolumninuse=1 and 	sectionid=@ColID and IsVisible=1	
@@ -1193,7 +1343,7 @@ SET NOCOUNT ON;
 	
   if exists(select value from adm_globalpreferences with(nolock) where name='POSEnable' and value='True') and not exists(select name from sys.columns where name='PosSessionID' and object_id IN (select object_id from sys.objects where name='COM_DocID'))
   begin
-	alter table COM_DocID add PosSessionID bigint not null default(0)
+	alter table COM_DocID add PosSessionID INT not null default(0)
   end
 
 	IF @CostCenterID=10 AND @FinancialYearsXml<>'' AND @FinancialYearsXml IS NOT NULL    
@@ -1203,7 +1353,7 @@ SET NOCOUNT ON;
 		   
 		INSERT INTO ADM_FinancialYears (FromDate,ToDate,AccountID,LocationID,CompanyGUID,GUID,CreatedBy,CreatedDate)    
 		SELECT  CONVERT(FLOAT,X.value('@FromDate','DATETIME')),CONVERT(FLOAT,X.value('@ToDate','DATETIME'))
-		,X.value('@AccountID','BIGINT'),isnull(X.value('@LocationID','BIGINT'),1)
+		,X.value('@AccountID','INT'),isnull(X.value('@LocationID','INT'),1)
 		,@CompanyGUID,@GUID,@UserName,CONVERT(FLOAT,getdate())    
 		FROM @DATA.nodes('/FinancialYears/Row') as DATA(X)    
 	END
@@ -1218,20 +1368,31 @@ SET NOCOUNT ON;
 		X.value('@isEnable','BIT'),0
 		FROM @DATA.nodes('/LockedDates/Row') as DATA(X)    
 	END
+	IF @CostCenterID=10 AND @BRSLockedDatesXml<>'' AND @BRSLockedDatesXml IS NOT NULL    
+	BEGIN    
+		DELETE FROM ADM_BRSLockedDates
+		SET @DATA=@BRSLockedDatesXml    
+		   
+		INSERT INTO ADM_BRSLockedDates (FromDate,ToDate,isEnable,AccountID)    
+		SELECT  CONVERT(FLOAT,X.value('@FromDate','DATETIME')),    
+		 CONVERT(FLOAT,X.value('@ToDate','DATETIME')),    
+		X.value('@isEnable','BIT'),X.value('@AccountID','INT')
+		FROM @DATA.nodes('/BRSLockedDates/Row') as DATA(X)    
+	END
 	IF @CostCenterID=10 AND @RegisterPreferenceXML<>'' AND @RegisterPreferenceXML IS NOT NULL    
 	BEGIN    
 		DELETE FROM ADM_RegisterPreferences 
 		SET @DATA=@RegisterPreferenceXML    
 		   
 		INSERT INTO ADM_RegisterPreferences (RegisterID,RightPanelWidth,RowSize,CostCenterID,TouchScreen,ButtonHeight,ButtonWidth,LevelProfile,PaymentModes,ActionHeight,ActionWidth)    
-		SELECT X.value('@RegisterID','BIGINT'),    
+		SELECT X.value('@RegisterID','INT'),    
 		X.value('@RightPanelWidth','INT'),
 		X.value('@RowSize','INT'),    
 		X.value('@CostCenterID','INT'),
 		X.value('@TouchScreen','BIT'),
 		X.value('@Height','INT'),
 		X.value('@Width','INT'),
-		X.value('@LevelProfile','BIGINT'),
+		X.value('@LevelProfile','INT'),
 		X.value('@PaymentModes','NVARCHAR(MAX)'),
 		X.value('@ActionHeight','INT'),
 		X.value('@ActionWidth','INT')
@@ -1239,17 +1400,33 @@ SET NOCOUNT ON;
 	END
 	if @CostCenterID=10 and @CrossDimensionXml<>'' and @CrossDimensionXml is not null
 	BEGIN
-		DELETE FROM ADM_CrossDimension    
-		SET @DATA=@CrossDimensionXml    
- 
-       INSERT INTO ADM_CrossDimension
+		DELETE FROM ADM_CrossDimension 
+		
+		
+		set @VALUE=''
+		select @VALUE=@VALUE+','+name from sys.columns
+		where object_id=object_id('ADM_CrossDimension')
+		and name like 'Dcccnid%'
+		order by name
+		
+		set @Sql='INSERT INTO ADM_CrossDimension
            ([Dimension],[DimIn],[DimFor],[Document],[DrAccount],[CrAccount],[CompanyGUID],[GUID],
-           [CreatedBy],[CreatedDate])
-       SELECT
-           X.value('@Dimension','BIGINT'),X.value('@DimIn','BIGINT'),X.value('@DimFor','BIGINT'),
-           X.value('@Document','BIGINT'),X.value('@DrAccount','BIGINT'),X.value('@CrAccount','BIGINT'),
-           @CompanyGUID,NEWID(),@UserName,CONVERT(FLOAT,getdate())
-		FROM @DATA.nodes('/CrossDimension/Row') as DATA(X)   
+           [CreatedBy],[CreatedDate]'+@VALUE+')
+			SELECT
+           X.value(''@Dimension'',''INT''),X.value(''@DimIn'',''INT''),X.value(''@DimFor'',''INT''),
+           X.value(''@Document'',''INT''),X.value(''@DrAccount'',''INT''),X.value(''@CrAccount'',''INT''),
+           @CompanyGUID,NEWID(),@UserName,CONVERT(FLOAT,getdate())'
+		select @Sql=@Sql+',X.value(''@'+name+''',''INT'')' from sys.columns
+		where object_id=object_id('ADM_CrossDimension')
+		and name like 'Dcccnid%'
+		order by name
+		
+		set @Sql=@Sql+'FROM @DATA.nodes(''/CrossDimension/Row'') as DATA(X)   '
+			
+		SET @DATA=@CrossDimensionXml    
+	print @Sql
+		EXEC sp_executesql @sql,N'@DATA xml,@CompanyGUID NVARCHAR(50),@UserName NVARCHAR(50)',@DATA,@CompanyGUID,@UserName
+		
 	END
 	else if(@CostCenterID=10 and @CrossDimensionXml='')
 		delete from ADM_CrossDimension 
@@ -1268,6 +1445,7 @@ SET NOCOUNT ON;
 		,UserColumnName= X.value('@FieldName','nvarchar(50)'),UserDefaultValue= X.value('@DefaultValue','nvarchar(50)')
 		,IsMandatory= X.value('@Validate','smallint')
 		,Decimal= X.value('@Decimal','INT')
+		,LocalReference= X.value('@LocalRef','INT'),LinkData= X.value('@LinkData','INT')
 		from @DATA.nodes('/QtyAdjustmentFields/Row') as DATA(X) 
 		where CostCenterID=403 and SysColumnName= X.value('@SyscolumnName','nvarchar(50)')
 		
@@ -1285,8 +1463,21 @@ SET NOCOUNT ON;
 		where CostCenterID=403 	
 	END
 		
+    IF @CostCenterID=10 AND @PenaltyDocXml<>'' AND @PenaltyDocXml IS NOT NULL    
+	BEGIN    
+		DELETE FROM ADM_PenaltyDoc WHERE CostCenterID=10
+		SET @DATA=@PenaltyDocXml    
+		   
+		INSERT INTO ADM_PenaltyDoc (TypeID,Type,AccountID,ProductID,CostCenterID)    
+		SELECT  X.value('@TypeID','INT'), X.value('@Type','nvarchar(50)'), X.value('@AccountID','INT'),X.value('@ProductID','INT')  ,10
+		FROM @DATA.nodes('/PenaltyDoc/Row') as DATA(X)    
+	END
     if @LWEmailXML is not null
 		update ADM_GLOBALPREFERENCES set Value=@LWEmailXML where Name='LWEmailXml'
+
+
+	if @DSCGridXML IS NOT NULL AND @DSCGridXML<>''
+		update ADM_GLOBALPREFERENCES set Value=@DSCGridXML where Name='DigitalSignGridData'
 
 	declare @AuditTrial bit
 	set @AuditTrial=(select value from adm_globalpreferences with(nolock) where name='AllowAuditTrialinAllDocs') 

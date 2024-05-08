@@ -36,7 +36,7 @@ SET NOCOUNT ON;
 			   SET @SQL=' ALTER TABLE #DATA ADD '+(SELECT COL FROM #TABLE WHERE ID=@I)+ ' NVARCHAR(300)'		     
 			   EXEC(@SQL)
 			   set @SQL=''
-			   SET @XMLCOLUMNS = @XMLCOLUMNS +  'X.value(''@'+(SELECT COL FROM #TABLE WHERE ID=@I)+''',''NVARCHAR(300)'') , '
+			   SET @XMLCOLUMNS += 'X.value(''@'+(SELECT COL FROM #TABLE WHERE ID=@I)+''',''NVARCHAR(300)'') , '
 			  SET @I=@I+1
 		 END
 		  

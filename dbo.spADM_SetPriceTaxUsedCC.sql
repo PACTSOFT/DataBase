@@ -13,7 +13,7 @@ BEGIN TRY
 SET NOCOUNT ON;
 	
 	--To Set Used CostCenters with Group Check
-	declare @Cnt int,@i int,@IsGroupExists int,@DefnTbl nvarchar(50),@TblName nvarchar(50),@SQL nvarchar(max),@strType nvarchar(10),@ProfileWhere nvarchar(50)
+	declare @CCID INT,@Cnt int,@i int,@IsGroupExists int,@DefnTbl nvarchar(50),@TblName nvarchar(50),@SQL nvarchar(max),@strType nvarchar(10),@ProfileWhere nvarchar(50)
 	
 	if(@Type=1)
 		set @DefnTbl='COM_CCPrices'	
@@ -23,16 +23,16 @@ SET NOCOUNT ON;
 	BEGIN
 		set @DefnTbl='COM_CCTaxes'	
 			
-		update adm_costcenterdef
-		set IsReEvaluate=1
-		from adm_costcenterdef a
-		join COM_CCTaxes b on a.CostCenterColID=b.[ColID]
+		update a
+		set a.IsReEvaluate=1
+		from adm_costcenterdef a with(nolock)
+		join COM_CCTaxes b with(nolock) on a.CostCenterColID=b.[ColID]
 
 
-		update adm_costcenterdef
-		set IsReEvaluate=0 
-		from adm_costcenterdef a
-		left join COM_CCTaxes b on a.CostCenterColID=b.[ColID]
+		update a
+		set a.IsReEvaluate=0 
+		from adm_costcenterdef a with(nolock)
+		left join COM_CCTaxes b with(nolock) on a.CostCenterColID=b.[ColID]
 		where a.IsReEvaluate=1 and a.costcenterid between 40000 and 50000 and  b.[ColID] is null
 		
 	END
@@ -56,7 +56,7 @@ SET NOCOUNT ON;
 			insert into COM_CCPriceTaxCCDefn
 			values('+@strType+','+convert(nvarchar,@ProfileID)+',2,@IsGroupExists)
 		end'
-	EXEC(@SQL)
+	exec sp_executesql @SQL
 		
 	set @SQL='if(select count(*) from '+@DefnTbl+' with(nolock) where ProductID>0'+@ProfileWhere+')>0
 		begin
@@ -68,8 +68,7 @@ SET NOCOUNT ON;
 			insert into COM_CCPriceTaxCCDefn
 			values('+@strType+','+convert(nvarchar,@ProfileID)+',3,@IsGroupExists)
 		end'
-		print(@SQL)
-	EXEC(@SQL)
+		exec sp_executesql @SQL
 		
 	if(@Type=1)
 	begin
@@ -85,39 +84,35 @@ SET NOCOUNT ON;
 		end
 	end
 	
-	set @i=50001
-	while(@i<=50100)
+	declare @tab table (id int identity(1,1),FeatureID int,TableName nvarchar(32))
+	insert into @tab
+	select FeatureID,TableName from ADM_Features with(nolock) 
+	where FeatureID>50000 AND FeatureID not in (50051,50052,50053,50054)
+	
+	select @i=1,@Cnt=count(*) from @tab
+	while(@i<=@Cnt)
 	begin
-		set @TblName=''
-		select @TblName=TableName from ADM_Features with(nolock) where FeatureID=@i
-		if @TblName is not null and @TblName<>'' and @i not in (50051,50052,50053,50054) and not (@i>50050 and @Type=3)
-			and exists (select name from sys.columns with(nolock) where object_id=object_id(@DefnTbl) and Name='CCNID'+convert(nvarchar,@i-50000))
+		select @CCID=FeatureID,@TblName=TableName from @tab where id=@i
+		if @TblName is not null and @TblName<>'' and not (@CCID BETWEEN 50055 AND 50100 and @Type=3)
+			and exists (select name from sys.columns with(nolock) where object_id=object_id(@DefnTbl) and Name='CCNID'+convert(nvarchar,@CCID-50000))
 		begin
-			set @SQL='if(select count(*) from '+@DefnTbl+' with(nolock) where CCNID'+convert(nvarchar,(@i-50000))+'>0 '+@ProfileWhere+')>0
+			set @SQL='if(select count(*) from '+@DefnTbl+' with(nolock) where CCNID'+convert(nvarchar,(@CCID-50000))+'>0 '+@ProfileWhere+')>0
 		begin
 			declare @IsGroupExists int
 			select @IsGroupExists=count(*) 
-			from '+@DefnTbl+' P with(nolock) inner join '+@TblName+' D with(nolock) ON P.CCNID'+convert(nvarchar,(@i-50000))+'=D.NodeID
-			where P.CCNID'+convert(nvarchar,(@i-50000))+' is not null and P.CCNID'+convert(nvarchar,(@i-50000))+'>0 '+@ProfileWhere+' AND D.IsGroup=1
+			from '+@DefnTbl+' P with(nolock) inner join '+@TblName+' D with(nolock) ON P.CCNID'+convert(nvarchar,(@CCID-50000))+'=D.NodeID
+			where P.CCNID'+convert(nvarchar,(@CCID-50000))+' is not null and P.CCNID'+convert(nvarchar,(@CCID-50000))+'>0 '+@ProfileWhere+' AND D.IsGroup=1
 			
 			insert into COM_CCPriceTaxCCDefn
-			values('+@strType+','+convert(nvarchar,@ProfileID)+','+convert(nvarchar,@i)+',@IsGroupExists)
+			values('+@strType+','+convert(nvarchar,@ProfileID)+','+convert(nvarchar,@CCID)+',@IsGroupExists)
 		end'
-			print(@SQL)
-			exec(@SQL)
+			exec sp_executesql @SQL
 		end
 		set @i=@i+1
 	end
 	
 	if(@Type<>3)
 	BEGIN
-		set @SQL='if(select count(*) from '+@DefnTbl+' with(nolock) where VehicleID>0'+@ProfileWhere+')>0
-			begin
-				insert into COM_CCPriceTaxCCDefn
-				values('+@strType+','+convert(nvarchar,@ProfileID)+',61,0)
-			end'
-		EXEC(@SQL)
-	
 		--All Used Dimensions in all profiles
 		delete from COM_CCPriceTaxCCDefn where DefType=@Type and ProfileID=0
 		

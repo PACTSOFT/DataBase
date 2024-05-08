@@ -225,7 +225,7 @@ INSERT INTO @TABEMPPAYVIEW
 		SET @strSelectCols=CONVERT(VARCHAR,REPLACE(LEFT(@strSelect,DATALENGTH(@strSelect)-1),'PE.',''))
 	END
 	--EMP PAY DATA
-	--print (@strselect)
+	print (@strselect)
 	SET @strQry=@strQry+'  SELECT TOP 1 ' + CONVERT(NVARCHAR(MAX),@strselect)+' FROM COM_CC50051 C51
 	LEFT JOIN PAY_EmpPay PE ON C51.NODEID=PE.EMPLOYEEID
 	JOIN COM_CCCCDATA CC ON C51.NODEID=CC.NODEID AND CC.COSTCENTERID=50051
@@ -233,7 +233,7 @@ INSERT INTO @TABEMPPAYVIEW
 	SET @strQry=@strQry+@strLookupDimQry
 	SET @strQry=@strQry+ ' WHERE C51.NODEID='+ CONVERT(VARCHAR,@EmployeeID)+' ORDER BY  PE.EffectFrom DESC'
 	print (@strQry)
-	EXEC (@strQry)
+	EXEC sp_executesql @STRQRY
 
 END
 GO

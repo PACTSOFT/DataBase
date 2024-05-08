@@ -7,9 +7,10 @@ CREATE PROCEDURE [dbo].[spDOC_GetVPTMastersData]
 	@DocumentSeqNo [int],
 	@ExtendedDataQuery [nvarchar](max),
 	@Attachments [int],
-	@UserID [bigint],
+	@UserID [int],
 	@UserName [nvarchar](50),
-	@LangID [int] = 1
+	@LangID [int] = 1,
+	@IsFSDoc [bit] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY  
@@ -18,9 +19,16 @@ SET NOCOUNT ON;
 
 	--Declaration Section
 	DECLARE @HasAccess BIT, @SQL NVARCHAR(MAX),@TableName NVARCHAR(300)
-	DECLARE @code NVARCHAR(200),@no BIGINT, @IsInventoryDoc BIT,@ExtSelectQuery nvarchar(max),@ExtJoinQuery nvarchar(max)
-	DECLARE @VoucherNo NVARCHAR(100),@VoucherType INT
+	DECLARE @code NVARCHAR(200),@no INT, @IsInventoryDoc BIT,@ExtSelectQuery nvarchar(max),@ExtJoinQuery nvarchar(max)
+	DECLARE @VoucherNo NVARCHAR(100),@VoucherType INT,@IsSinglePDC BIT
+	DECLARE @AlpCols NVARCHAR(MAX),@sContractCols NVARCHAR(MAX)
+	set @sContractCols=''
+	set @IsSinglePDC=0
 	
+	if @DocumentID=95 and exists(select Value from COM_CostCenterPreferences WITH(NOLOCK)
+			where CostCenterID=@DocumentID and Name='SinglePDC' and Value ='true' )
+		set @IsSinglePDC=1
+		
 	--Check For Company Fields Exists
 	if(@ExtendedDataQuery like '%#PACTCOMPANYID#%')
 	begin		
@@ -40,16 +48,12 @@ SET NOCOUNT ON;
 		set @ExtJoinQuery=''
 	end
 
-	IF @DocumentID=59--SERVICE TICKET
-	BEGIN			
-		exec spSVC_GetServiceVPTMastersData 59 ,@DocumentSeqNo ,@ExtendedDataQuery ,@UserID ,@UserName ,@LangID
-	END
-	ELSE IF @DocumentID=78
+	IF @DocumentID=78
 	BEGIN
 		--FINISHED PRODUCTS
-	  	SELECT BOM.BOMName, BOM.BOMCode, i.Quantity AS Qty,i.Rate as UnitPrice,i.quantity*i.Rate as Value, OExt.*, O.*, OBOM.MFGOrderBOMID,CONVERT(DATETIME,OrderDate) OrderDate_Date,S.Status,
+	  	set @SQL='SELECT BOM.BOMName, BOM.BOMCode, i.Quantity AS Qty,i.Rate as UnitPrice,i.quantity*i.Rate as Value, OExt.*, O.*, OBOM.MFGOrderBOMID,CONVERT(DATETIME,OrderDate) OrderDate_Date,S.Status,
 		(SELECT TOP 1 Particulars FROM PRD_ProductionMethod WITH(NOLOCK) WHERE BOMID=BOM.BOMID) AS ProductionMethod,
-		P.ProductCode ProductCode, P.ProductName ProductName,case when P.IsLotwise=1 then 'True' else 'False' End as IsLotwise,
+		P.ProductCode ProductCode, P.ProductName ProductName,case when P.IsLotwise=1 then ''True'' else ''False'' End as IsLotwise,
 		P.AliasName,PT.ProductType  ProductTypeID,VM.ValuationMethod as ValutionID,PS.Status ProductStatus,UOM.BaseName UOMID
 		,P.ReorderLevel,P.ReorderQty,P.ShelfLife,P.Packing,P.BarcodeID,PP.ProductName ParentID
 		,P.PurchaseRateA,P.PurchaseRateB,P.PurchaseRateC,P.PurchaseRateD,P.PurchaseRateE,P.PurchaseRateF,P.PurchaseRateG
@@ -73,11 +77,12 @@ SET NOCOUNT ON;
 		INNER JOIN INV_Product AS PP WITH(NOLOCK) ON P.ParentID = PP.ProductID       
 		Left JOIN COM_Department AS DEP WITH(NOLOCK) ON P.DepartmentID=DEP.NodeID 
 		Left JOIN COM_Category AS CAT WITH(NOLOCK) ON P.CategoryID=CAT.NodeID 
-		WHERE (O.MFGOrderID = @DocumentSeqNo)          
-		ORDER BY OBOM.MFGOrderBOMID
-	
+		WHERE O.MFGOrderID = '+CONVERT(NVARCHAR,@DocumentSeqNo)+'         
+		ORDER BY OBOM.MFGOrderBOMID'
+		EXEC (@SQL)
+		
 		--RAW MATERIALS
-		SELECT  OBOM.BOMID, WO.WONumber WorkOrderNumber, WOD.WODetailsID, WOD.BOMProductID, WOD.ProdQuantity, WOD.Wastage, WOD.ReturnQty, WOD.NetQuantity, 
+		set @SQL='SELECT  OBOM.BOMID, WO.WONumber WorkOrderNumber, WOD.WODetailsID, WOD.BOMProductID, WOD.ProdQuantity, WOD.Wastage, WOD.ReturnQty, WOD.NetQuantity, 
 		P.ProductCode, P.ProductName, COM_Category.Name AS CategoryName,
 		Bp.Quantity ActualQty,                 
 		case when  Wo.DocID is not null and Wo.DocID>0 then Bpd.Rate else bp.UnitPrice end as UnitPrice,
@@ -103,19 +108,21 @@ SET NOCOUNT ON;
 		INNER JOIN INV_Product AS PP WITH(NOLOCK) ON P.ParentID = PP.ProductID
 		Left JOIN COM_Department AS DEP WITH(NOLOCK) ON P.DepartmentID=DEP.NodeID 
 		Left JOIN COM_Category AS CAT WITH(NOLOCK) ON P.CategoryID=CAT.NodeID 
-		WHERE     (O.MFGOrderID = @DocumentSeqNo) AND WOD.WODetailsID=1
-		ORDER BY COM_Category.Code, WorkOrderNumber
+		WHERE  O.MFGOrderID = '+CONVERT(NVARCHAR,@DocumentSeqNo)+' AND WOD.WODetailsID=1
+		ORDER BY COM_Category.Code, WorkOrderNumber'
+		EXEC (@SQL)
 
 		--PRODUCTION METHODS
-		SELECT BOM.BOMName, BOM.BOMCode,PM.Particulars
+		set @SQL='SELECT BOM.BOMName, BOM.BOMCode,PM.Particulars
 		FROM PRD_ProductionMethod AS PM WITH(NOLOCK)       
 		INNER JOIN PRD_MFGOrder AS O WITH(NOLOCK) ON PM.MOID = O.MFGOrderID 
 		LEFT JOIN PRD_BillOfMaterial AS BOM WITH(NOLOCK) ON BOM.BOMID = PM.BOMID
-		WHERE (O.MFGOrderID = @DocumentSeqNo)
-		ORDER BY BOM.BOMName
+		WHERE O.MFGOrderID = '+CONVERT(NVARCHAR,@DocumentSeqNo)+'
+		ORDER BY BOM.BOMName'
+		EXEC (@SQL)
 		
-		declare @tab table(docid bigint,crname bigint,drname bigint,amount float,voucherno nvarchar(100),date float,Currency bigint,lname nvarchar(200))
-		declare @tab1 table(docid bigint,crname bigint,drname bigint,amount float,voucherno nvarchar(100),date float,Currency bigint,lname nvarchar(200))
+		set @SQL='declare @tab table(docid INT,crname INT,drname INT,amount float,voucherno nvarchar(100),date float,Currency INT,lname nvarchar(200))
+		declare @tab1 table(docid INT,crname INT,drname INT,amount float,voucherno nvarchar(100),date float,Currency INT,lname nvarchar(200))
 
 		insert into @tab
 		select  a.docid,a.CreditAccount, a.DebitAccount,amount,a.voucherno,docdate,A.CurrencyID,l.name
@@ -123,13 +130,13 @@ SET NOCOUNT ON;
 		inner join acc_docdetails A WITH(NOLOCK) on A.docid=M.accdocid  
 		inner join COM_docccData CC WITH(NOLOCK) on CC.accdocdetailsid=A.accdocdetailsid
 		inner join COM_LOCATION L WITH(NOLOCK) on L.NodeID=CC.dcCCNID2  
-		where M.MFGOrderID=@DocumentSeqNo   and a.CreditAccount<>-99
+		where M.MFGOrderID='+CONVERT(NVARCHAR,@DocumentSeqNo)+'   and a.CreditAccount<>-99
 		 
 		insert into @tab1 
-		select a.docid, a.CreditAccount, a.DebitAccount,amount,a.voucherno,docdate,CurrencyID,''
+		select a.docid, a.CreditAccount, a.DebitAccount,amount,a.voucherno,docdate,CurrencyID,''''
 		from PRD_MFGDocRef M WITH(NOLOCK)  
 		inner join acc_docdetails A WITH(NOLOCK) on A.docid=M.accdocid   
-		where M.MFGOrderID=@DocumentSeqNo   and a.DebitAccount<>-99
+		where M.MFGOrderID='+CONVERT(NVARCHAR,@DocumentSeqNo)+'   and a.DebitAccount<>-99
 				
 		select  CR.AccountName CreditAccount,Dr.AccountName DebitAccount,Amount,VoucherNo,convert(datetime,date) DocDate,C.Name CurrencyID,lname Location from
 		(select case when a.crname =-99 then b.crname else a.crname end as cr,
@@ -148,11 +155,10 @@ SET NOCOUNT ON;
 		inner join COM_docccData CC WITH(NOLOCK) on CC.invdocdetailsid=i.invdocdetailsid
 		inner join COM_LOCATION L WITH(NOLOCK) on L.NodeID=CC.dcCCNID2  
 		left join COM_CURRENCY C WITH(NOLOCK) on C.CurrencyID=A.CurrencyID
-		where M.MFGOrderID=@DocumentSeqNo
+		where M.MFGOrderID='+CONVERT(NVARCHAR,@DocumentSeqNo)+'
 			
-		create table #TEMP(id int identity(1,1),CA bigint,DA bigint,Amount float)
+		create table #TEMP(id int identity(1,1),CA INT,DA INT,Amount float)
 		insert into #TEMP(CA,DA,Amount) 
-
 		select  t.cr,t.dr ,sum(Amount )from
 		(select case when a.crname =-99 then b.crname else a.crname end as cr,
 		case when a.drname =-99 then b.drname else a.drname end as dr,  a.Amount ,a.date,a.voucherno,a.Currency,a.docid,a.lname from @tab a
@@ -168,12 +174,12 @@ SET NOCOUNT ON;
 		inner join acc_docdetails A WITH(NOLOCK) on i.invdocdetailsid  =A.invdocdetailsid
 		inner join COM_docccData CC WITH(NOLOCK) on CC.invdocdetailsid=i.invdocdetailsid
 		inner join COM_LOCATION L WITH(NOLOCK) on L.NodeID=CC.dcCCNID2  
-		where M.MFGOrderID=@DocumentSeqNo
+		where M.MFGOrderID='+CONVERT(NVARCHAR,@DocumentSeqNo)+'
 		group by a.CreditAccount, a.DebitAccount
 	                              
         DECLARE @TABLE1 TABLE(ID INT IDENTITY(1,1),ACCOUNT INT,CR FLOAT,DR FLOAT)
         
-        DECLARE @COUNT INT ,@SCOPE INT,@CR FLOAT,@DR FLOAT,@ACC BIGINT, @k int
+        DECLARE @COUNT INT ,@SCOPE INT,@CR FLOAT,@DR FLOAT,@ACC INT, @k int
         SET @k=1
         SELECT @COUNT=COUNT(*) FROM #TEMP with(nolock)
         WHILE @k<=@COUNT
@@ -182,8 +188,7 @@ SET NOCOUNT ON;
 			IF((SELECT COUNT(*) FROM @TABLE1 WHERE ACCOUNT=@ACC)=0)
 			BEGIN
                     
-				INSERT INTO @TABLE1 VALUES (
-				@ACC,0,0)
+				INSERT INTO @TABLE1 VALUES (@ACC,0,0)
 				SET @SCOPE=SCOPE_IDENTITY()
 
 				SELECT @CR=ISNULL(SUM(Amount),0) FROM #TEMP with(nolock) WHERE CA=@ACC
@@ -195,12 +200,11 @@ SET NOCOUNT ON;
 			SET @CR=0
 			SET @DR=0
 			SET @ACC=0
-			SELECT @ACC=DA FROM #TEMP WHERE ID=@k
+			SELECT @ACC=DA FROM #TEMP with(nolock) WHERE ID=@k
 			IF((SELECT COUNT(*) FROM @TABLE1 WHERE ACCOUNT=@ACC)=0)
 			BEGIN
                     
-				INSERT INTO @TABLE1 VALUES (
-				@ACC,0,0)
+				INSERT INTO @TABLE1 VALUES (@ACC,0,0)
 				SET @SCOPE=SCOPE_IDENTITY()
 
 				SELECT @CR=ISNULL(SUM(Amount),0) FROM #TEMP with(nolock) WHERE CA=@ACC
@@ -216,7 +220,23 @@ SET NOCOUNT ON;
         SELECT A.AccountName Account,CR CreditAmount,DR DebitAmount 
         FROM @TABLE1 T inner join Acc_Accounts A with(nolock) on A.AccountID=T.ACCOUNT
 
-        drop table #TEMP 			
+        drop table #TEMP'
+		EXEC (@SQL) 			
+	END
+	IF @DocumentID=76
+	BEGIN
+		--PRODUCTION METHODS
+		set @SQL='SELECT BOM.BOMCode,BOM.BOMName,S.Status StatusID,BOM.CreatedBy,CONVERT(DATETIME,BOM.CreatedDate) CreatedDate,BOM.ModifiedBy,CONVERT(DATETIME,BOM.ModifiedDate) ModifiedDate,UOM.BaseName UOMID,PP.ProductName ProductID,L.Name LocationID,D.Name DivisionID,CONVERT(DATETIME,BOM.BOMDate) Date,BOM.*,BOMEXT.*
+		FROM PRD_BillOfMaterial AS BOM WITH(NOLOCK) 
+		LEFT JOIN PRD_BillOfMaterialExtended AS BOMEXT ON BOM.BOMID=BOMEXT.BOMID
+		LEFT JOIN COM_STATUS S WITH(NOLOCK) ON BOM.StatusID=S.StatusID
+		Left JOIN COM_UOM AS UOM WITH(NOLOCK) ON   BOM.UOMID=UOM.UOMID
+		INNER JOIN INV_Product AS PP WITH(NOLOCK) ON BOM.ProductID = PP.ProductID 
+		left join COM_LOCATION L WITH(NOLOCK) on L.NodeID=BOM.LocationID
+		left join COM_DIVISION D WITH(NOLOCK) on D.NodeID=BOM.DivisionID 
+		WHERE BOM.BOMID = '+CONVERT(NVARCHAR,@DocumentSeqNo)+''
+		EXEC (@SQL)		
+		
 	END
 	ELSE IF @DocumentID=88
 	BEGIN
@@ -255,17 +275,17 @@ SET NOCOUNT ON;
 		set @CustomQuery1=''
 		set @CustomQuery3=', '
 		set @CustomQueryNoName=', '
-		select @CNT=count(id) from #CustomTable
+		select @CNT=count(id) from #CustomTable WITH(NOLOCK)
 
 		while (@i<=	@CNT)
 		begin
-			select @CCID=CostCenterID from #CustomTable where ID=@i
+			select @CCID=CostCenterID from #CustomTable WITH(NOLOCK) where ID=@i
 	 
 			select @Table=TableName,@FeatureName=FeatureID from adm_features WITH(NOLOCK) where FeatureID = @CCID
 			set @TabRef='A'+CONVERT(nvarchar,@i)
 			set @CCID=@CCID-50000
 	    	 
-			if(@CCID>0 and @CCID<=100)
+			if(@CCID>0)
 			begin
 				set @CustomQuery1=@CustomQuery1+' left join '+@Table+' '+@TabRef+' WITH(NOLOCK) on '+@TabRef+'.NodeID=CC.CCNID'+CONVERT(nvarchar,@CCID)
 				set @CustomQuery3=@CustomQuery3+' '+@TabRef+'.Name as CCNID'+CONVERT(nvarchar,@CCID)+'_Name ,'
@@ -279,6 +299,8 @@ SET NOCOUNT ON;
 			set @CustomQuery3=SUBSTRING(@CustomQuery3,0,LEN(@CustomQuery3)-1)
 			set @CustomQueryNoName=SUBSTRING(@CustomQueryNoName,0,LEN(@CustomQueryNoName)-1)
 		end
+
+		--SELECT @CustomQuery1,@CustomQuery3,@CustomQueryNoName
 		IF @DocumentID=84
 		BEGIN
 			set @SQL='SELECT A.DocID,convert(datetime,A.Date) as Date,S.Status as ContractStatus,CT.CTemplName ContractTemplID,C.CustomerName CustomerID,convert(datetime,A.StartDate) as StartDate,convert(datetime,A.EndDate) as EndDate,CT.BillFrequencyName as BillingScheduleID,
@@ -340,28 +362,38 @@ SET NOCOUNT ON;
 				
 			exec(@SQL)
 
-			select NodeID,Convert(Datetime,Date) Date,Convert(Datetime,Date) FILTERDATE,FeedBack,Alpha1,Alpha2,Alpha3,Alpha4,Alpha5,Alpha6,Alpha7,Alpha8,Alpha9,Alpha10,Alpha11,Alpha12,Alpha13,Alpha14,Alpha15
-			,Alpha16,Alpha17,Alpha18,Alpha19,Alpha20,Alpha21,Alpha22,Alpha23,Alpha24,Alpha25,Alpha26,Alpha27,Alpha28,Alpha29,Alpha30,Alpha31,Alpha32,Alpha33,Alpha34
-			,Alpha35,Alpha36,Alpha37,Alpha38,Alpha39,Alpha40,Alpha41,Alpha42,Alpha43,Alpha44,Alpha45,Alpha46,Alpha47,Alpha48,Alpha49,Alpha50
-			from  CRM_Feedback WITH(NOLOCK) 
-			where CCNodeID=convert(nvarchar,@DocumentSeqNo) and CCID=86
+			
+			SET @AlpCols=''
+			SELECT @AlpCols=STUFF( (SELECT ','+Name FROM Sys.Columns WITH(NOLOCK) WHERE object_id=OBJECT_ID('CRM_Feedback') AND Name Like 'Alpha%'  FOR XML PATH('') ),1,1,'') 
 
-			SELECT A.ActivityID,CASE WHEN ACTIVITYTYPEID=1 THEN 'Appointment Regular' WHEN ACTIVITYTYPEID=2 THEN 'Task Regular' WHEN ACTIVITYTYPEID=3 THEN 'Appointment Recurring' ELSE 'Task Recurring' END AS ActivityTypeID,
-			Com_Status.Status as StatusID,Subject,Case when Priority=0 then 'Low' when Priority=1 then 'Normal' else 'High' End as Priority,PctComplete [Complete%],Location,
-			case when IsAllDayActivity=0 then 'No' else 'Yes' end IsAllDayActivity,CustomerID,Remarks,Convert(Datetime,StartDate) StartDate,convert(Datetime,EndDate) EndDate,StartTime,EndTime
-			,A.Alpha1,A.Alpha2,A.Alpha3,A.Alpha4,A.Alpha5,A.Alpha6,A.Alpha7,A.Alpha8,A.Alpha9,A.Alpha10
-			,A.Alpha11,A.Alpha12,A.Alpha13,A.Alpha14,A.Alpha15,A.Alpha16,A.Alpha17,A.Alpha18,A.Alpha19,A.Alpha20
-			,A.Alpha21,A.Alpha22,A.Alpha23,A.Alpha24,A.Alpha25,A.Alpha26,A.Alpha27,A.Alpha28,A.Alpha29,A.Alpha30
-			From crm_activities A with(nolock)
+			set @SQL='select NodeID,Convert(Datetime,Date) Date,Convert(Datetime,Date) FILTERDATE,FeedBack'
+			IF(LEN(@AlpCols)>0)
+				SET @SQL+=','+@AlpCols
+			SET @SQL+=' from  CRM_Feedback WITH(NOLOCK) 
+			where CCID=86 and CCNodeID='+convert(nvarchar,@DocumentSeqNo)
+			exec(@SQL)
+
+			
+			SET @AlpCols=''
+			SELECT @AlpCols=STUFF( (SELECT ',A.'+Name FROM Sys.Columns WITH(NOLOCK) WHERE object_id=OBJECT_ID('crm_activities') AND Name Like 'Alpha%'  FOR XML PATH('') ),1,1,'') 
+
+			set @SQL='SELECT A.ActivityID,CASE WHEN ACTIVITYTYPEID=1 THEN ''Appointment Regular'' WHEN ACTIVITYTYPEID=2 THEN ''Task Regular'' WHEN ACTIVITYTYPEID=3 THEN ''Appointment Recurring'' ELSE ''Task Recurring'' END AS ActivityTypeID,
+			Com_Status.Status as StatusID,Subject,Case when Priority=0 then ''Low'' when Priority=1 then ''Normal'' else ''High'' End as Priority,PctComplete [Complete%],Location,
+			case when IsAllDayActivity=0 then ''No'' else ''Yes'' end IsAllDayActivity,CustomerID,Remarks,Convert(Datetime,StartDate) StartDate,convert(Datetime,EndDate) EndDate,StartTime,EndTime'
+			IF(LEN(@AlpCols)>0)
+				SET @SQL+=','+@AlpCols
+			SET @SQL+=' From crm_activities A with(nolock)
 			Left Join Com_Status WITH(NOLOCK) on A.StatusID=Com_Status.StatusID
-			where  A.costcenterid=86 and A.nodeid=convert(nvarchar,@DocumentSeqNo)
-
+			where  A.costcenterid=86 and A.nodeid='+convert(nvarchar,@DocumentSeqNo)
+			exec(@SQL)
+			
 			select	NT.Note Notes From COM_Notes NT WITH(NOLOCK) where  NT.FeatureID=86 and NT.FeaturePK=convert(nvarchar,@DocumentSeqNo)
 			    
-		    select CVR.*,Convert(Datetime,CVR.Date) as CVRDate,P.ProductName
+		    set @SQL='select CVR.*,Convert(Datetime,CVR.Date) as CVRDate,P.ProductName
 		    from CRM_LeadCVRDetails CVR with(nolock)
 		    inner join INV_Product P WITH(NOLOCK) on CVR.Product=P.ProductID
-		    where CVR.CCNodeID=@DocumentSeqNo and CVR.CCID=86
+		    where CVR.CCID=86 and CVR.CCNodeID='+convert(nvarchar,@DocumentSeqNo)
+			exec(@SQL) 
 		    
 		    --assigned users email address
 		    exec spCOM_GetAssignedUserEmailAddress 86,@DocumentSeqNo
@@ -398,7 +430,7 @@ SET NOCOUNT ON;
 			end
 			
 			declare @Alphatable table(id int identity(1,1),name nvarchar(50),field nvarchar(50))
-			declare @AlphaColumns nvarchar(max),@Alphai bigint,@AlphaCnt bigint
+			declare @AlphaColumns nvarchar(max),@Alphai INT,@AlphaCnt INT
 
 			insert into @Alphatable (name,field)
 			select Usercolumnname,Syscolumnname from adm_Costcenterdef WITH(NOLOCK)
@@ -437,7 +469,7 @@ SET NOCOUNT ON;
 			exec(@SQL)
 						
 			--Product Mapping Fields
-			Declare @PrefID bigint,@PrefTable nvarchar(50),@CP nvarchar(max),@CPFeatureName nvarchar(100),@CPCustomQuery3 nvarchar(max),@CPi int ,@CPCNT int,@CPTable nvarchar(100),@CPTabRef nvarchar(3),@CPCCID int
+			Declare @PrefID INT,@PrefTable nvarchar(50),@CP nvarchar(max),@CPFeatureName nvarchar(100),@CPCustomQuery3 nvarchar(max),@CPi int ,@CPCNT int,@CPTable nvarchar(100),@CPTabRef nvarchar(3),@CPCCID int
 			Declare @CPCustomTable table(ID int identity(1,1),CostCenterID int)
 			insert into @CPCustomTable(CostCenterID)
 			select ColumnCostCenterID from adm_CostCenterDef WITH(NOLOCK) where CostCenterID=115 and SysColumnName  like '%CCNID%' and ColumnCostCenterID>50000 and IsColumnInUse=1 
@@ -469,7 +501,7 @@ SET NOCOUNT ON;
 			end
 			
 			declare @Alpha1table table(id int identity(1,1),name nvarchar(50),field nvarchar(50))
-			declare @Alpha1Columns nvarchar(max),@Alpha1i bigint,@Alpha1Cnt bigint
+			declare @Alpha1Columns nvarchar(max),@Alpha1i INT,@Alpha1Cnt INT
 
 			insert into @Alpha1table (name,field)
 			select Usercolumnname,Syscolumnname from adm_Costcenterdef WITH(NOLOCK)
@@ -557,7 +589,7 @@ SET NOCOUNT ON;
 			LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on A.AccountID=CC.NodeID and CC.CostCenterID=2
 			'+@ExtJoinQuery+' '+@CustomQuery1+'
 			WHERE A.AccountID='+convert(nvarchar,@DocumentSeqNo)
-			--	Print(@SQL)
+			--Print(@SQL)
 			exec(@SQL)
 			
 		END
@@ -600,6 +632,21 @@ SET NOCOUNT ON;
 		END
 		ELSE IF @DocumentID=50051
 		BEGIN
+			DECLARE @EMPID INT
+
+			if(@IsFSDoc=1)
+			begin
+				set @SQL='SELECT @EMPID=CC.dcCCNID51 FROM INV_DocDetails I WITH(NOLOCK)
+						JOIN COM_DocCCData CC WITH(NOLOCK) ON CC.InvDocDetailsID=I.InvDocDetailsID
+						WHERE I.CostCenterID=40095 AND DOCID='+convert(nvarchar,@DocumentSeqNo)
+
+						EXEC sp_executesql @SQL,N'@EMPID INT OUTPUT',@EMPID OUTPUT
+			end
+			ELSE
+			BEGIN
+				SET @EMPID=@DocumentSeqNo
+			END
+
 			-- 0 GETTING EMPLOYEE MASTER DETAILS
 			SELECT @TABLENAME=TABLENAME FROM ADM_FEATURES WITH(NOLOCK) WHERE FEATUREID=@DocumentID
 			set @SQL=' SELECT '+@ExtSelectQuery+'AG.Name PARENTID,ST.Status StatusID,convert(datetime,A.CreatedDate) CreatedDate,convert(datetime,A.ModifiedDate) ModifiedDate,
@@ -620,7 +667,7 @@ SET NOCOUNT ON;
 			LEFT JOIN '+@TABLENAME+' AG WITH(NOLOCK) ON AG.NODEID=A.PARENTID		 
 			LEFT JOIN COM_CC50051 RM WITH(NOLOCK) ON RM.NodeID=A.RptManager
 			LEFT JOIN COM_CC50068 BK WITH(NOLOCK) ON BK.NodeID=A.iBank
-			LEFT JOIN COM_Contacts C WITH(NOLOCK) ON C.FeaturePK='+convert(nvarchar,@DocumentSeqNo)+' AND C.FeatureID='+CONVERT(NVARCHAR,@DocumentID)+' AND C.AddressTypeID=1
+			LEFT JOIN COM_Contacts C WITH(NOLOCK) ON C.FeaturePK='+convert(nvarchar,@EMPID)+' AND C.FeatureID='+CONVERT(NVARCHAR,@DocumentID)+' AND C.AddressTypeID=1
 			LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on A.NODEID=CC.NodeID and CC.CostCenterID='+CONVERT(NVARCHAR,@DocumentID)+'
 			LEFT JOIN COM_STATUS ST WITH(NOLOCK) ON A.StatusID=ST.StatusID
 			LEFT JOIN COM_LOOKUP L104 WITH(NOLOCK) on A.EmpType=L104.NodeID
@@ -628,7 +675,7 @@ SET NOCOUNT ON;
 			LEFT JOIN COM_LOOKUP L114 WITH(NOLOCK) on A.Religion=L114.NodeID
 		 
 			'+@ExtJoinQuery+'
-			WHERE A.NODEID='+convert(nvarchar,@DocumentSeqNo)
+			WHERE A.NODEID='+convert(nvarchar,@EMPID)
 			--select @SQL
 			--Print(@SQL)
 			exec(@SQL)
@@ -640,7 +687,7 @@ SET NOCOUNT ON;
 			LEFT JOIN COM_LookUp b WITH(NOLOCK) on b.NodeID=a.Field2
 			LEFT JOIN COM_LookUp b1 WITH(NOLOCK) on b1.NodeID=a.Field3
 			LEFT JOIN COM_LookUp b2 WITH(NOLOCK) on b2.NodeID=a.Field4
-			WHERE a.DType=251 AND a.EmployeeID='+convert(nvarchar,@DocumentSeqNo)
+			WHERE a.DType=251 AND a.EmployeeID='+convert(nvarchar,@EMPID)
 			
 			exec(@SQL)
 			
@@ -650,20 +697,20 @@ SET NOCOUNT ON;
 			FROM PAY_EmpDetail a WITH(NOLOCK) 
 			LEFT JOIN COM_LookUp b WITH(NOLOCK) on b.NodeID=a.Field3
 			LEFT JOIN COM_LookUp b1 WITH(NOLOCK) on b1.NodeID=a.Field4
-			WHERE a.DType=252 AND a.EmployeeID='+convert(nvarchar,@DocumentSeqNo)
+			WHERE a.DType=252 AND a.EmployeeID='+convert(nvarchar,@EMPID)
 			exec(@SQL)
 			
 			-- 3 GETTING PREVIOUS EMPLOYMENT DETAILS
 			set @SQL='SELECT Field1 as FromDate,Field2 as ToDate,Field3 as Company,Field4 as CompanyDetails, Field5 as Location,
 			Field6 as Department, Field7 as Designation, Field8 as Grade, Field9 as ReferenceNo, Field10 as ReferenceName, Field11 as Remarks,Field12 as LeavingReason
 			FROM PAY_EmpDetail a WITH(NOLOCK) 
-			WHERE a.DType=253 AND a.EmployeeID='+convert(nvarchar,@DocumentSeqNo)
+			WHERE a.DType=253 AND a.EmployeeID='+convert(nvarchar,@EMPID)
 			exec(@SQL)
 			
 			-- 4 GETTING MEDICAL HISTORY DETAILS
 			set @SQL='SELECT Field1 as MedicalTest,Field2 as ValidTill,Field3 as Result,Field4 as Remarks
 			FROM PAY_EmpDetail a WITH(NOLOCK) 
-			WHERE a.DType=254 AND a.EmployeeID='+convert(nvarchar,@DocumentSeqNo)
+			WHERE a.DType=254 AND a.EmployeeID='+convert(nvarchar,@EMPID)
 			exec(@SQL)
 
 			-- 5 GETTING DEPENDENT INFO DETAILS
@@ -674,18 +721,19 @@ SET NOCOUNT ON;
 			FROM PAY_EmpDetail a WITH(NOLOCK) 
 			LEFT JOIN COM_LookUp b WITH(NOLOCK) on b.NodeID=a.Field5
 			LEFT JOIN COM_LookUp b1 WITH(NOLOCK) on b1.NodeID=a.Field15
-			WHERE a.DType=255 AND a.EmployeeID='+convert(nvarchar,@DocumentSeqNo)
+			WHERE a.DType=255 AND a.EmployeeID='+convert(nvarchar,@EMPID)
 			exec(@SQL)
 
 			-- 6 GETTING MONTHLY PAYROLL DETAILS
 
-			DECLARE @mpDocID BIGINT
-			select top 1 @mpDocID=DocID from INV_DocDetails D with(nolock) 
+			DECLARE @mpDocID INT
+			set @SQL='select top 1 @mpDocID=DocID from INV_DocDetails D with(nolock) 
 			join COM_DocCCDATA DCC with(nolock) on D.InvDocDetailsID=DCC.InvDocDetailsID
 			join COM_DocTextDATA TXT with(nolock) on D.InvDocDetailsID=TXT.InvDocDetailsID
-			where CostCenterID=40054 and DCC.dcCCNID51=@DocumentSeqNo and D.DueDate<=GETDATE()
-			order by D.DueDate DESC 
-
+			where CostCenterID=40054 and DCC.dcCCNID51='+convert(nvarchar,@EMPID)+' and D.DueDate<=GETDATE()
+			order by D.DueDate DESC'
+			EXEC sp_executesql @SQL,N'@mpDocID INT OUTPUT',@mpDocID OUTPUT
+			
 			IF(@mpDocID IS NULL)
 				SET @mpDocID=0
 
@@ -703,23 +751,30 @@ SET NOCOUNT ON;
 			set @SQL='
 			declare @EffectFrom float
 			SELECT top 1 @EffectFrom=EffectFrom FROM PAY_EmpPay WITH(NOLOCK)
-			where EmployeeID='+convert(nvarchar,@DocumentSeqNo)+' and EffectFrom<=GETDATE()
+			where EmployeeID='+convert(nvarchar,@EMPID)+' and EffectFrom<=GETDATE()
 			order by EffectFrom desc
 			
 			SELECT *,0.0 EmptyData FROM PAY_EmpPay D WITH(NOLOCK)
-			where D.EmployeeID='+convert(nvarchar,@DocumentSeqNo)+' and EffectFrom=@EffectFrom '
+			where D.EmployeeID='+convert(nvarchar,@EMPID)+' and EffectFrom=@EffectFrom '
 			EXEC(@SQL)
 			
 			-- 8 GETTING FINAL SETTLEMENT DETAILS FROM DOCUMENT
 			set @SQL='
-			SELECT EMP.Code as EmpCode,EMP.Name as EmpName,CONVERT(DATETIME,a.DocDate) as cDocDate,*
+			SELECT EMP.Code as EmpCode,EMP.Name as EmpName,CONVERT(DATETIME,a.DocDate) as cDocDate,CONVERT(DATETIME,a.CreatedDate) cCreatedDate,CONVERT(DATETIME,a.ModifiedDate) cModifiedDate,*
 			FROM INV_DocDetails a WITH(NOLOCK) 
 			JOIN COM_DocCCData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
 			JOIN COM_DocNumData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
 			JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
 			JOIN COM_CC50051 EMP WITH(NOLOCK) on EMP.NodeID=b.dcCCNID51
-			WHERE a.CostCenterID=40095 and b.dcCCNID51='+convert(nvarchar,@DocumentSeqNo)
+			WHERE a.CostCenterID=40095 '
+
+			IF(@IsFSDoc=1)
+				SET @SQL=@SQL+' and DOCID='+convert(nvarchar,@DocumentSeqNo)
+			ELSE
+				SET @SQL=@SQL+' and b.dcCCNID51='+convert(nvarchar,@EMPID)
+			
 			EXEC(@SQL)
+
 
 			-- 9 GETTING ALL APPRAISALS
 			set @SQL='
@@ -727,18 +782,29 @@ SET NOCOUNT ON;
 			ISNULL(L.Name,'''') as cAppraisalType,0.0 EmptyData 
 			FROM PAY_EmpPay D WITH(NOLOCK) 
 			LEFT JOIN COM_Lookup L WITH(NOLOCK) ON L.NodeID=D.AppraisalType
-			WHERE D.EmployeeID='+convert(nvarchar,@DocumentSeqNo) +' ORDER BY EffectFrom DESC '
+			WHERE D.EmployeeID='+convert(nvarchar,@EMPID) +' ORDER BY EffectFrom DESC '
 			EXEC(@SQL)
 
-			--10
+			--10 NoticePay
 			set @SQL='SELECT D.VoucherType,N.*,convert(float,T.dcAlpha1) BasicMonthly,convert(float,T.dcAlpha3) NetSalary,T.*
 			FROM INV_DocDetails D WITH(NOLOCK) LEFT JOIN
 			INV_DocDetails LD WITH(NOLOCK) ON LD.InvDocDetailsID=D.LinkedInvDocDetailsID LEFT JOIN
 			COM_DocTextData T WITH(NOLOCK) ON T.InvDocDetailsID=D.InvDocDetailsID LEFT JOIN
 			COM_DocCCDATA CC WITH(NOLOCK) ON CC.InvDocDetailsID=D.InvDocDetailsID LEFT JOIN
 			PAY_DocNumData N WITH(NOLOCK) ON N.InvDocDetailsID=D.InvDocDetailsID
-			WHERE D.CostCenterID=40054 and D.StatusID=369 AND CC.dcCCNID51='+convert(nvarchar,@DocumentSeqNo) +'
+			WHERE D.CostCenterID=40054 and D.StatusID=369 AND CC.dcCCNID51='+convert(nvarchar,@EMPID) +'
 			AND ISNULL(T.dcAlpha23,'''')=''NoticePay'''
+			EXEC(@SQL)
+
+			--11 UnProcessed Salary
+			set @SQL='SELECT D.VoucherType,N.*,convert(float,T.dcAlpha1) BasicMonthly,convert(float,T.dcAlpha3) NetSalary,T.*
+			FROM INV_DocDetails D WITH(NOLOCK) LEFT JOIN
+			INV_DocDetails LD WITH(NOLOCK) ON LD.InvDocDetailsID=D.LinkedInvDocDetailsID LEFT JOIN
+			COM_DocTextData T WITH(NOLOCK) ON T.InvDocDetailsID=D.InvDocDetailsID LEFT JOIN
+			COM_DocCCDATA CC WITH(NOLOCK) ON CC.InvDocDetailsID=D.InvDocDetailsID LEFT JOIN
+			PAY_DocNumData N WITH(NOLOCK) ON N.InvDocDetailsID=D.InvDocDetailsID
+			WHERE D.CostCenterID=40054 and D.StatusID=369 AND CC.dcCCNID51='+convert(nvarchar,@EMPID) +'
+			AND ISNULL(T.dcAlpha23,'''')=''UnProcessed'''
 			EXEC(@SQL)
 					
 		END
@@ -774,7 +840,7 @@ SET NOCOUNT ON;
 				SET @SQL=''
 				SELECT @SQL=@SQL+',A.'+a.name
 				FROM sys.columns a
-				WHERE a.object_id= object_id(@TABLENAME) and a.name LIKE 'ccAlpha%'
+				WHERE a.object_id= object_id(@TABLENAME) and (a.name LIKE 'ccAlpha%' or a.name in ('UserNameAlpha','PasswordAlpha'))
 					
 				set @SQL=' SELECT '+@ExtSelectQuery+'A.Code,A.Name,A.AliasName,A.CreditDays,A.CreditLimit,A.DebitDays,A.DebitLimit,
 				case when A.IsGroup=''0'' then ''False'' else ''True'' END AS IsGroup,SalesAccount.AccountName SalesAccount 
@@ -814,109 +880,128 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 		END
 		ELSE IF @DocumentID=89
 		BEGIN
-			set @SQL='
-				SELECT '+@ExtSelectQuery+'A.Code,A.Subject,convert(datetime,A.Date) as Date,A.Company,O.COMPANY AS [Group],S.STATUS as StatusID,C.Name CampaignID,A.EstimatedRevenue,
-					A.CreatedBy,CONVERT(DATETIME,A.CreatedDate) CreatedDate,
-				CO.NAME CurrencyID,LD.Company as LeadID,P.Quantity as PRODUCT_Quantity,P.Remarks PRODUCT_Remarks,PRO.ProductName PRODUCT_ProductName,U.BaseName PRODUCT_UOM, convert(datetime,A.ESTIMATEDCLOSEDATE) as EstimatedCloseDate,
-		       A.ModifiedBy,CONVERT(DATETIME,A.ModifiedDate) ModifiedDate,
-				L1.NAME AS ProbabilityLookUpID,L2.NAME AS RatingLookUpID,convert(datetime,A.CloseDate) as CloseDate, L3.NAME AS ReasonLookUpID,L4.Name as Contact'+@CustomQuery3+',EXT.*
-				FROM CRM_OPPORTUNITIES A  WITH(NOLOCK)
-				lEFT JOIN CRM_OPPORTUNITIES O  WITH(NOLOCK) on A.PARENTID=O.OPPORTUNITYID
-				LEFT JOIN CRM_CONTACTS D WITH(NOLOCK) on D.FeatureID=89 AND D.FeaturePK='+convert(nvarchar,@DocumentSeqNo)+'
-				lEFT JOIN crm_leads LD  WITH(NOLOCK) on A.leadid=LD.leadid
-				LEFT JOIN COM_STATUS S WITH(NOLOCK) on A.StatusID=S.StatusID
-				LEFT JOIN CRM_Campaigns C WITH(NOLOCK) on A.CampaignID=C.CampaignID
-				LEFT JOIN COM_CURRENCY CO WITH(NOLOCK) on A.CURRENCYID=CO.CURRENCYID
-				LEFT JOIN COM_LOOKUP L1 WITH(NOLOCK) on A.ProbabilityLookUpID=L1.NodeID
-				LEFT JOIN COM_LOOKUP L2 WITH(NOLOCK) on A.RatingLookUpID=L2.NodeID
-				LEFT JOIN COM_LOOKUP L3 WITH(NOLOCK) on A.REASONLookUpID=L3.NodeID
-				LEFT JOIN COM_LOOKUP L4 WITH(NOLOCK) on L4.NodeID=53
-				LEFT JOIN CRM_ProductMapping P WITH(NOLOCK) on P.CostcenterID=89 AND P.CCNodeID=A.OpportunityID 
-				LEFT JOIN INV_Product PRO WITH(NOLOCK) on P.ProductID=PRO.ProductID
-				LEFT JOIN COM_UOM U WITH(NOLOCK) on P.UOMID=U.UOMID
-				LEFT JOIN CRM_OpportunitiesExtended EXT WITH(NOLOCK) on A.OPPORTUNITYID=EXT.OPPORTUNITYID
-				LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on A.OPPORTUNITYID=CC.NodeID and CC.CostCenterID=89'
-				+@ExtJoinQuery+@CustomQuery1+'
-				where A.OPPORTUNITYID='+convert(nvarchar,@DocumentSeqNo)
-				Print(@SQL)
-				exec(@SQL)
-				
-				select Convert(Datetime,Date) Date,Convert(Datetime,Date) FILTERDATE,FeedBack,Alpha1,Alpha2,Alpha3,Alpha4,Alpha5,Alpha6,Alpha7,Alpha8,Alpha9,Alpha10,Alpha11,Alpha12,Alpha13,Alpha14,Alpha15
-						,Alpha16,Alpha17,Alpha18,Alpha19,Alpha20,Alpha21,Alpha22,Alpha23,Alpha24,Alpha25,Alpha26,Alpha27,Alpha28,Alpha29,Alpha30,Alpha31,Alpha32,Alpha33,Alpha34
-						,Alpha35,Alpha36,Alpha37,Alpha38,Alpha39,Alpha40,Alpha41,Alpha42,Alpha43,Alpha44,Alpha45,Alpha46,Alpha47,Alpha48,Alpha49,Alpha50
-						 from  CRM_Feedback where CCNodeID=convert(nvarchar,@DocumentSeqNo) and CCID=89
-				
-				SELECT A.ActivityID,CASE WHEN ACTIVITYTYPEID=1 THEN 'Appointment Regular' WHEN ACTIVITYTYPEID=2 THEN 'Task Regular' WHEN ACTIVITYTYPEID=3 THEN 'Appointment Recurring' ELSE 'Task Recurring' END AS ActivityTypeID,
-				   Com_Status.Status as StatusID,Subject,Case when Priority=0 then 'Low' when Priority=1 then 'Normal' else 'High' End as Priority,PctComplete [Complete%],Location,
-					case when IsAllDayActivity=0 then 'No' else 'Yes' end IsAllDayActivity,CustomerID,Remarks,Convert(Datetime,StartDate) StartDate,convert(Datetime,EndDate) EndDate,StartTime,EndTime
-					,A.Alpha1,A.Alpha2,A.Alpha3,A.Alpha4,A.Alpha5,A.Alpha6,A.Alpha7,A.Alpha8,A.Alpha9,A.Alpha10
-      ,A.Alpha11,A.Alpha12,A.Alpha13,A.Alpha14,A.Alpha15,A.Alpha16,A.Alpha17,A.Alpha18,A.Alpha19,A.Alpha20
-      ,A.Alpha21,A.Alpha22,A.Alpha23,A.Alpha24,A.Alpha25,A.Alpha26,A.Alpha27,A.Alpha28,A.Alpha29,A.Alpha30
-					From crm_activities A with(nolock)
-					Left Join Com_Status WITH(NOLOCK) on A.StatusID=Com_Status.StatusID
-					where  A.costcenterid=89 and A.nodeid=convert(nvarchar,@DocumentSeqNo)
+			set @SQL='SELECT '+@ExtSelectQuery+'A.Code,A.Subject,convert(datetime,A.Date) as Date,A.Company,O.COMPANY AS [Group],S.STATUS as StatusID,C.Name CampaignID,A.EstimatedRevenue,
+			A.CreatedBy,CONVERT(DATETIME,A.CreatedDate) CreatedDate,
+			CO.NAME CurrencyID,LD.Company as LeadID,P.Quantity as PRODUCT_Quantity,P.Remarks PRODUCT_Remarks,PRO.ProductName PRODUCT_ProductName,U.BaseName PRODUCT_UOM, convert(datetime,A.ESTIMATEDCLOSEDATE) as EstimatedCloseDate,
+			A.ModifiedBy,CONVERT(DATETIME,A.ModifiedDate) ModifiedDate,
+			L1.NAME AS ProbabilityLookUpID,L2.NAME AS RatingLookUpID,convert(datetime,A.CloseDate) as CloseDate, L3.NAME AS ReasonLookUpID,L4.Name as Contact'+@CustomQuery3+',EXT.*
+			FROM CRM_OPPORTUNITIES A  WITH(NOLOCK)
+			lEFT JOIN CRM_OPPORTUNITIES O  WITH(NOLOCK) on A.PARENTID=O.OPPORTUNITYID
+			LEFT JOIN CRM_CONTACTS D WITH(NOLOCK) on D.FeatureID=89 AND D.FeaturePK='+convert(nvarchar,@DocumentSeqNo)+'
+			lEFT JOIN crm_leads LD  WITH(NOLOCK) on A.leadid=LD.leadid
+			LEFT JOIN COM_STATUS S WITH(NOLOCK) on A.StatusID=S.StatusID
+			LEFT JOIN CRM_Campaigns C WITH(NOLOCK) on A.CampaignID=C.CampaignID
+			LEFT JOIN COM_CURRENCY CO WITH(NOLOCK) on A.CURRENCYID=CO.CURRENCYID
+			LEFT JOIN COM_LOOKUP L1 WITH(NOLOCK) on A.ProbabilityLookUpID=L1.NodeID
+			LEFT JOIN COM_LOOKUP L2 WITH(NOLOCK) on A.RatingLookUpID=L2.NodeID
+			LEFT JOIN COM_LOOKUP L3 WITH(NOLOCK) on A.REASONLookUpID=L3.NodeID
+			LEFT JOIN COM_LOOKUP L4 WITH(NOLOCK) on L4.NodeID=53
+			LEFT JOIN CRM_ProductMapping P WITH(NOLOCK) on P.CostcenterID=89 AND P.CCNodeID=A.OpportunityID 
+			LEFT JOIN INV_Product PRO WITH(NOLOCK) on P.ProductID=PRO.ProductID
+			LEFT JOIN COM_UOM U WITH(NOLOCK) on P.UOMID=U.UOMID
+			LEFT JOIN CRM_OpportunitiesExtended EXT WITH(NOLOCK) on A.OPPORTUNITYID=EXT.OPPORTUNITYID
+			LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on A.OPPORTUNITYID=CC.NodeID and CC.CostCenterID=89'
+			+@ExtJoinQuery+@CustomQuery1+'
+			where A.OPPORTUNITYID='+convert(nvarchar,@DocumentSeqNo)
+			Print(@SQL)
+			exec(@SQL)
+			
+			
+			SET @AlpCols=''
+			SELECT @AlpCols=STUFF( (SELECT ','+Name FROM Sys.Columns WITH(NOLOCK) WHERE object_id=OBJECT_ID('CRM_Feedback') AND Name Like 'Alpha%'  FOR XML PATH('') ),1,1,'') 
+			
+			set @SQL='select NodeID,Convert(Datetime,Date) Date,Convert(Datetime,Date) FILTERDATE,FeedBack'
+			IF(LEN(@AlpCols)>0)
+				SET @SQL+=','+@AlpCols
+			SET @SQL+=' from  CRM_Feedback WITH(NOLOCK) 
+			where CCID=89 and CCNodeID='+convert(nvarchar,@DocumentSeqNo)
+			exec(@SQL)
+
+			SET @AlpCols=''
+			SELECT @AlpCols=STUFF( (SELECT ',A.'+Name FROM Sys.Columns WITH(NOLOCK) WHERE object_id=OBJECT_ID('crm_activities') AND Name Like 'Alpha%'  FOR XML PATH('') ),1,1,'') 
+
+			set @SQL='SELECT A.ActivityID,CASE WHEN ACTIVITYTYPEID=1 THEN ''Appointment Regular'' WHEN ACTIVITYTYPEID=2 THEN ''Task Regular'' WHEN ACTIVITYTYPEID=3 THEN ''Appointment Recurring'' ELSE ''Task Recurring'' END AS ActivityTypeID,
+			Com_Status.Status as StatusID,Subject,Case when Priority=0 then ''Low'' when Priority=1 then ''Normal'' else ''High'' End as Priority,PctComplete [Complete%],Location,
+			case when IsAllDayActivity=0 then ''No'' else ''Yes'' end IsAllDayActivity,CustomerID,Remarks,Convert(Datetime,StartDate) StartDate,convert(Datetime,EndDate) EndDate,StartTime,EndTime'
+			IF(LEN(@AlpCols)>0)
+				SET @SQL+=','+@AlpCols
+			SET @SQL+=' From crm_activities A with(nolock)
+			Left Join Com_Status WITH(NOLOCK) on A.StatusID=Com_Status.StatusID
+			where  A.costcenterid=89 and A.nodeid='+convert(nvarchar,@DocumentSeqNo)
+			exec(@SQL)
 					
-			    select	NT.Note Notes From COM_Notes NT WITH(NOLOCK) where  NT.FeatureID=89 and NT.FeaturePK=convert(nvarchar,@DocumentSeqNo)
+			select	NT.Note Notes From COM_Notes NT WITH(NOLOCK) where  NT.FeatureID=89 and NT.FeaturePK=convert(nvarchar,@DocumentSeqNo)
 		END
 		ELSE IF @DocumentID=73
 		BEGIN
-			set @SQL='
-				SELECT '+@ExtSelectQuery+'convert(datetime,A.CreateDate) as CreateDate,convert(datetime,A.EstimateDate) as EstimateDate,convert(datetime,A.EstComplDate) as EstComplDate,convert(datetime,A.ActualComplDate) as ActualComplDate,
-				A.CreatedBy,CONVERT(DATETIME,A.CreatedDate) CreatedDate,A.Subject,
-				A.CaseNumber,S.STATUS as StatusID,L1.NAME AS CaseTypeLookupID,L2.NAME AS CaseOriginLookupID, L3.NAME AS CasePriorityLookupID,O.CaseNumber as ParentID,
-				CASE WHEN A.CustomerMode=2 THEN CCU.CustomerName ELSE CU.AccountName end as CustomerID,SV.VOUCHERNO as SvcContractID,PR.ProductName as CaseProductName,convert(datetime,A.CreatedDate) as CreatedDate,
-				convert(nvarchar,A.ContractLineID)+''-''+PR.ProductName as ContractLineID,A.SerialNumber,L4.Name as ServiceLvlLookupID,A.ConsumedUnits,L5.Name as BillingMethod,
-				A.ModifiedBy,CONVERT(DATETIME,A.ModifiedDate) ModifiedDate,
-				A.CreatedBy as AssignedTo,convert(datetime,A.CreateDate) as AssignedDate,A.FeedBack,A.Suggestion,A.Comments,convert(datetime,A.WaiveDate) as WaiveDate'+@CustomQuery3+',
-				P.Quantity as PRODUCT_Quantity,P.Remarks PRODUCT_Remarks,PRO.ProductName PRODUCT_ProductName,U.BaseName PRODUCT_UOM,A.CreatedBy as [Owner],EXT.*
-				FROM CRM_CASES A  WITH(NOLOCK)
-				lEFT JOIN CRM_CASES O  WITH(NOLOCK) on A.PARENTID=O.CaseID
-				LEFT JOIN COM_STATUS S WITH(NOLOCK) on A.StatusID=S.StatusID
-				LEFT JOIN COM_LOOKUP L1 WITH(NOLOCK) on A.CaseTypeLookupID=L1.NodeID
-				LEFT JOIN COM_LOOKUP L2 WITH(NOLOCK) on A.CaseOriginLookupID=L2.NodeID
-				LEFT JOIN COM_LOOKUP L3 WITH(NOLOCK) on A.CasePriorityLookupID=L3.NodeID
-				LEFT JOIN COM_LOOKUP L4 WITH(NOLOCK) on A.ServiceLvlLookupID=L4.NodeID
-				LEFT JOIN COM_LOOKUP L5 WITH(NOLOCK) on A.BillingMethod=L5.NodeID
-				LEFT JOIN Acc_Accounts CU WITH(NOLOCK) on A.CustomerID=CU.AccountID
-				LEFT JOIN CRM_Customer CCU WITH(NOLOCK) on A.CustomerID=CCU.CustomerID
-				LEFT JOIN INV_DOCDETAILS SV WITH(NOLOCK) on A.SvcContractID=SV.DOCID AND SV.DOCUMENTTYPE=35
-				LEFT JOIN CRM_ProductMapping P WITH(NOLOCK) on P.CostcenterID=73 AND P.CCNodeID=A.CaseID
-				LEFT JOIN INV_Product PR WITH(NOLOCK) on A.ProductID=PR.ProductID
-				LEFT JOIN INV_Product PRO WITH(NOLOCK) on P.ProductID=PRO.ProductID
-				LEFT JOIN COM_UOM U WITH(NOLOCK) on P.UOMID=U.UOMID
-				LEFT JOIN CRM_CasesExtended EXT WITH(NOLOCK) on A.CaseID=EXT.CaseID
-				LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on A.CaseID=CC.NodeID and CC.CostCenterID=73'
-				+@ExtJoinQuery+@CustomQuery1+'
-				where A.CaseID='+convert(nvarchar,@DocumentSeqNo)
-				--Print(@SQL)
-				EXEC(@SQL)
+			set @SQL='SELECT '+@ExtSelectQuery+'convert(datetime,A.CreateDate) as CreateDate,convert(datetime,A.EstimateDate) as EstimateDate,convert(datetime,A.EstComplDate) as EstComplDate,convert(datetime,A.ActualComplDate) as ActualComplDate,
+			A.CreatedBy,CONVERT(DATETIME,A.CreatedDate) CreatedDate,A.Subject,
+			A.CaseNumber,S.STATUS as StatusID,L1.NAME AS CaseTypeLookupID,L2.NAME AS CaseOriginLookupID, L3.NAME AS CasePriorityLookupID,O.CaseNumber as ParentID,
+			CASE WHEN A.CustomerMode=2 THEN CCU.CustomerName ELSE CU.AccountName end as CustomerID,SV.VOUCHERNO as SvcContractID,PR.ProductName as CaseProductName,convert(datetime,A.CreatedDate) as CreatedDate,
+			convert(nvarchar,A.ContractLineID)+''-''+PR.ProductName as ContractLineID,A.SerialNumber,L4.Name as ServiceLvlLookupID,A.ConsumedUnits,L5.Name as BillingMethod,
+			A.ModifiedBy,CONVERT(DATETIME,A.ModifiedDate) ModifiedDate,
+			A.CreatedBy as AssignedTo,convert(datetime,A.CreateDate) as AssignedDate,A.FeedBack,A.Suggestion,A.Comments,convert(datetime,A.WaiveDate) as WaiveDate'+@CustomQuery3+',
+			P.Quantity as PRODUCT_Quantity,P.Remarks PRODUCT_Remarks,PRO.ProductName PRODUCT_ProductName,U.BaseName PRODUCT_UOM,A.CreatedBy as [Owner],EXT.*
+			FROM CRM_CASES A  WITH(NOLOCK)
+			lEFT JOIN CRM_CASES O  WITH(NOLOCK) on A.PARENTID=O.CaseID
+			LEFT JOIN COM_STATUS S WITH(NOLOCK) on A.StatusID=S.StatusID
+			LEFT JOIN COM_LOOKUP L1 WITH(NOLOCK) on A.CaseTypeLookupID=L1.NodeID
+			LEFT JOIN COM_LOOKUP L2 WITH(NOLOCK) on A.CaseOriginLookupID=L2.NodeID
+			LEFT JOIN COM_LOOKUP L3 WITH(NOLOCK) on A.CasePriorityLookupID=L3.NodeID
+			LEFT JOIN COM_LOOKUP L4 WITH(NOLOCK) on A.ServiceLvlLookupID=L4.NodeID
+			LEFT JOIN COM_LOOKUP L5 WITH(NOLOCK) on A.BillingMethod=L5.NodeID
+			LEFT JOIN Acc_Accounts CU WITH(NOLOCK) on A.CustomerID=CU.AccountID
+			LEFT JOIN CRM_Customer CCU WITH(NOLOCK) on A.CustomerID=CCU.CustomerID
+			LEFT JOIN INV_DOCDETAILS SV WITH(NOLOCK) on A.SvcContractID=SV.DOCID AND SV.DOCUMENTTYPE=35
+			LEFT JOIN CRM_ProductMapping P WITH(NOLOCK) on P.CostcenterID=73 AND P.CCNodeID=A.CaseID
+			LEFT JOIN INV_Product PR WITH(NOLOCK) on A.ProductID=PR.ProductID
+			LEFT JOIN INV_Product PRO WITH(NOLOCK) on P.ProductID=PRO.ProductID
+			LEFT JOIN COM_UOM U WITH(NOLOCK) on P.UOMID=U.UOMID
+			LEFT JOIN CRM_CasesExtended EXT WITH(NOLOCK) on A.CaseID=EXT.CaseID
+			LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on A.CaseID=CC.NodeID and CC.CostCenterID=73'
+			+@ExtJoinQuery+@CustomQuery1+'
+			where A.CaseID='+convert(nvarchar,@DocumentSeqNo)
+			--Print(@SQL)
+			EXEC(@SQL)
 				
-				select Convert(Datetime,Date) Date,Convert(Datetime,Date) FILTERDATE,FeedBack,Alpha1,Alpha2,Alpha3,Alpha4,Alpha5,Alpha6,Alpha7,Alpha8,Alpha9,Alpha10,Alpha11,Alpha12,Alpha13,Alpha14,Alpha15
-						,Alpha16,Alpha17,Alpha18,Alpha19,Alpha20,Alpha21,Alpha22,Alpha23,Alpha24,Alpha25,Alpha26,Alpha27,Alpha28,Alpha29,Alpha30,Alpha31,Alpha32,Alpha33,Alpha34
-						,Alpha35,Alpha36,Alpha37,Alpha38,Alpha39,Alpha40,Alpha41,Alpha42,Alpha43,Alpha44,Alpha45,Alpha46,Alpha47,Alpha48,Alpha49,Alpha50
-						 from  CRM_Feedback where CCNodeID=convert(nvarchar,@DocumentSeqNo) and CCID=73
-				
-				SELECT A.ActivityID,CASE WHEN ACTIVITYTYPEID=1 THEN 'Appointment Regular' WHEN ACTIVITYTYPEID=2 THEN 'Task Regular' WHEN ACTIVITYTYPEID=3 THEN 'Appointment Recurring' ELSE 'Task Recurring' END AS ActivityTypeID,
-				   Com_Status.Status as StatusID,Subject,Case when Priority=0 then 'Low' when Priority=1 then 'Normal' else 'High' End as Priority,PctComplete [Complete%],Location,
-					case when IsAllDayActivity=0 then 'No' else 'Yes' end IsAllDayActivity,CustomerID,Remarks,Convert(Datetime,StartDate) StartDate,convert(Datetime,EndDate) EndDate,StartTime,EndTime
-					,A.Alpha1,A.Alpha2,A.Alpha3,A.Alpha4,A.Alpha5,A.Alpha6,A.Alpha7,A.Alpha8,A.Alpha9,A.Alpha10
-      ,A.Alpha11,A.Alpha12,A.Alpha13,A.Alpha14,A.Alpha15,A.Alpha16,A.Alpha17,A.Alpha18,A.Alpha19,A.Alpha20
-      ,A.Alpha21,A.Alpha22,A.Alpha23,A.Alpha24,A.Alpha25,A.Alpha26,A.Alpha27,A.Alpha28,A.Alpha29,A.Alpha30
-					From crm_activities A with(nolock)
-					Left Join Com_Status WITH(NOLOCK) on A.StatusID=Com_Status.StatusID
-					where  A.costcenterid=73 and A.nodeid=convert(nvarchar,@DocumentSeqNo)
+
+			SET @AlpCols=''
+			SELECT @AlpCols=STUFF( (SELECT ','+Name FROM Sys.Columns WITH(NOLOCK) WHERE object_id=OBJECT_ID('CRM_Feedback') AND Name Like 'Alpha%'  FOR XML PATH('') ),1,1,'') 
+
+			set @SQL='select CC.NodeID,Convert(Datetime,Date) Date,Convert(Datetime,Date) FILTERDATE,FeedBack,CC.CreatedBy'
+			IF(LEN(@AlpCols)>0)
+				SET @SQL+=','+@AlpCols
+			SET @SQL+=REPLACE(@CustomQuery3,'_Name','')+'
+			from  CRM_Feedback CC WITH(NOLOCK) '+@CustomQuery1+' 
+			where CCID=73 and CC.CCNodeID='+convert(nvarchar,@DocumentSeqNo)
+			print  @sql
+			exec(@SQL)
+
+			SET @AlpCols=''
+			SELECT @AlpCols=STUFF( (SELECT ',A.'+Name FROM Sys.Columns WITH(NOLOCK) WHERE object_id=OBJECT_ID('crm_activities') AND Name Like 'Alpha%'  FOR XML PATH('') ),1,1,'') 
+
+			set @SQL='SELECT A.ActivityID,CASE WHEN ACTIVITYTYPEID=1 THEN ''Appointment Regular'' WHEN ACTIVITYTYPEID=2 THEN ''Task Regular'' WHEN ACTIVITYTYPEID=3 THEN ''Appointment Recurring'' ELSE ''Task Recurring'' END AS ActivityTypeID,
+			Com_Status.Status as StatusID,Subject,Case when Priority=0 then ''Low'' when Priority=1 then ''Normal'' else ''High'' End as Priority,PctComplete [Complete%],Location,
+			case when IsAllDayActivity=0 then ''No'' else ''Yes'' end IsAllDayActivity,CustomerID,Remarks,Convert(Datetime,StartDate) StartDate,convert(Datetime,EndDate) EndDate,StartTime,EndTime'
+			IF(LEN(@AlpCols)>0)
+				SET @SQL+=','+@AlpCols
+			SET @SQL+=' From crm_activities A with(nolock)
+			Left Join Com_Status WITH(NOLOCK) on A.StatusID=Com_Status.StatusID
+			where  A.costcenterid=73 and A.nodeid='+convert(nvarchar,@DocumentSeqNo)
+			exec(@SQL)
 					
-			    select	NT.Note Notes From COM_Notes NT WITH(NOLOCK) where  NT.FeatureID=73 and NT.FeaturePK=convert(nvarchar,@DocumentSeqNo)
-			    
-			    --assigned users email address
-			    exec spCOM_GetAssignedUserEmailAddress 73,@DocumentSeqNo
-			    
-			   SELECT ST.ServiceName,R.Reason,STM.VoiceOfCustomer,STM.TechinicianComments,
-				T.Name Technician FROM dbo.CRM_CaseSvcTypeMap STM WITH(NOLOCK) 
-				LEFT JOIN CRM_ServiceTypes ST with(nolock) ON ST.ServiceTypeID=STM.ServiceTypeID 
-				LEFT JOIN CRM_ServiceReasons R with(nolock) ON R.ServiceReasonID=STM.ServiceReasonID 
-				left join COM_CC50019 t with(nolock) on t.NodeID=STM.Techincian
-				where caseid=@DocumentSeqNo
+		    select	NT.Note Notes From COM_Notes NT WITH(NOLOCK) where  NT.FeatureID=73 and NT.FeaturePK=convert(nvarchar,@DocumentSeqNo)
+		    
+		    --assigned users email address
+		    exec spCOM_GetAssignedUserEmailAddress 73,@DocumentSeqNo
+		    
+			set @SQL='SELECT ST.ServiceName,R.Reason,STM.VoiceOfCustomer,STM.TechinicianComments,
+			T.Name Technician FROM dbo.CRM_CaseSvcTypeMap STM WITH(NOLOCK) 
+			LEFT JOIN CRM_ServiceTypes ST with(nolock) ON ST.ServiceTypeID=STM.ServiceTypeID 
+			LEFT JOIN CRM_ServiceReasons R with(nolock) ON R.ServiceReasonID=STM.ServiceReasonID 
+			left join COM_CC50019 t with(nolock) on t.NodeID=STM.Techincian
+			where caseid='+convert(nvarchar,@DocumentSeqNo)
+			exec(@SQL)
   
   
 		END
@@ -935,6 +1020,9 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 			if @LandLord is null
 				set @LandLord='COM_Location'
 			declare @PK nvarchar(20),@EXTPK nvarchar(20),@SELECT nvarchar(max),@TblName1 nvarchar(30),@TblName2 nvarchar(30),@TblName3 nvarchar(30),@TblName4 nvarchar(30)
+			declare @j nvarchar(50),@SecurityDeposit FLOAT
+			set @j=(select tablename from adm_Features WITH(NOLOCK) where featureid=(select value from adm_globalpreferences with(nolock) where Name='DepositLinkDimension'))
+			
 			if @DocumentID=103 OR @DocumentID=129
 			begin
 				set @PK='QuotationID'
@@ -944,20 +1032,56 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 				set @TblName3='REN_QuotationParticulars'
 				set @TblName4='REN_QuotationPayTerms'
 				set @SELECT='convert(Datetime,L.Date) Date,graceperiod,L.Prefix,L.Number,CONVERT(DATETIME, ExtendTill) AS ExtendTill,case when L.MultiName is null or L.MultiName='''' then U.Name else L.MultiName end MultiName,'
-				select @UnitID=UnitID,@PropertyID=PropertyID,@TenantID=TenantID from REN_Quotation with(nolock) where QuotationID=@DocumentSeqNo
+				SET @SQL='select @UnitID=UnitID,@PropertyID=PropertyID,@TenantID=TenantID from REN_Quotation with(nolock) where QuotationID='+CONVERT(NVARCHAR,@DocumentSeqNo)
+				EXEC sp_executesql @SQL,N'@UnitID INT OUTPUT,@PropertyID INT OUTPUT,@TenantID INT OUTPUT',@UnitID OUTPUT,@PropertyID OUTPUT,@TenantID OUTPUT
 			end
 			else
 			begin
+				IF @DocumentID=95
+				BEGIN
+				set @sContractCols=',TenanctRecvBalance,TenanctRecvBalInclPDC ';
+
+					SET @SQL='DECLARE @RenewRefID INT=@DocumentSeqNo,@i INT=1 
+					WHILE (@i=1)
+					BEGIN
+						IF EXISTS (SELECT RC.RenewRefID FROM REN_Contract RC WITH(NOLOCK)
+						WHERE RC.ContractID=@RenewRefID AND RC.RenewRefID IS NOT NULL AND RC.RenewRefID<>0)
+						BEGIN
+							SELECT @RenewRefID=RC.RenewRefID FROM REN_Contract RC WITH(NOLOCK)
+							WHERE RC.ContractID=@RenewRefID AND RC.RenewRefID IS NOT NULL AND RC.RenewRefID<>0
+						END
+						ELSE
+							SET @i=2
+					END
+
+
+					SELECT @SecurityDeposit=L.Amount FROM REN_ContractParticulars L WITH(NOLOCK) 
+					JOIN '+@j+' CC WITH(NOLOCK) ON L.CCNodeID=CC.NodeID
+					WHERE ContractID=@RenewRefID AND CC.Name Like ''Sec%Dep%''
+					
+					if @SecurityDeposit is null
+						set @SecurityDeposit=0
+					'
+
+					EXEC sp_executesql @SQL,N'@DocumentSeqNo INT,@SecurityDeposit FLOAT  OUTPUT',@DocumentSeqNo,@SecurityDeposit OUTPUT
+				END
+				
+				if @SecurityDeposit is null
+					set @SecurityDeposit=0
+
 				set @SELECT='convert(Datetime,L.ContractDate) ContractDate,graceperiod,L.ContractNumber,convert(Datetime,L.VacancyDate) VacancyDate,convert(Datetime,L.TerminationDate) TerminationDate, CONVERT(DATETIME, ExtendTill) AS ExtendTill,
-				L.SRTAmount,L.RefundAmt,L.PDCRefund,L.Penalty,L.Amt,case when L.TerminationDate is not null then L.TerminationDate-L.StartDate else 0 end RentDaysTillTerminate,L.RentAmt,
-				 (select AccountName from acc_accounts with(nolock) where AccountID=L.TermPayMode) TermPayMode,L.TermChequeNo,convert(datetime,L.TermChequeDate) TermChequeDate,L.TermRemarks,convert(Datetime,L.RefundDate) RefundDate,L.RefundAmt SecurityDeposit,L.SecurityDeposit ExcessDaysAmt,L.AgeOfRenewal,'
+				L.SRTAmount,L.RefundAmt,L.PDCRefund,L.Penalty,L.Amt,case when L.TerminationDate is not null then L.TerminationDate-L.StartDate else 0 end RentDaysTillTerminate,L.RentAmt,L.InputVAT,L.OutputVAT,
+				 (select AccountName from acc_accounts with(nolock) where AccountID=L.TermPayMode) TermPayMode,L.TermChequeNo,convert(datetime,L.TermChequeDate) TermChequeDate,L.TermRemarks,convert(Datetime,L.RefundDate) RefundDate,CASE WHEN L.RefundAmt IS NOT NULL AND L.RefundAmt<>0 THEN L.RefundAmt ELSE '+CONVERT(NVARCHAR,@SecurityDeposit)+' END SecurityDeposit,L.SecurityDeposit ExcessDaysAmt,L.AgeOfRenewal,'
 				set @PK='CONTRACTID'
 				set @EXTPK='NodeID'
 				set @TblName1='REN_CONTRACT'
 				set @TblName2='REN_ContractExtended'
 				set @TblName3='REN_ContractParticulars'
 				set @TblName4='REN_ContractPayTerms'
-				select @UnitID=UnitID,@PropertyID=PropertyID,@TenantID=TenantID from REN_Contract with(nolock) where ContractID=@DocumentSeqNo
+				
+				SET @SQL='select @UnitID=UnitID,@PropertyID=PropertyID,@TenantID=TenantID from REN_Contract with(nolock) where ContractID='+CONVERT(NVARCHAR,@DocumentSeqNo)
+				EXEC sp_executesql @SQL,N'@UnitID INT OUTPUT,@PropertyID INT OUTPUT,@TenantID INT OUTPUT',@UnitID OUTPUT,@PropertyID OUTPUT,@TenantID OUTPUT
+				
 			end
 			
 			Declare @ExtQuery nvarchar(max),@ExtJoin nvarchar(max),@SysColumnName nvarchar(max),@Exti int ,@ExtCNT int,@ExtCCID int
@@ -1018,7 +1142,7 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 				ELSE DATEDIFF(MONTH,L.StartDate,(L.EndDate+1)) END/12),L.StartDate))),(L.EndDate+1)))=0 THEN '''' ELSE CONVERT(VARCHAR,(DATEDIFF(DAY,DATEADD(MM,(CASE WHEN DATEPART(DAY,L.StartDate)>DATEPART(DAY,(L.EndDate+1)) THEN DATEDIFF(MONTH,L.StartDate,(L.EndDate+1))-1
 				ELSE DATEDIFF(MONTH,L.StartDate,(L.EndDate+1)) END%12),(DATEADD(YY,(CASE WHEN DATEPART(DAY,L.StartDate)>DATEPART(DAY,(L.EndDate+1)) THEN DATEDIFF(MONTH,L.StartDate,(L.EndDate+1))-1
 				ELSE DATEDIFF(MONTH,L.StartDate,(L.EndDate+1)) END/12),L.StartDate))),(L.EndDate+1))))+'' Days'' END AS RentDuration,
-				convert(Datetime,L.StartDate) StartDate,convert(Datetime,L.EndDate) EndDate,L.TotalAmount,L.NonRecurAmount,L.RecurAmount,
+				convert(Datetime,L.StartDate) StartDate,convert(Datetime,L.EndDate) EndDate,L.TotalAmount,L.NonRecurAmount,L.RecurAmount,L.WorkflowID,L.WorkflowLevel,
 				L.ModifiedBy,CONVERT(DATETIME,L.ModifiedDate) ModifiedDate
 				--,datediff(year,convert(Datetime,L.StartDate),dateadd(day,1,convert(Datetime,L.EndDate))) TotalYears
 				,datediff(year,convert(Datetime,L.StartDate),dateadd(day,1,convert(Datetime,L.EndDate)))-case when DATEADD(Year,datediff(year,convert(Datetime,L.StartDate),dateadd(day,1,convert(Datetime,L.EndDate))),convert(Datetime,L.StartDate))>dateadd(day,1,convert(Datetime,L.EndDate)) then 1 else 0 end TotalYears
@@ -1030,9 +1154,15 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 				,L.TermsConditions
 				--,DATEDIFF(day,CONVERT(Datetime,L.StartDate),CONVERT(Datetime,L.EndDate))/30 Months
 				,DATEDIFF(MONTH,L.StartDate,L.EndDate+1) Months
+				,DATEDIFF(Day,L.StartDate,L.EndDate)+1 TotalDays
 				,SalesMan.Name SalesmanID,LLORD.NAME AS LANDLORDID'+@CustomQuery3+@ExtQuery+'
 				,CASE WHEN isnumeric(U.RentableArea)=0 or convert(float,U.RentableArea)=0.0 THEN isnull((select RentAmount from '+@TblName3+' with(nolock) where '+@PK+'=L.'+@PK+' and Sno=1),0.0) ELSE (isnull((select RentAmount from '+@TblName3+' with(nolock) where '+@PK+'=L.'+@PK+' and Sno=1),0.0)/U.RentableArea) END RatePerArea
-				,(select sqft from '+@TblName3+' with(nolock) where '+@PK+'=L.'+@PK+' and Sno=1) sqft
+				,(select sqft from '+@TblName3+' with(nolock) where '+@PK+'=L.'+@PK+' and Sno=1) sqft,RecurDuration '
+				
+				IF (@DocumentID=95 OR @DocumentID=104)
+					set @SQL=@SQL+',ProposedRent,ProposedDisc,ProposedAfterDisc,ProposedDailyRent,ProposedDiscPer,Variance,PendFinalSettl,FinalSettlXML '
+
+				set @SQL=@SQL+@sContractCols+'
 				from '+@TblName1+' L WITH(NOLOCK)
 				LEFT JOIN '+@TblName2+' EXT WITH(NOLOCK) ON L.'+@PK+'=EXT.'+@EXTPK+'
 				LEFT JOIN COM_STATUS S WITH(NOLOCK) ON L.STATUSID=S.STATUSID
@@ -1054,45 +1184,78 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 		 	
 			EXEC(@SQL)
 			
-			declare @j nvarchar(50),@VatNode nvarchar(50)
-			set @j=(select tablename from adm_Features WITH(NOLOCK) where featureid=(select value from adm_globalpreferences with(nolock) where Name='DepositLinkDimension'))--select top(1) CCID from REN_ContractParticulars WITH(NOLOCK) where ContractID=@DocumentSeqNo
-			select @VatNode=Value from com_costcenterpreferences where CostCenterID=95 and Name='VatNode'
+			declare @VatNode nvarchar(50),@VATSQL nvarchar(max),@CCcolnames nvarchar(max),@CCcoljoin nvarchar(max)
+			select @VatNode=Value from com_costcenterpreferences with(nolock) where CostCenterID=95 and Name='VatNode'
 			if isnumeric(@VatNode)=0
 				set @VatNode='-12345'
-			if ((@DocumentID=95 OR @DocumentID=104) AND exists (select top(1) CCID from REN_ContractParticulars WITH(NOLOCK) where ContractID=@DocumentSeqNo))
-			OR ((@DocumentID=103 OR @DocumentID=129) AND exists (select top(1) CCID from REN_QuotationParticulars WITH(NOLOCK) where QuotationID=@DocumentSeqNo)) 
+			set @VATSQL=''
+			
+			set @CCcolnames=''
+			set @CCcoljoin=''
+			SELECT @CCcolnames=@CCcolnames+',C'+CONVERT(NVARCHAR,ROW_NUMBER() OVER (ORDER BY[ColumnCostCenterID]))+'.Name '+SYSCOLUMNNAME
+			,@CCcoljoin=@CCcoljoin+' LEFT JOIN '+ParentCostCenterSysName+' C'+CONVERT(NVARCHAR,ROW_NUMBER() OVER (ORDER BY[ColumnCostCenterID]))+' WITH(NOLOCK) ON C'+CONVERT(NVARCHAR,ROW_NUMBER() OVER (ORDER BY[ColumnCostCenterID]))+'.NodeID=L.'+SYSCOLUMNNAME	
+			FROM ADM_CostCenterDef with(nolock) 
+			WHERE COSTCENTERID=@DocumentID and SYSCOLUMNNAME like 'CCNID%'
+			and SysTableName=@TblName3
+	
+			if exists (select FeatureID from ADM_Features with(nolock) where FeatureID=50061)
+				set @VATSQL=',(select name from COM_CC50061 with(nolock) where NodeID=L.SPType) SPType'
+			set @SQL='if (('+convert(nvarchar,@DocumentID)+'=95 OR '+convert(nvarchar,@DocumentID)+'=104) AND exists (select top(1) CCID from REN_ContractParticulars WITH(NOLOCK) where ContractID='+convert(nvarchar,@DocumentSeqNo)+'))
+			OR (('+convert(nvarchar,@DocumentID)+'=103 OR '+convert(nvarchar,@DocumentID)+'=129) AND exists (select top(1) CCID from REN_QuotationParticulars WITH(NOLOCK) where QuotationID='+convert(nvarchar,@DocumentSeqNo)+')) 
 			begin
-				set @SQL='select L.NodeID ParticularID,L.Amount,L.Narration,A.AccountName AS CreditAccID,ACC.AccountName AS DebitAccID,CC.Name Particulars,L.ChequeNO,convert(Datetime,L.ChequeDate) Date,L.PayeeBank
+					select L.NodeID ParticularID,L.Amount,L.Narration,A.AccountName AS CreditAccID,ACC.AccountName AS DebitAccID,CC.Name Particulars,L.ChequeNO,convert(Datetime,L.ChequeDate) Date,L.PayeeBank
 					,case when L.VatPer>0 then convert(nvarchar,L.VatPer) when CC.NodeID='+@VatNode+' then null else ''Exempt'' end VatPer
-					,L.VatAmount
+					,L.VatAmount'+@VATSQL+'
 					,case when CC.NodeID='+@VatNode+' then null when L.VatPer is null and (L.VatType is null or L.VatType='''') then L.Amount else L.TaxableAmt+isnull(L.VatAmount,0.0) end AmountWithVAT
 					,case when L.Sno=1 then L.TaxableAmt else null end RentWithVAT
-					,L.DetailsXML,L.TaxableAmt,L.VatType,L.Sqft,L.Rate,L.RentAmount,L.Discount,LOC.Name LocationID
+					,L.DetailsXML,L.TaxableAmt,L.VatType,L.Sqft,L.Rate,L.RentAmount,L.Discount,LOC.Name LocationID,L.NetAmount'
+
+					IF(@TblName3='REN_ContractParticulars')
+						set @SQL=@SQL+',L.NonTaxAmount'
+
+					set @SQL=@SQL+@CCcolnames+'
 					from '+@TblName3+' L WITH(NOLOCK)
 					LEFT JOIN '+@j+' CC WITH(NOLOCK) ON L.CCNodeID=CC.NodeID
 					LEFT JOIN ACC_Accounts A WITH(NOLOCK) ON L.CreditAccID=A.AccountID
 					LEFT JOIN ACC_Accounts ACC WITH(NOLOCK) ON L.DebitAccID=ACC.AccountID
 					LEFT JOIN COM_Location LOC WITH(NOLOCK) ON L.LocationID=LOC.NodeID
-					where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)
+					'+@CCcoljoin+'
+					where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)+'
 			end
 			else
 			begin
-				set @SQL='select L.NodeID ParticularID,L.Amount,L.Narration,A.AccountName AS CreditAccID,ACC.AccountName AS DebitAccID,NULL as Particulars,L.ChequeNO,convert(Datetime,L.ChequeDate) Date,L.PayeeBank
+					select L.NodeID ParticularID,L.Amount,L.Narration,A.AccountName AS CreditAccID,ACC.AccountName AS DebitAccID,NULL as Particulars,L.ChequeNO,convert(Datetime,L.ChequeDate) Date,L.PayeeBank
 					,case when L.VatPer>0 then convert(nvarchar,L.VatPer) when L.CCNodeID='+@VatNode+' then null else ''Exempt'' end VatPer
-					,L.VatAmount
+					,L.VatAmount'+@VATSQL+'
 					,case when L.CCNodeID='+@VatNode+' then null when L.VatPer is null and (L.VatType is null or L.VatType='''') then L.Amount else L.TaxableAmt+isnull(L.VatAmount,0.0) end AmountWithVAT
 					,case when L.Sno=1 then L.TaxableAmt else null end RentWithVAT
-					,L.DetailsXML,L.TaxableAmt,L.VatType,L.Sqft,L.Rate,L.RentAmount,L.Discount,LOC.Name LocationID
+					,L.DetailsXML,L.TaxableAmt,L.VatType,L.Sqft,L.Rate,L.RentAmount,L.Discount,LOC.Name LocationID,L.NetAmount'
+					
+					IF(@TblName3='REN_ContractParticulars')
+						set @SQL=@SQL+',L.NonTaxAmount'
+
+					set @SQL=@SQL+@CCcolnames+'
 					from '+@TblName3+' L WITH(NOLOCK)
 					LEFT JOIN ACC_Accounts A WITH(NOLOCK) ON L.CreditAccID=A.AccountID
 					LEFT JOIN ACC_Accounts ACC WITH(NOLOCK) ON L.DebitAccID=ACC.AccountID
 					LEFT JOIN COM_Location LOC WITH(NOLOCK) ON L.LocationID=LOC.NodeID
-					where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)
-			end
+					'+@CCcoljoin+'
+					where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)+'
+			end'
+			print @SQL
 			exec(@SQL)
 			
+			
+			set @CCcolnames=''
+			set @CCcoljoin=''
+			SELECT @CCcolnames=@CCcolnames+',C'+CONVERT(NVARCHAR,ROW_NUMBER() OVER (ORDER BY[ColumnCostCenterID]))+'.Name '+SYSCOLUMNNAME
+			,@CCcoljoin=@CCcoljoin+' LEFT JOIN '+ParentCostCenterSysName+' C'+CONVERT(NVARCHAR,ROW_NUMBER() OVER (ORDER BY[ColumnCostCenterID]))+' WITH(NOLOCK) ON C'+CONVERT(NVARCHAR,ROW_NUMBER() OVER (ORDER BY[ColumnCostCenterID]))+'.NodeID=L.'+SYSCOLUMNNAME	
+			FROM ADM_CostCenterDef with(nolock) 
+			WHERE COSTCENTERID=@DocumentID and SYSCOLUMNNAME like 'CCNID%'
+			and SysTableName=@TblName4
+			
 			set @SQL='
-			select L.ChequeNO,convert(Datetime,L.ChequeDate) Date,L1.Name PayeeBank,ACC.AccountName AS DebitAccID,L.Amount,L.Narration
+			select L.ChequeNO,convert(Datetime,L.ChequeDate) Date,convert(Datetime,L.ChequeDate) ChequeDate,L1.Name PayeeBank,ACC.AccountName AS DebitAccID,L.Amount,L.Narration
 			,DD.VoucherNo as DocID,S.Status StatusID,LP.Name Period'
 			if @DocumentID=95
 			BEGIN
@@ -1100,45 +1263,58 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 								LEFT JOIN REN_QuotationPayTerms QPT WITH(NOLOCK) ON QPT.QuotationID=C.QuotationID 
 								LEFT JOIN REN_Quotation Q WITH(NOLOCK) ON Q.QuotationID=QPT.QuotationID
 								LEFT JOIN REN_Property P WITH(NOLOCK) ON P.NodeID=Q.Prefix
-								WHERE C.CONTRACTID=L.'+@PK+') ELSE '''' END RefNo,convert(datetime,L.PostingDate) PostingDate'
+								WHERE C.CONTRACTID=L.'+@PK+') ELSE '''' END RefNo,convert(datetime,DD.DocDate) PostingDate'
 								
 				set @SQL=@SQL+',CC.Name Particular,convert(Datetime,L.TillDate) TillDate'
 			END
-			set @SQL=@SQL+',LOC.Name LocationID 
+			set @SQL=@SQL+',LOC.Name LocationID'+@CCcolnames+' 
 			from '+@TblName4+' L WITH(NOLOCK)
 			LEFT JOIN ACC_Accounts ACC WITH(NOLOCK) ON L.DebitAccID=ACC.AccountID
 			LEFT JOIN COM_LOOKUP L1 WITH(NOLOCK) on L.CustomerBank=L1.NodeID
-			LEFT JOIN COM_LOOKUP LP WITH(NOLOCK) on L.Period=LP.NodeID
-			LEFT JOIN REN_ContractDocMapping LL WITH(NOLOCK) ON L.'+@PK+'=LL.CONTRACTID and LL.Type=2 and L.Sno=LL.Sno and LL.ContractCCID='+convert(nvarchar,@DocumentID)+'
-			LEFT JOIN ACC_DocDetails DD WITH(NOLOCK) ON LL.DocID=DD.DocID AND (DD.DocumentType!=17 OR (DD.DocumentType=17 AND CreditAccount>0))
-			LEFT JOIN COM_STATUS S WITH(NOLOCK) ON DD.STATUSID=S.STATUSID
-			LEFT JOIN COM_Location LOC WITH(NOLOCK) ON L.LocationID=LOC.NodeID'
+			LEFT JOIN COM_LOOKUP LP WITH(NOLOCK) on L.Period=LP.NodeID'
+
+			if @IsSinglePDC=1
+				set @SQL=@SQL+' JOIN REN_ContractDocMapping LL WITH(NOLOCK) ON L.ContractID = LL.ContractID 
+				JOIN Acc_DocDetails DD WITH(NOLOCK) on  LL.DocID =  DD.DocID '
+			ELSE
+				set @SQL=@SQL+' LEFT JOIN REN_ContractDocMapping LL WITH(NOLOCK) ON L.'+@PK+'=LL.CONTRACTID and LL.Type=2 and L.Sno=LL.Sno and LL.ContractCCID='+convert(nvarchar,@DocumentID)+'
+				LEFT JOIN ACC_DocDetails DD WITH(NOLOCK) ON LL.DocID=DD.DocID AND (DD.DocumentType!=17 OR (DD.DocumentType=17 AND CreditAccount>0)) '
+
+			set @SQL=@SQL+' LEFT JOIN COM_STATUS S WITH(NOLOCK) ON DD.STATUSID=S.STATUSID
+			LEFT JOIN COM_Location LOC WITH(NOLOCK) ON L.LocationID=LOC.NodeID'+@CCcoljoin
 			if @DocumentID=95
 				set @SQL=@SQL+' LEFT JOIN '+@j+' CC WITH(NOLOCK) ON L.Particular=CC.NodeID '
-			set @SQL=@SQL+' where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)+' order by L.Sno'
+			set @SQL=@SQL+' where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)
+			if @IsSinglePDC=1
+				set @SQL=@SQL+' and (DD.debitaccount=L.DebitAccID or DD.BankAccountID=L.DebitAccID) and DD.amount=L.amount and DD.ChequeNumber=L.ChequeNo '
+			set @SQL=@SQL+' order by L.Sno'
+			print @SQL
 			exec(@SQL)
 
 			Create Table #tmp(id int identity(1,1),Amount float,DetailsTotal float)			
-			declare @total float
+			
 			if @DocumentID=103 OR @DocumentID=129
 			begin
-				set @total=(select SUM(Amount)  From REN_QuotationParticulars WITH(NOLOCK) where  QuotationID=convert(nvarchar,@DocumentSeqNo) and ISRECURR=0)
-				Insert into #tmp
-				Select Amount,@total From REN_QuotationPayTerms WITH(NOLOCK) where QuotationID=convert(nvarchar,@DocumentSeqNo)
-				update #tmp set DetailsTotal=0 where id<>1
-				select Id,Amount,Case when DetailsTotal=0 then NULL else DetailsTotal end as DetailsTotal,SUM(Amount+DetailsTotal) as TotalAmount from #tmp Group by Id,Amount,DetailsTotal
-				drop table #tmp
+				set @SQL='Select Amount,(select SUM(Amount)  From REN_QuotationParticulars WITH(NOLOCK) where  QuotationID='+convert(nvarchar,@DocumentSeqNo)+' and ISRECURR=0) 
+				From REN_QuotationPayTerms WITH(NOLOCK) where QuotationID='+convert(nvarchar,@DocumentSeqNo)
 			end
 			else
 			begin
-				set @total=(select SUM(Amount)  From REN_ContractParticulars WITH(NOLOCK) where  CONTRACTID=convert(nvarchar,@DocumentSeqNo) and ISRECURR=0)
-				Insert into #tmp
-				Select Amount,@total From REN_ContractPayTerms WITH(NOLOCK) where CONTRACTID=convert(nvarchar,@DocumentSeqNo)
-				update #tmp set DetailsTotal=0 where id<>1
-				select Id,Amount,Case when DetailsTotal=0 then NULL else DetailsTotal end as DetailsTotal,SUM(Amount+DetailsTotal) as TotalAmount from #tmp Group by Id,Amount,DetailsTotal
-				drop table #tmp
-			end
+				SET @SQL='Select Amount,(select SUM(Amount)  From REN_ContractParticulars WITH(NOLOCK) where CONTRACTID='+convert(nvarchar,@DocumentSeqNo)+' and ISRECURR=0) 
+				From REN_ContractPayTerms WITH(NOLOCK) where CONTRACTID='+convert(nvarchar,@DocumentSeqNo)
+			end	
 			
+			Insert into #tmp
+			EXEC (@SQL)
+			
+			update #tmp set DetailsTotal=0 where id<>1
+			
+			select Id,Amount,Case when DetailsTotal=0 then NULL else DetailsTotal end as DetailsTotal,SUM(Amount+DetailsTotal) as TotalAmount 
+			from #tmp WITH(NOLOCK) 
+			Group by Id,Amount,DetailsTotal
+			
+			drop table #tmp
+		
 			truncate table #ExtendedTable
 			set @ExtQuery=''
 			set @ExtJoin=''
@@ -1177,7 +1353,7 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 			T.License,T.LicenseIssuedBy,convert(datetime,T.LicenseIssueDate) LicenseIssueDate,convert(datetime,T.LicenseExpiryDate) LicenseExpiryDate
 			'+@CustomQueryNoName+@ExtQuery+'
 			From REN_Tenant T with(nolock)
-			left join Com_LookUp L1 with(nolock) on L1.NodeID=T.PositionID
+			left join Com_LookUp L1 with(nolock) on L1.NodeID=T.TypeID
 			left join Com_LookUp L2 with(nolock) on L2.NodeID=T.PositionID
 			left join Acc_Accounts A with(nolock) on A.AccountID=T.PostingID
 			LEFT JOIN REN_TenantExtended EXT WITH(NOLOCK) on T.TenantID=EXT.TenantID
@@ -1286,13 +1462,14 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 			C.NoOfBathrooms,C.NoOfParkings,C.ElectricityCode,C.ElectricityKW,C.DiscountAmount Discount,C.AnnualRent,C.MonthlyRent,C.RentPerSQFT,U.Name [Group],
 			C.Rent Amount,Case when C.RentTypeID=1 then ''Annual'' when C.RentTypeID=2 then ''Monthly'' else ''SqFt'' end as AmountType,Accountant.Name AccountantID,
 			SalesMan.Name SalesmanID,LandLord.Name LandlordID, Convert(float,C.ElectricityKW) Electricity,C.BasedOn,
-			C.TermsConditions'+@CustomQueryNoName+@ExtQuery+',UnitType.Name as UnitType
+			C.TermsConditions'+@CustomQueryNoName+@ExtQuery+',UnitType.Name as NodeID,L3.Name as UnitType
 			From REN_Units C with(nolock)
 			inner join REN_Units U with(nolock) on U.UnitID=C.UnitID
 			inner join REN_Property P with(nolock) on C.PropertyID=P.NodeID
 			Left join Com_Status S with(Nolock) on C.Status=S.StatusID
 			left join Com_LookUp L1 with(nolock) on L1.NodeID=C.FloorLookUpID
 			left join Com_LookUp L2 with(nolock) on L2.NodeID=C.ViewLookUpID
+			left join Com_LookUp L3 with(nolock) on L3.NodeID=C.UnitType
 			left join '+@Accountant+' Accountant with(nolock) on Accountant.NodeID=C.AccountantID
 			left join '+@SalesMan+' SalesMan with(nolock) on SalesMan.NodeID=C.SalesmanID
 			left join '+@LandLord+' LandLord with(nolock) on LandLord.NodeID=C.LandlordID
@@ -1301,17 +1478,20 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 			LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on C.UnitID=CC.NodeID and CC.CostCenterID=93'
 			+@CustomQuery1+@ExtJoin+' 
 			where C.UnitID=' +convert(nvarchar,@UnitID)
+			
 			exec(@SQL)
 			
 			set @Sql='SELECT ParticularNodeID,convert(datetime,FromDate) FromDate,convert(datetime,ToDate) ToDate,P.Name Period
 			,ActAmount Amount,CP.Rate,CP.Discount,CP.Amount AfterDiscount,ActAmount,Distribute,U.Name Unit,CP.Narration,LP.Sqft
+			,Fld1 ,Fld2 ,Fld3 ,Fld4 ,Fld5 ,Fld6 ,Fld7 ,Fld8 ,Fld9 ,Fld10,CP.ProposedRent,CP.ProposedDisc,CP.ProposedAmount,CP.BaseRent,CP.PrevRent
 			FROM REN_ContractParticularsDetail CP with(nolock)
 			JOIN '+@TblName1+' L WITH(NOLOCK) ON L.'+@PK+'=CP.ContractID AND L.Costcenterid=CP.Costcenterid
 			JOIN '+@TblName3+' LP WITH(NOLOCK) ON L.'+@PK+'=LP.'+@PK+' AND LP.Sno=1
 			left join com_lookup P with(nolock) on P.NodeID=CP.Period
 			left join REN_Units U with(nolock) on U.UnitID=ISNULL(CP.Unit,L.UnitID)
 			where CP.ContractID='+convert(nvarchar,@DocumentSeqNo)+' and CP.Costcenterid='+convert(nvarchar,@DocumentID)
-			--print(@SQL)
+		
+			
 			exec(@SQL)
 				
 		END
@@ -1342,7 +1522,6 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 	else-- if @Attachments=1
 		select [GUID],ActualFileName,FileExtension  from COM_Files with(nolock)
 		where FeatureID=@DocumentID AND FeaturePK=@DocumentSeqNo and AllowinPrint=1
- 
 
 SET NOCOUNT OFF;
 RETURN 1
@@ -1361,5 +1540,6 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
 
 GO

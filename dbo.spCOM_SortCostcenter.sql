@@ -3,10 +3,11 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SortCostcenter]
-	@CCNodeID [bigint],
-	@CostcenterID [bigint],
+	@CCNodeID [int],
+	@CostcenterID [int],
 	@ColumnName [nvarchar](200),
-	@UserID [bigint],
+	@sOrder [nvarchar](10) = 'ASC',
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -15,8 +16,8 @@ BEGIN TRY
 SET NOCOUNT ON;  
   
 	--Declaration Section  
-	declare @i bigint,@cnt bigint,@lft bigint,@diff bigint,@nodeid bigint,@isgrp bit  
-	declare @tab table(id bigint identity(1,1),NodeID bigint,ColumnData nvarchar(max),lft bigint,rgt bigint,isgrp bit)  
+	declare @i INT,@cnt INT,@lft INT,@diff INT,@nodeid INT,@isgrp bit  
+	declare @tab table(id INT identity(1,1),NodeID INT,ColumnData nvarchar(max),lft INT,rgt INT,isgrp bit)  
 	declare @PrimKey nvarchar(200),@TableName nvarchar(200),@sql nvarchar(max)  
 
 	set @PrimKey='NodeID'  
@@ -56,11 +57,11 @@ SET NOCOUNT ON;
 		set @sql='select b.'+@PrimKey+',p.'+@ColumnName+',b.lft,b.rgt,b.isgroup from INV_Batches  b with(nolock)
 		left join INV_Product p with(nolock) on b.ProductID=p.ProductID
 		where b.ParentID='+convert(nvarchar,@CCNodeID)+'  
-		order by p.'+@ColumnName  
+		order by p.'+@ColumnName + ' '+@sOrder
 	else 
 		set @sql='select DISTINCT '+@PrimKey+','+@ColumnName+',lft,rgt,isgroup from '+@TableName+' with(nolock) 
-		where ParentID='+convert(nvarchar,@CCNodeID)+'  
-		order by '+@ColumnName
+		where ParentID='+convert(nvarchar,@CCNodeID)+' and '+@PrimKey+'>0
+		order by '+@ColumnName+ ' '+@sOrder
 	
   
 	print @sql
@@ -71,7 +72,7 @@ SET NOCOUNT ON;
 	set @sql='select @lft=lft from '+@TableName+'  with(nolock)
 	where '+@PrimKey+'='+convert(nvarchar,@CCNodeID)  
 
-	exec sp_executesql @sql,N'@lft bigint output',@lft output  
+	exec sp_executesql @sql,N'@lft INT output',@lft output  
 
 	select @i=0,@cnt=count(id) from @tab  
       
@@ -92,7 +93,7 @@ SET NOCOUNT ON;
 		set @lft=@lft+@diff  
 
 		if(@isgrp=1)  
-			exec [spCOM_SortCostcenter] @nodeid,@CostcenterID,@ColumnName,@UserID,@LangID  
+			exec [spCOM_SortCostcenter] @nodeid,@CostcenterID,@ColumnName,@sOrder,@UserID,@LangID  
 	end  
      
     
@@ -118,6 +119,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH    
-   
+END CATCH
 GO

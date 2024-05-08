@@ -5,11 +5,11 @@ GO
 CREATE PROCEDURE [dbo].[spCom_GetCostCenterQuickViewSummary]
 	@CostCenterID [int],
 	@NodeID [nvarchar](max),
-	@ShowInCCID [bigint],
+	@ShowInCCID [int],
 	@Date [datetime],
 	@CCXML [nvarchar](max) = NULL,
-	@AccountID [bigint],
-	@QuickViewID [bigint],
+	@AccountID [int],
+	@QuickViewID [int],
 	@UserID [int] = 0,
 	@RoleID [int] = 0,
 	@LangID [int] = 1
@@ -22,13 +22,14 @@ SET NOCOUNT ON
    declare @tempgroup nvarchar(max),@TempSQL nvarchar(max),@salescol nvarchar(max),@IsAddressDisplayed bit
    Declare @HasAccess bit,@Primarycol varchar(50),@CostCenterTableName nvarchar(50),@CC int ,@Unappstat bit             
    Declare @TableName nvarchar(50),@ColCostCenterPrimary varchar(50),@SQL nvarchar(max),@Where nvarchar(max)              
-   Declare @CostCenterColID INT,@Cnt int,@I INT,@STRJOIN nvarchar(max),@strColumns nvarchar(max) , @strGroupBy nvarchar(max)             
+   Declare @CostCenterColID INT,@Cnt int,@I INT,@STRJOIN nvarchar(max),@strColumns nvarchar(max) , @strGroupBy nvarchar(max),@strIDCols nvarchar(max)
    Declare @SysColumnName nvarchar(50),@UserColumnName nvarchar(50), @ColumnResourceData nvarchar(200),@IsColumnUserDefined BIT,@ColumnCostCenterID INT              
-   Declare @ColumnDataType nvarchar(50), @tempWhere nvarchar(max), @Dt float,@Nid bigint
+   Declare @ColumnDataType nvarchar(50), @tempWhere nvarchar(max), @Dt float,@Nid INT
    	declare @QOH FLOAT,@HOLDQTY FLOAT,@CommittedQTY FLOAT,@RESERVEQTY FLOAT,@AvgRate FLOAT,@BalQOH FLOAT,@TotalReserve float
    declare @EmpAsOnStatus NVARCHAR(500)
    SET @EmpAsOnStatus=''
    set @salescol=''
+   set @strIDCols=''
    set @IsAddressDisplayed=0
      SET @Dt=convert(float,getdate())      
    --Check for manadatory paramters              
@@ -48,10 +49,10 @@ SET NOCOUNT ON
    --END               
 
     --Create temporary table to read xml data into table              
-    DECLARE @tblList AS TABLE (ID int identity(1,1),CostCenterColID BIGINT,Param1 NVARCHAR(MAX))                
-	DECLARE @QID BIGINT,@Param1 NVARCHAR(MAX)
+    DECLARE @tblList AS TABLE (ID int identity(1,1),CostCenterColID INT,Param1 NVARCHAR(MAX))                
+	DECLARE @QID INT,@Param1 NVARCHAR(MAX)
 	
-	IF (@QuickViewID IS NOT NULL AND @QuickViewID > 0)
+	IF (@QuickViewID IS NOT NULL AND @QuickViewID != 0 )
 	BEGIN
 		SET @QID=@QuickViewID
 	END
@@ -70,16 +71,20 @@ SET NOCOUNT ON
 	
 	--Read CostCenterColUMNS FROM  QuickView into temporary table              
 	INSERT INTO @tblList              
-	select CostCenterColID,case when (CostCenterColID=26428 OR CostCenterColID=50453 OR CostCenterColID=-11401 OR CostCenterColID=-11402 OR CostCenterColID=-11393 OR CostCenterColID=-11398 OR CostCenterColID=-11399) then [Description] else Param1 end from ADM_QuickViewDefn WITH(NOLOCK)               
-	where QID=@QID              
-	order by ColumnOrder 
-	declare @DocsList nvarchar(1000),@AccWhere nvarchar(MAX),@AccJoin nvarchar(MAX)
+	select QDV.CostCenterColID,case when (QDV.CostCenterColID=26428 OR QDV.CostCenterColID=50453 OR QDV.CostCenterColID=-11401 OR QDV.CostCenterColID=-11402 OR QDV.CostCenterColID=-11393 OR QDV.CostCenterColID=-11398 OR QDV.CostCenterColID=-11399) then QDV.[Description] when cd.CostCenterID=110 and cd.CostCenterID<>@CostCenterID then '#Address#' else QDV.Param1 end 
+	from ADM_QuickViewDefn QDV WITH(NOLOCK)   
+	LEFT JOIN ADM_Costcenterdef cd WITH(NOLOCK) on cd.CostCenterColID=QDV.CostCenterColID       
+	where QDV.QID=@QID              
+	order by QDV.ColumnOrder 
+	
+	declare @DocsList nvarchar(1000),@AccWhere nvarchar(MAX),@AccJoin nvarchar(MAX),@InvJoin nvarchar(MAX)
 
 	if(@CostCenterID=2)
 	begin
 		declare @includepdc nvarchar(10),@includeunposted nvarchar(10)
 		set @AccWhere=''
 		set @AccJoin=''
+		set @InvJoin=''
 				
 		select @includepdc=value from adm_globalpreferences with(nolock)
 		where name='IncludePDCs'
@@ -110,16 +115,19 @@ SET NOCOUNT ON
 			if exists (select 1 from @XML2.nodes('/X/DW') as DATA(X))
 				select @AccJoin=@AccJoin+' and DCC.dcCCNID1 in ('+X.value('@ID','nvarchar(max)')+')' from @XML.nodes('/XML/Div') as DATA(X)
 			if @AccJoin!=''
-				set @AccJoin=' join COM_DocCCDATA DCC with(nolock) on (DCC.AccDocDetailsID=D.AccDocDetailsID  or (D.InvDocDetailsID is not null and DCC.InvDocDetailsID=D.InvDocDetailsID))'+@AccJoin
+			begin
+				set @InvJoin=' join COM_DocCCDATA DCC with(nolock) on DCC.InvDocDetailsID=D.InvDocDetailsID '+@AccJoin
+				set @AccJoin=' join COM_DocCCDATA DCC with(nolock) on DCC.AccDocDetailsID=D.AccDocDetailsID '+@AccJoin
+			end
 		end
 	end
     ELSE if(@CostCenterID=3 and exists(select * from @tblList where CostCenterColID =22821 or CostCenterColID between 22793 and 22799))
     BEGIN
-		DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId BIGINT)     
-		declare @UOMID bigint ,@CCWHERE nvarchar(max),@OrderBY nvarchar(max),@CCname  nvarchar(max)
+		DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId INT)     
+		declare @UOMID INT ,@CCWHERE nvarchar(max),@OrderBY nvarchar(max),@CCname  nvarchar(max)
 		set @XML=@CCXML
 		   INSERT INTO @tblCC(CostCenterID,NodeId)      
-		   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','BIGINT')      
+		   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','INT')      
 		   FROM @XML.nodes('/XML/Row') as Data(X)      
 		           
 		  select @UOMID=UOMID from INV_Product a WITH(NOLOCK)               
@@ -141,24 +149,27 @@ SET NOCOUNT ON
 		   set @WHERE=@WHERE+' AccountID=0)'       
 		         
 		   Set @I=50000       
-		   Set @CNT=50050       
+		   SELECT  @CNT=MAX(FEATUREID) FROM ADM_FEATURES WITH(NOLOCK) WHERE FEATUREID> 50000     
 		   while(@I<@CNT)      
 		   begin      
-			set @I=@I+1      
-			set @OrderBY=@OrderBY+',CCNID'+convert(nvarchar,@I-50000)+' Desc '      
-			set @CCname='CCNID'+convert(nvarchar,@I-50000)+'=' 
+			set @I=@I+1   
+			IF EXISTS (SELECT  FEATUREID FROM ADM_FEATURES WITH(NOLOCK) WHERE FEATUREID=@I)  
+			BEGIN 
+				set @OrderBY=@OrderBY+',CCNID'+convert(nvarchar,@I-50000)+' Desc '      
+				set @CCname='CCNID'+convert(nvarchar,@I-50000)+'=' 
 			     
-			set @WHERE=@WHERE+' and ('      
-			if exists(select CostCenterID from @tblCC where CostCenterID=@I)      
-			begin      
-			 select @Nid=NodeId from @tblCC where CostCenterID=@I      
-			 set @WHERE=@WHERE+@CCname+convert(nvarchar,@Nid)+' or '      
-			 set @CCWHERE=@CCWHERE+' and '+@CCname+convert(nvarchar,@Nid)           
-			end      
-			else      
-			 set @CCWHERE=@CCWHERE+' and '+@CCname+'0'       
+				set @WHERE=@WHERE+' and ('      
+				if exists(select CostCenterID from @tblCC where CostCenterID=@I)      
+				begin      
+				 select @Nid=NodeId from @tblCC where CostCenterID=@I      
+				 set @WHERE=@WHERE+@CCname+convert(nvarchar,@Nid)+' or '      
+				 set @CCWHERE=@CCWHERE+' and '+@CCname+convert(nvarchar,@Nid)           
+				end      
+				else      
+				 set @CCWHERE=@CCWHERE+' and '+@CCname+'0'       
 		           
-			set @WHERE=@WHERE+@CCname+'0)'          
+				set @WHERE=@WHERE+@CCname+'0)'   
+			END       
 		   end     
     
     END
@@ -177,19 +188,7 @@ SET NOCOUNT ON
    if(@CostCenterID=2)              
    set @Primarycol='A.AccountID'              
    if(@CostCenterID=16)              
-   set @Primarycol='A.BatchID'              
-   if(@CostCenterID=51)              
-   set @Primarycol='A.CustomerID'       
-    if(@CostCenterID=52)              
-   set @Primarycol='A.CV_ID'         
-   if(@CostCenterID=61)              
-   set @Primarycol='A.VehicleID'              
-   if(@CostCenterID=58)              
-   set @Primarycol='A.InsuranceID'              
-    if(@CostCenterID=57)              
-   set @Primarycol='A.NodeID'              
-   if(@CostCenterID=59)              
-   set @Primarycol='A.ServiceTicketID'         
+   set @Primarycol='A.BatchID'    
    if(@CostCenterID=7)              
    set @Primarycol='A.UserID'          
    if(@CostCenterID=71)              
@@ -244,15 +243,11 @@ SET NOCOUNT ON
    if(@CostCenterID=3)              
     SET @STRJOIN=@STRJOIN+'JOIN INV_ProductExtended X with(nolock) ON A.ProductID=X.ProductID'         
    if(@CostCenterID=2)                 
-    SET @STRJOIN=@STRJOIN+'JOIN ACC_AccountsExtended X with(nolock) ON A.AccountID=X.AccountID'              						
-   --if(@CostCenterID=16)                 
-   -- SET @STRJOIN=@STRJOIN+'LEFT JOIN INV_BatchesExtended X with(nolock) ON A.BatchID=X.BatchID'              
-   if(@CostCenterID=51)                 
-    SET @STRJOIN=@STRJOIN+'JOIN SVC_CustomersExtended X with(nolock) ON A.CustomerID=X.CustomerID'              
-   if(@CostCenterId=57)              
-    SET @STRJOIN=@STRJOIN+'JOIN SVC_ShopSupplies X with(nolock) ON A.NodeID=X.NodeID'                  
+    SET @STRJOIN=@STRJOIN+'JOIN ACC_AccountsExtended X with(nolock) ON A.AccountID=X.AccountID'     
    if(@CostCenterId=72)              
-    SET @STRJOIN=@STRJOIN+'JOIN ACC_AssetsExtended X with(nolock) ON A.AssetID=X.AssetID'           
+    SET @STRJOIN=@STRJOIN+'JOIN ACC_AssetsExtended X with(nolock) ON A.AssetID=X.AssetID'              						
+   if(@CostCenterID=76)                 
+    SET @STRJOIN=@STRJOIN+'JOIN PRD_BillOfMaterialExtended X with(nolock) ON A.BOMID=X.BOMID'           
      if(@CostCenterId=83)              
     SET @STRJOIN=@STRJOIN+'JOIN CRM_CustomerExtended X with(nolock) ON A.CustomerID=X.CustomerID'            
   if(@CostCenterId=88)              
@@ -269,7 +264,7 @@ SET NOCOUNT ON
           
    --Set loop initialization varaibles              
    SELECT @I=1, @Cnt=count(*) FROM @tblList                
-            print @Cnt  
+            --print @Cnt  
    SET @CC=0               
    WHILE(@I<=@Cnt)                
    BEGIN              
@@ -278,42 +273,36 @@ SET NOCOUNT ON
     SELECT @SysColumnName=SysColumnName,@UserColumnName=UserColumnName, @ColumnDataType=ColumnDataType,@ColumnResourceData=ResourceData,@IsColumnUserDefined=IsColumnUserDefined,@ColumnCostCenterID=ColumnCostCenterID
     FROM ADM_CostCenterDef A WITH(nolock)              
     join dbo.COM_LanguageResources B WITH(nolock) on A.ResourceID=B.ResourceID              
-    WHERE CostCenterColID=@CostCenterColID AND LanguageID=@LangID              
+    WHERE CostCenterColID=@CostCenterColID AND LanguageID=@LangID     
+	
+	IF(@CostCenterID=50051)
+	BEGIN
+		IF(@SysColumnName='BankBranch' OR @SysColumnName='BankRoutingCode' OR @SysColumnName='BankAgentCode' OR 
+			@SysColumnName='BasicMonthly' OR @SysColumnName='BasicWeekly' OR @SysColumnName='BasicDaily' OR @SysColumnName='BasicHourly' OR
+			@SysColumnName='NetSalary' OR @SysColumnName='AnnualCTC' OR @SysColumnName='CreatedBy'  )
+		BEGIN
+			SET @I=@I+1
+			Continue
+		END
+
+	END
+	
+	         
     if(@ColumnCostCenterID=113)
 		set @ColumnCostCenterID=0
-     --SELECT @SysColumnName,@CostCenterColID,@ColumnCostCenterID,@ColumnResourceData              
-    --SET @strGroupBy=@strGroupBy+','           
-    --print @CostCenterColID 
 	SET @strColumns=@strColumns+','              
-  --IF @I<>1 and @CostCenterID=2       
-  --   BEGIN      
-  -- if @SysColumnName<>'balance'       
-  -- if @CC=0       
-  --  set @tempgroup = @tempgroup  +'A.'+ @SysColumnName + ','       
-  -- --else if @IsColumnUserDefined=0      
-  --  --SET @tempgroup = @tempgroup  +'A.'+ @SysColumnName + ','       
-  --END      
- 
+     
     IF(@ColumnCostCenterID IS NOT NULL AND @ColumnCostCenterID>0 and @ColumnCostCenterID!=44)--IF COSTCENTER COLUMN              
     BEGIN      
      --GETTING COLUMN COSTCENTER TABLE      
             
      SET @CostCenterTableName=(SELECT Top 1 SysTableName FROM ADM_CostCenterDef with(nolock) WHERE CostCenterID=@ColumnCostCenterID)                 
-     if(@ColumnCostCenterID=52)
-		set @CostCenterTableName  ='SVC_CustomersVehicle'
-                   
-     IF(@CC=0)--FIRST TIME JOIN MAP TABLE              
+    IF(@CC=0)--FIRST TIME JOIN MAP TABLE              
      BEGIN                
       IF(@CostCenterID=2)--ACCOUNTS                    
    SET @STRJOIN=@STRJOIN+' left  JOIN COM_CCCCDATA ACM WITH(NOLOCK) ON ACM.NodeID=A.AccountID AND ACM.COSTCENTERID='+CONVERT(VARCHAR,@CostCenterID)              
     ELSE IF(@CostCenterID=3)--PRODUCTS              
        SET @STRJOIN=@STRJOIN+' left  JOIN COM_CCCCDATA PCM WITH(NOLOCK) ON PCM.NodeID=A.ProductID AND PCM.COSTCENTERID='+CONVERT(VARCHAR,@CostCenterID)              
-      ELSE IF(@CostCenterID=51)--CUSTOMERS              
-       SET @STRJOIN=@STRJOIN+' left  JOIN SVC_CustomerCostCenterMap SCM WITH(NOLOCK) ON SCM.CustomerID=A.CustomerID'              
-       ELSE IF (@CostCenterID=58)              
-       SET @STRJOIN=@STRJOIN              
-      ELSE IF (@CostCenterID=57)              
-       SET @STRJOIN=@STRJOIN               
       ELSE IF (@CostCenterID=72)            
        SET @STRJOIN=@STRJOIN              
       ELSE IF (@CostCenterID=101)            
@@ -341,8 +330,6 @@ SET NOCOUNT ON
       ELSE IF (@CostCenterID=75)             
        SET @STRJOIN=@STRJOIN     
          ELSE IF (@CostCenterID=104)             
-       SET @STRJOIN=@STRJOIN     
-          ELSE IF (@CostCenterID=59)             
        SET @STRJOIN=@STRJOIN   
       ELSE --OTHER COSTCENTERS   
 		SET @STRJOIN=@STRJOIN+' left  JOIN COM_CCCCDATA CCM WITH(NOLOCK) ON CCM.NodeID=A.NodeID AND CCM.COSTCENTERID='+CONVERT(VARCHAR,@CostCenterID)              
@@ -350,7 +337,6 @@ SET NOCOUNT ON
        --SET @STRJOIN=@STRJOIN+' left  JOIN COM_CostCenterCostCenterMap CCM WITH(NOLOCK) ON CCM.ParentNodeID =A.NodeID AND CCM.ParentCostCenterID='+convert(NVARCHAR(10),@CostCenterID)              
      END  
 	 
-	    
       
      --Set Primary Column               
      if(@ColumnCostCenterID=3)              
@@ -390,37 +376,7 @@ SET NOCOUNT ON
            
        set @ColCostCenterPrimary='BatchID'              
        SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.BatchNumber as '''+@ColumnResourceData+''''              
-    END              
-    ELSE if(@ColumnCostCenterID=51)              
-      BEGIN            
-       set @ColCostCenterPrimary='CustomerID'              
-       SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.CustomerName as '''+@ColumnResourceData+''''              
-       END  
-        ELSE if(@ColumnCostCenterID=52)              
-      BEGIN            
-       set @ColCostCenterPrimary='CV_ID'              
-       SET @strColumns=@strColumns+'replace(CC'+CONVERT(NVARCHAR(10),@CC)+'.PlateNumber,''-'','''') as '''+@ColumnResourceData+''''              
-       END     
-    ELSE if(@ColumnCostCenterID=61 and @UserColumnName='Vehicle')              
-      BEGIN            
-       set @ColCostCenterPrimary='VehicleID'              
-       SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.Make+''-''+'+'CC'+CONVERT(NVARCHAR(10),@CC)+'.Model+''-''+'+'CC'+CONVERT(NVARCHAR(10),@CC)+'.Variant as '''+@ColumnResourceData+''''    
-     END      
-       ELSE if(@ColumnCostCenterID=61 and @UserColumnName='Make')              
-      BEGIN            
-       set @ColCostCenterPrimary='VehicleID'              
-       SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.Make as '''+@ColumnResourceData+''''    
-     END    
-       ELSE if(@ColumnCostCenterID=61 and @UserColumnName='Model')              
-      BEGIN            
-       set @ColCostCenterPrimary='VehicleID'              
-       SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.Model as '''+@ColumnResourceData+''''    
-     END   
-       ELSE if(@ColumnCostCenterID=61 and @UserColumnName='Variant')              
-      BEGIN            
-       set @ColCostCenterPrimary='VehicleID'              
-       SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.Variant as '''+@ColumnResourceData+''''    
-     END   
+    END   
     ELSE if(@ColumnCostCenterID=83)              
       BEGIN              
                       
@@ -470,15 +426,7 @@ SET NOCOUNT ON
        set @ColCostCenterPrimary='ContractID'              
        SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.ContractPrefix as '''+@ColumnResourceData+''''              
                        
-      END     
-         
-     ELSE if(@ColumnCostCenterID=57)              
-      BEGIN              
-                      
-       set @ColCostCenterPrimary='NodeID'              
-       SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.Category as '''+@ColumnResourceData+''''              
-                       
-      END             
+      END       
      ELSE if(@ColumnCostCenterID=72)              
       BEGIN              
                       
@@ -527,15 +475,10 @@ SET NOCOUNT ON
        set @ColCostCenterPrimary='BOMID'              
        SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.BOMName as '''+@ColumnResourceData+''''              
                        
-   END            
-     ELSE if(@ColumnCostCenterID=58)              
-      BEGIN              
-       set @ColCostCenterPrimary='InsuranceID'              
-       SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.InsuranceName as '''+@ColumnResourceData+''''              
-      END                    
+	   END                  
       ELSE               
       BEGIN              
-    set @ColCostCenterPrimary='NodeID'              
+		set @ColCostCenterPrimary='NodeID'              
        SET @strColumns=@strColumns+'CC'+CONVERT(NVARCHAR(10),@CC)+'.NAME as '''+@ColumnResourceData+''''              
       END              
               
@@ -563,22 +506,7 @@ SET NOCOUNT ON
            
       --SET @STRJOIN=@STRJOIN+' left  JOIN '+@CostCenterTableName +' CC'+CONVERT(NVARCHAR(10),@CC)              
       -- +' WITH(NOLOCK) ON PCM.NodeID= CC'+CONVERT(NVARCHAR(10),@CC)+'.'+@ColCostCenterPrimary+' AND PCM.CostCenterID='+convert(NVARCHAR(10),@ColumnCostCenterID)              
-     END              
-     ELSE IF(@CostCenterID=51)--CUSTOMERS              
-     BEGIN              
-      SET @STRJOIN=@STRJOIN+' left  JOIN '+@CostCenterTableName +' CC'+CONVERT(NVARCHAR(10),@CC)              
-       +' WITH(NOLOCK) ON SCM.NodeID= CC'+CONVERT(NVARCHAR(10),@CC)+'.'+@ColCostCenterPrimary+' AND SCM.CostCenterID='+convert(NVARCHAR(10),@ColumnCostCenterID)              
-     END      
-       ELSE IF(@CostCenterID=52)--CUSTOMERS   Vehicle           
-     BEGIN              
-      SET @STRJOIN=@STRJOIN+' left  JOIN '+@CostCenterTableName +' CC'+CONVERT(NVARCHAR(10),@CC)              
-       +' WITH(NOLOCK) ON SCM.NodeID= CC'+CONVERT(NVARCHAR(10),@CC)+'.'+@ColCostCenterPrimary+' AND SCM.CostCenterID='+convert(NVARCHAR(10),@ColumnCostCenterID)              
-     END  
-     ELSE IF(@CostCenterID=57)--ShopSupplies              
-     BEGIN              
-      SET @STRJOIN=@STRJOIN+' left  JOIN '+@CostCenterTableName +' CC'+CONVERT(NVARCHAR(10),@CC)              
-       +' WITH(NOLOCK) ON SCM.NodeID= CC'+CONVERT(NVARCHAR(10),@CC)+'.'+@ColCostCenterPrimary+' AND SCM.CostCenterID='+convert(NVARCHAR(10),@ColumnCostCenterID)              
-     END                
+     END           
      ELSE IF(@CostCenterID=72)--Asset              
      BEGIN              
       SET @STRJOIN=@STRJOIN+' left  JOIN '+@CostCenterTableName +' CC'+CONVERT(NVARCHAR(10),@CC)              
@@ -642,13 +570,14 @@ SET NOCOUNT ON
        SET @STRJOIN=@STRJOIN+' left JOIN '+@CostCenterTableName +' CC'+CONVERT(NVARCHAR(10),@CC)            
        +' WITH(NOLOCK) ON CCM.CCNID'+CONVERT(NVARCHAR,@ColumnCostCenterID-50000)+'= CC'+CONVERT(NVARCHAR(10),@CC)+'.'+@ColCostCenterPrimary   
         
-     END              
+     END
+	 set @strIDCols=@strIDCols+',CC'+CONVERT(NVARCHAR(10),@CC)+'.'+@ColCostCenterPrimary +' C'+convert(nvarchar,@CostCenterColID)
       --select     @ColCostCenterPrimary
     --INCREMENT COSTCENTER COLUMNS COUNT              
 		SET @CC=@CC+1              
               
     END              
-    ELSE IF(@IsColumnUserDefined IS NOT NULL AND @IsColumnUserDefined = 1 AND (@CostCenterID=2 OR @CostCenterID=3 OR @CostCenterID=65 OR @CostCenterID=51  OR @CostCenterID=83 OR @CostCenterID=88 OR @CostCenterID=73 OR @CostCenterID=72))               
+    ELSE IF(@IsColumnUserDefined IS NOT NULL AND @IsColumnUserDefined = 1 AND (@CostCenterID=2 OR @CostCenterID=3 OR @CostCenterID=65 OR @CostCenterID=83 OR @CostCenterID=88 OR @CostCenterID=73 OR @CostCenterID=72 OR @CostCenterID=76) and @Param1<>'#Address#')               
     BEGIN
 	
 		if @ColumnCostCenterID=44
@@ -664,14 +593,19 @@ SET NOCOUNT ON
 		end
     END              
 ELSE IF(@SysColumnName='Balance' and @IsColumnUserDefined=0)              
-BEGIN
-	
---select @Param1           
-	SET @strColumns=@strColumns +'
-isnull((select SUM(isnull(amount,0)) from ACC_DocDetails D with(nolock)'+@AccJoin+' where DocDate < =' +convert(nvarchar,@Dt)+@AccWhere+' and debitaccount in (select AccountID from ACC_Accounts with(nolock) where lft>=(select lft from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar(50),@NodeID)+')
-and rgt<= (select rgt from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar(50),@NodeID)+'))),0)-      
-isnull((select SUM(isnull(amount,0)) from ACC_DocDetails D with(nolock)'+@AccJoin+' where DocDate < =' +convert(nvarchar,@Dt)+@AccWhere+' and creditaccount in (select AccountID from ACC_Accounts with(nolock) where lft>=(select lft from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar,@NodeID)+') and rgt< 
-= (select rgt from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar,@NodeID)+'))),0) as Balance
+BEGIN   
+	SET @strColumns=@strColumns +'(isnull((select SUM(isnull(D.amount,0)) from ACC_DocDetails D with(nolock)'+@AccJoin+' where D.DocDate < =' +convert(nvarchar,@Dt)+@AccWhere+' and D.debitaccount in (select AccountID from ACC_Accounts with(nolock) where lft>=(select lft from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar(50),@NodeID)+')
+	and rgt<= (select rgt from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar(50),@NodeID)+'))),0)'
+	IF @InvJoin IS NOT NULL AND @InvJoin<>''
+		set @strColumns=@strColumns+'
+		+isnull((select SUM(isnull(D.amount,0)) from ACC_DocDetails D with(nolock)'+@InvJoin+' where D.DocDate < =' +convert(nvarchar,@Dt)+@AccWhere+' and D.debitaccount in (select AccountID from ACC_Accounts with(nolock) where lft>=(select lft from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar(50),@NodeID)+')
+		and rgt<= (select rgt from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar(50),@NodeID)+'))),0)'
+	set @strColumns=@strColumns+')-(isnull((select SUM(isnull(D.amount,0)) from ACC_DocDetails D with(nolock)'+@AccJoin+' where D.DocDate < =' +convert(nvarchar,@Dt)+@AccWhere+' and D.creditaccount in (select AccountID from ACC_Accounts with(nolock) where lft>=(select lft from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar,@NodeID)+') 
+	and rgt<= (select rgt from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar,@NodeID)+'))),0)'
+	IF @InvJoin IS NOT NULL AND @InvJoin<>''
+		set @strColumns=@strColumns+'+isnull((select SUM(isnull(D.amount,0)) from ACC_DocDetails D with(nolock)'+@InvJoin+' where D.DocDate < =' +convert(nvarchar,@Dt)+@AccWhere+' and D.creditaccount in (select AccountID from ACC_Accounts with(nolock) where lft>=(select lft from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar,@NodeID)+') 
+		and rgt<= (select rgt from ACC_Accounts with(nolock) where AccountID='+convert(nvarchar,@NodeID)+'))),0)'
+	set @strColumns=@strColumns+',0)) as Balance
   '      
  END         
   ELSE IF(@SysColumnName='QOH' and @IsColumnUserDefined=0 and @CostCenterID=3  )              
@@ -743,9 +677,9 @@ isnull((select SUM(isnull(amount,0)) from ACC_DocDetails D with(nolock)'+@AccJoi
 		IF(@Param1 IS NOT NULL AND @Param1 != '')
 		BEGIN
 			DECLARE @Query NVARCHAR(MAX)
-			DECLARE @TblPendingOrders AS TABLE(ProductID BIGINT,Qty FLOAT)
+			DECLARE @TblPendingOrders AS TABLE(ProductID INT,Qty FLOAT)
 			SET @Query=dbo.fnGetPendingOrders(@Param1,@NodeID,'','',0) 
-			PRINT @Query
+			--PRINT @Query
 			DELETE FROM @TblPendingOrders
 			INSERT INTO @TblPendingOrders(ProductID,Qty)
 			EXEC(@Query)
@@ -930,11 +864,11 @@ BEGIN
 END
 ELSE IF(@CostCenterID=3 AND @SysColumnName LIKE 'PW_LastValue%')
 BEGIN
-	declare @LastColID BIGINT,@PWCOLUMNNAME NVARCHAR(100),@PWCCID NVARCHAR(20),@DocumentType INT,@val nvarchar(MAX),@RName nvarchar(100),@DataType nvarchar(100)
+	declare @LastColID INT,@PWCOLUMNNAME NVARCHAR(100),@PWCCID NVARCHAR(20),@DocumentType INT,@val nvarchar(MAX),@RName nvarchar(100),@DataType nvarchar(100)
 	set @Val=null
 	set @PWCOLUMNNAME=null
 	set @RName=@ColumnResourceData
-	if ISNUMERIC(@Param1)=1 and convert(bigint,@Param1)>0
+	if ISNUMERIC(@Param1)=1 and convert(INT,@Param1)>0
 	begin
 		SELECT @PWCOLUMNNAME=C.SYSCOLUMNNAME,@PWCCID=convert(nvarchar,C.CostCenterID),@DocumentType=DocumentType,
 			@RName=C.UserColumnName,@DataType=UserColumnType
@@ -988,11 +922,20 @@ ELSE IF(@CostCenterID=2 AND @SysColumnName='Balance As On Document Date')
 BEGIN
 	declare @BalDocDate float
 	--Debit Amount	
-	set @sql='SELECT @BalDocDate=ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.DebitAccount='+convert(nvarchar,@NodeID)
-	+' and D.DocDate<='+convert(nvarchar,convert(float,@Date))+@AccWhere+'),0) '
-	--Credit Amount	 
-	set @sql=@sql+'-ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.CreditAccount='+convert(nvarchar,@NodeID)
+	set @sql='SELECT @BalDocDate=(ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.DebitAccount='+convert(nvarchar,@NodeID)
 	+' and D.DocDate<='+convert(nvarchar,convert(float,@Date))+@AccWhere+'),0)'
+	IF @InvJoin IS NOT NULL AND @InvJoin<>''
+		set @sql=@sql+'+ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@InvJoin+' where D.DebitAccount='+convert(nvarchar,@NodeID)
+		+' and D.DocDate<='+convert(nvarchar,convert(float,@Date))+@AccWhere+'),0)'
+	set @sql=@sql+')'
+	--Credit Amount	 
+	set @sql=@sql+'-(ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.CreditAccount='+convert(nvarchar,@NodeID)
+	+' and D.DocDate<='+convert(nvarchar,convert(float,@Date))+@AccWhere+'),0)'
+	IF @InvJoin IS NOT NULL AND @InvJoin<>''
+		set @sql=@sql+'+ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@InvJoin+' where D.CreditAccount='+convert(nvarchar,@NodeID)
+		+' and D.DocDate<='+convert(nvarchar,convert(float,@Date))+@AccWhere+'),0)'
+	set @sql=@sql+')'
+	PRINT @sql
 	exec sp_executesql @sql,N'@BalDocDate float output',@BalDocDate output
 	
 	SET @strColumns=@strColumns+'CONVERT(FLOAT,'+CONVERT(NVARCHAR,convert(decimal(14,3),@BalDocDate))+') as '''+@ColumnResourceData+''''
@@ -1001,12 +944,19 @@ ELSE IF(@CostCenterID=2 AND @SysColumnName='Balance As On System Date')
 BEGIN
 	declare @BalSysDate float
 	--Debit Amount	
-	set @sql='SELECT @BalSysDate=ISNULL((SELECT SUM(AMOUNT) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where DebitAccount='+convert(nvarchar,@NodeID)
-	+' and DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0) '
+	set @sql='SELECT @BalSysDate=(ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.DebitAccount='+convert(nvarchar,@NodeID)
+	+' and D.DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
+	IF @InvJoin IS NOT NULL AND @InvJoin<>''
+		set @sql=@sql+'+ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@InvJoin+' where D.DebitAccount='+convert(nvarchar,@NodeID)
+		+' and D.DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
+	set @sql=@sql+')'
 	--Credit Amount	 
-	set @sql=@sql+'-ISNULL((SELECT SUM(AMOUNT) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where CreditAccount='+convert(nvarchar,@NodeID)
-	+' and DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
-	print(@sql)
+	set @sql=@sql+'-(ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.CreditAccount='+convert(nvarchar,@NodeID)
+	+' and D.DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
+	IF @InvJoin IS NOT NULL AND @InvJoin<>''
+		set @sql=@sql+'+ISNULL((SELECT SUM(D.AMOUNT) FROM ACC_DocDetails D with(nolock)'+@InvJoin+' where D.CreditAccount='+convert(nvarchar,@NodeID)
+		+' and D.DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
+	set @sql=@sql+')'
 	exec sp_executesql @sql,N'@BalSysDate float output',@BalSysDate output
 	
 	SET @strColumns=@strColumns+'CONVERT(FLOAT,'+CONVERT(NVARCHAR,convert(decimal(14,3),@BalSysDate))+') as '''+@ColumnResourceData+''''
@@ -1016,11 +966,19 @@ BEGIN
 	
 	declare @Bal float,@CrLimit float,@DOBal float
 	--Debit Amount	
-	set @sql='SELECT @Bal=ISNULL((SELECT SUM(ISNULL(AMOUNT,0)) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.DebitAccount='+convert(nvarchar,@NodeID)
-	+' and DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0) '
+	set @sql='SELECT @Bal=(ISNULL((SELECT SUM(ISNULL(D.AMOUNT,0)) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.DebitAccount='+convert(nvarchar,@NodeID)
+	+' and D.DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
+	IF @InvJoin IS NOT NULL AND @InvJoin<>''
+		set @sql=@sql+'+ISNULL((SELECT SUM(ISNULL(D.AMOUNT,0)) FROM ACC_DocDetails D with(nolock)'+@InvJoin+' where D.DebitAccount='+convert(nvarchar,@NodeID)
+		+' and D.DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
+	set @sql=@sql+')'
 	--Credit Amount	 
-	set @sql=@sql+'-ISNULL((SELECT SUM(ISNULL(AMOUNT,0)) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.CreditAccount='+convert(nvarchar,@NodeID)
-	+' and DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
+	set @sql=@sql+'-(ISNULL((SELECT SUM(ISNULL(D.AMOUNT,0)) FROM ACC_DocDetails D with(nolock)'+@AccJoin+' where D.CreditAccount='+convert(nvarchar,@NodeID)
+	+' and D.DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
+	IF @InvJoin IS NOT NULL AND @InvJoin<>''
+		set @sql=@sql+'+ISNULL((SELECT SUM(ISNULL(D.AMOUNT,0)) FROM ACC_DocDetails D with(nolock)'+@InvJoin+' where D.CreditAccount='+convert(nvarchar,@NodeID)
+		+' and D.DocDate<='+convert(nvarchar,@Dt)+@AccWhere+'),0)'
+	set @sql=@sql+')'
 	exec sp_executesql @sql,N'@Bal float output',@Bal output
 	
 	select @CrLimit=CreditLimit from ACC_Accounts with(nolock) WHERE AccountID=@NodeID
@@ -1040,7 +998,7 @@ BEGIN
 	
 	SET @strColumns=@strColumns+'CONVERT(FLOAT,'+convert(nvarchar,convert(decimal(14,3),(@CrLimit-(@Bal+ISNULL(@DOBal,0)))))+') as '''+@ColumnResourceData+''''
 END
- else if (@CostCenterColID between 26706 and 26720)--Address Fields
+ else if (@CostCenterColID between 26706 and 26720 or @Param1='#Address#')--Address Fields
   BEGIN                  
 	if @IsAddressDisplayed=0
 	begin
@@ -1048,7 +1006,7 @@ END
 		SET @STRJOIN=@STRJOIN+'
 	  LEFT JOIN COM_Address ADDS WITH(NOLOCK) ON ADDS.AddressTypeID=1 and ADDS.FeatureID='+convert(nvarchar,@CostCenterID)+' and ADDS.FeaturePK='+@Primarycol
 	end
-	SET @strColumns=@strColumns+'ADDS.'+@SysColumnName+' as  ' +@SysColumnName                        
+	SET @strColumns=@strColumns+'ADDS.'+@SysColumnName+' as ['+@ColumnResourceData+']'                        
   END  
  else if (@SysColumnName ='SalutationID' and @CostCenterID=65)      
   BEGIN      
@@ -1318,13 +1276,7 @@ END
   else if (@SysColumnName ='StatusID' and @CostCenterID=72)      
   BEGIN      
   SET @strColumns=@strColumns+'case when A.StatusID=1 then ''Active'' else ''Dispose'' end as Status '     
-  END     
-  else if (@SysColumnName ='StatusID' and @CostCenterID=59)      
-  BEGIN      
-  SET @strColumns=@strColumns+' case when (A.servicetickettypeid=1) then (''Estimate'')       
-      when (A.ServiceTicketTypeID=2) then (''Workorder'')     
-       when (A.ServiceTicketTypeID=3) then (''Invoice'') else (''Delivered'') end    Status '     
-  END     
+  END  
   else if (@SysColumnName ='PropertyTypeLookUpID' and @CostCenterID=92)      
   BEGIN      
   SET @strColumns=@strColumns+'CTLookup.Name as Property Type '       
@@ -1442,7 +1394,7 @@ END
   SET @STRJOIN=@STRJOIN+'  LEFT JOIN ACC_Accounts TNT WITH(NOLOCK) ON (A.IncomeAccID=ACC.AccountID) '      
   END   
   else if((@CostCenterID=2 and @SysColumnName='AccountImage') or (@CostCenterID=3 and @SysColumnName='ProductImage')
-  or (@CostCenterID>50000 and @CostCenterID<=50050 and @SysColumnName='DimensionImage') )
+  or (@CostCenterID>50000 and @SysColumnName='DimensionImage') )
      begin
 		set @strColumns=@strColumns+'f.FileExtension,f.GUID FileGUID  '  
 		 SET @STRJOIN=@STRJOIN+' left join COM_Files f WITH(NOLOCK) on FeaturePK='+Convert(nvarchar,@PrimaryCol)+' 
@@ -1450,13 +1402,50 @@ END
 	end
 	ELSE IF(@CostCenterID=50051 AND @SysColumnName='CreditDays')     
 	BEGIN
-			DECLARE @EDOB DATETIME 
-			SELECT @EDOB=CONVERT(DATETIME,DOB) from COM_CC50051 Where NodeId=@NodeID 
+			DECLARE @EDOB DATETIME
+			SET @SQL ='SELECT @EDOB=CONVERT(DATETIME,DOB) from COM_CC50051 WITH(NOLOCK) Where NodeId='+CONVERT(NVARCHAR,@NodeID)
+			EXEC sp_executesql @SQL,N'@EDOB DATETIME OUTPUT',@EDOB OUTPUT
+			
 			IF(@EDOB IS NOT NULL)
 				SET @strColumns=@strColumns+'DATEDIFF(YEAR,'''+CONVERT(NVARCHAR,@EDOB)+''','''+CONVERT(NVARCHAR,GETDATE())+''') as '''+@ColumnResourceData+''''  
 			ELSE 
 				SET @strColumns=@strColumns+'0 as '''+@ColumnResourceData+''''  
-	END       
+	END     
+	ELSE IF(@CostCenterID=50051 AND @SysColumnName='Service')     
+	BEGIN
+		DECLARE @EDOJ DATETIME,@strVal NVARCHAR(100)
+		DECLARE @tbl TABLE (iy INT,im INT,id INT)
+		SET @SQL ='SELECT @EDOJ=CONVERT(DATETIME,DOJ) from COM_CC50051 WITH(NOLOCK) Where NodeId='+CONVERT(NVARCHAR,@NodeID)
+		EXEC sp_executesql @SQL,N'@EDOJ DATETIME OUTPUT',@EDOJ OUTPUT
+
+		INSERT INTO @tbl
+		SELECT * FROM fnCOM_GetYearsMonthsDays(@EDOJ,GETDATE())
+		SELECT @strVal= convert(nvarchar,iy)+' Years '+convert(nvarchar,im)+' Months '+convert(nvarchar,id)+' Days' FROM @tbl 
+		SET @strColumns=@strColumns+''''+@strVal+''' as '''+@ColumnResourceData+''''  
+
+	END  
+	ELSE IF(@CostCenterID=50051 AND @SysColumnName='NextShift')     
+	BEGIN
+		DECLARE @Shift NVARCHAR(100)
+		SET @Shift=''
+		EXEC spPAY_GetEmpShift @Date,@NodeID,@UserID,@LangID,@Shift OUTPUT
+		SET @strColumns=@strColumns+''''+@Shift+''' as '''+@ColumnResourceData+''''  
+
+	END 
+	ELSE IF(@CostCenterID=50051 AND @SysColumnName='LastIncrement')     
+	BEGIN
+		DECLARE @LastIncrement NVARCHAR(100)
+		SET @LastIncrement=''
+		SET @SQL ='SELECT TOP 1 @LastIncrement=REPLACE(SUBSTRING(CONVERT(VARCHAR(11), CONVERT(DATETIME,a.EffectFrom), 113), 4, 8),'' '',''-'')
+		FROM PAY_EmpPay a WITH(NOLOCK)
+		WHERE EmployeeID='+CONVERT(NVARCHAR,@NodeID) +'
+		ORDER BY a.EffectFrom DESC '
+
+		EXEC sp_executesql @SQL,N'@LastIncrement NVARCHAR(100) OUTPUT',@LastIncrement OUTPUT
+
+		SET @strColumns=@strColumns+''''+@LastIncrement+''' as '''+@ColumnResourceData+''''  
+
+	END  
     ELSE IF(@SysColumnName='StatusID')              
     BEGIN          
  --if @CostCenterID=2       
@@ -1542,38 +1531,23 @@ END
      SET @strColumns=@strColumns+'A.'+@SysColumnName+' as '''+@ColumnResourceData+''''              
  END              
  
-   END   
+   END
+
+   if (@CostCenterID=2 and @strColumns not like '%A.AccountTypeID%')
+	set @strColumns = @strColumns+',A.AccountTypeID'
 	
 	IF(@CostCenterID=50051 AND EXISTS (SELECT * FROM @tblList WHERE CostCenterColID=30002)) ---StatusID
 	BEGIN
-	
-		SET @SQL=' with rows as ( select 1 rowno,'+@Primarycol+' as NodeID'+@strColumns+','''+@EmpAsOnStatus+''' as Status'+ +@STRJOIN+' WHERE '+@Primarycol+' IN(' +convert(nvarchar(MAX), @NodeID)   +')'+ @tempWhere     +      
+		SET @SQL=' with rows as ( select 1 rowno,'+@Primarycol+' as NodeID'+@strColumns+','''+@EmpAsOnStatus+''' as Status'+@strIDCols +@STRJOIN+' WHERE '+@Primarycol+' IN(' +convert(nvarchar(MAX), @NodeID)   +')'+ @tempWhere     +      
 					' ) select * from rows ' 
 	END
 	ELSE
 	BEGIN  
-		SET @SQL=' with rows as ( select 1 rowno,'+@Primarycol+' as NodeID'+@strColumns +@STRJOIN+' WHERE '+@Primarycol+' IN(' +convert(nvarchar(MAX), @NodeID)   +')'+ @tempWhere     +      
+		SET @SQL=' with rows as ( select 1 rowno,'+@Primarycol+' as NodeID'+@strColumns+@strIDCols+@STRJOIN+' WHERE '+@Primarycol+' IN(' +convert(nvarchar(MAX), @NodeID)   +')'+ @tempWhere     +      
 					' ) select * from rows '              
 	END
               
-   IF(@CostCenterID=54)              
-   BEGIN              
-   SET @SQL='   Select bd.Incident_ID rowno,              
-     bd.BreakDownTicketNumber as Ticket,       
-        convert(nvarchar(12),convert(datetime,bd.CallReceivedDateTime),106) as Date,              
-              c.CustomerName as Name,               
-    v.Make+''-''+v.Model+''-''+v.Variant as Vehicle,              
-   case when cv.PlateNumber is null or cv.PlateNumber = '''' then ''-'' else cv.PlateNumber end as Plate,      
-     l.Name as Location,              
-              s.Status as Status               
-    from SVC_BreakDownTicket bd with(nolock)              
-    join COM_Location l with(nolock) on bd.Location=l.NodeID                
-    join COM_Status s with(nolock) on bd.StatusID=s.StatusID              
-             join SVC_CustomersVehicle cv with(nolock) on bd.CustomerVehicleID=cv.CV_ID              
-    join SVC_Customers c with(nolock) on cv.CustomerID=c.CustomerID               
-    left join SVC_Vehicle v with(nolock) on cv.VehicleID=v.VehicleID where bd.Incident_ID='+convert(nvarchar(50), @NodeID)              
-              
-   end     
+       
    
 	IF(@CostCenterID=117)              
 	BEGIN              
@@ -1581,9 +1555,10 @@ END
 	end                       
                
 	SET @SQL=@SQL+' SELECT * FROM  COM_Files WITH(NOLOCK)  WHERE FeatureID='+Convert(nvarchar,@CostCenterID)+' and  FeaturePK in ('+Convert(nvarchar(max),@NodeID)+')'              
+	
 	print @SQL
 	if(@NodeID<>'')
-		Exec(@SQL)               
+		Exec sp_executesql @SQL               
 
 SET NOCOUNT OFF;              
 RETURN 1              
@@ -1602,5 +1577,6 @@ BEGIN CATCH
 SET NOCOUNT OFF                
 RETURN -999                 
 END CATCH
+
 
 GO

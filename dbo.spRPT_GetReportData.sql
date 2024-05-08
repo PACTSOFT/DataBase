@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spRPT_GetReportData]
 	@Type [int] = 0,
-	@Param1 [bigint],
+	@Param1 [int],
 	@strXML [nvarchar](max) = NULL,
 	@RoleID [int] = -153
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -35,7 +35,7 @@ SET NOCOUNT ON;
 		set @UserID=@Param1
 		
 		select CostCenterID,DocumentName,DocumentAbbr From ADM_DocumentTypes with(nolock) 
-		where IsInventory=1 and DocumentType not between 51 and 90
+		where IsInventory=1 --and DocumentType not between 51 and 90
 		and (@RoleID=1 or @UserID=1 or CostCenterID IN( select FA.FeatureID from adm_featureactionrolemap FAR with(nolock)
 			inner join adm_featureaction FA with(nolock) on FAR.FeatureActionID=FA.FeatureActionID
 			where FAR.RoleID=@RoleID and (FA.FeatureActionTypeID=1 or FA.FeatureActionTypeID=2) and FA.FeatureID between 40000 and 50000
@@ -75,7 +75,7 @@ SET NOCOUNT ON;
 		ModifiedDate=convert(float,getdate())  
 	   FROM COM_Files C   
 	   INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)    
-	   ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID  
+	   ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID  
 	   WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
 	   
 	END
@@ -92,35 +92,75 @@ SET NOCOUNT ON;
 		set @UserID=@Param1
 		if @RoleID=-153
 			SELECT @RoleID=RoleID FROM ADM_UserRoleMap WITH(nolock) WHERE UserID=@UserID
+		
+		IF(@RoleID=-1)
+		BEGIN
+			DECLARE @NRoleID NVARCHAR(MAX)
 
-		insert into #TblUsrWF
-		select *,null,null from (
-			--Horizontal
-			select WorkFlowID,max(LevelID) LevelID,1 TYPE
-			from
-			(
-				select WorkFlowID,LevelID from com_workflow w with(nolock)
-				where (UserID=@UserID or RoleID=@RoleID) and w.Type=1
-				union all
-				select WorkFlowID,LevelID from [COM_WorkFlow] w WITH(NOLOCK)
-				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
-				where g.UserID=@UserID or g.RoleID =@RoleID and w.Type=1
-			) as H
-			group by WorkFlowID
-			UNION ALL
-			--Vertical
-			select WorkFlowID,LevelID,2 TYPE
-			from
-			(
-				select WorkFlowID,LevelID,TYPE from com_workflow w with(nolock)
-				where (UserID=@UserID or RoleID=@RoleID) and w.Type=2
-				union all
-				select WorkFlowID,LevelID,TYPE from [COM_WorkFlow] w WITH(NOLOCK)
-				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
-				where g.UserID=@UserID or g.RoleID =@RoleID and w.Type=2
-			) as V
-			group by WorkFlowID,LevelID
-		) as T
+			SELECT @NRoleID=RoleID FROM ADM_UserRoleMap WITH(nolock) WHERE UserID=@UserID
+
+			SET @SQL='insert into #TblUsrWF
+			select *,null,null from (
+				--Horizontal
+				select WorkFlowID,max(LevelID) LevelID,1 TYPE
+				from
+				(
+					select WorkFlowID,LevelID from com_workflow w with(nolock)
+					where (UserID='+CONVERT(NVARCHAR,@UserID)+' or RoleID IN (-1,'+ @NRoleID +')) and w.Type=1
+					union all
+					select WorkFlowID,LevelID from [COM_WorkFlow] w WITH(NOLOCK)
+					JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
+					where g.UserID='+CONVERT(NVARCHAR,@UserID)+' or g.RoleID IN (-1,'+ @NRoleID +') and w.Type=1
+				) as H
+				group by WorkFlowID
+				UNION ALL
+				--Vertical
+				select WorkFlowID,LevelID,2 TYPE
+				from
+				(
+					select WorkFlowID,LevelID,TYPE from com_workflow w with(nolock)
+					where (UserID='+CONVERT(NVARCHAR,@UserID)+' or RoleID IN (-1,'+ @NRoleID +')) and w.Type=2
+					union all
+					select WorkFlowID,LevelID,TYPE from [COM_WorkFlow] w WITH(NOLOCK)
+					JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
+					where g.UserID='+CONVERT(NVARCHAR,@UserID)+' or g.RoleID IN (-1,'+ @NRoleID +') and w.Type=2
+				) as V
+				group by WorkFlowID,LevelID
+			) as T'
+			--PRINT @SQL
+			EXEC(@SQL)	
+		END
+		ELSE
+		BEGIN
+			insert into #TblUsrWF
+			select *,null,null from (
+				--Horizontal
+				select WorkFlowID,max(LevelID) LevelID,1 TYPE
+				from
+				(
+					select WorkFlowID,LevelID from com_workflow w with(nolock)
+					where (UserID=@UserID or RoleID=@RoleID) and w.Type=1
+					union all
+					select WorkFlowID,LevelID from [COM_WorkFlow] w WITH(NOLOCK)
+					JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
+					where g.UserID=@UserID or g.RoleID =@RoleID and w.Type=1
+				) as H
+				group by WorkFlowID
+				UNION ALL
+				--Vertical
+				select WorkFlowID,LevelID,2 TYPE
+				from
+				(
+					select WorkFlowID,LevelID,TYPE from com_workflow w with(nolock)
+					where (UserID=@UserID or RoleID=@RoleID) and w.Type=2
+					union all
+					select WorkFlowID,LevelID,TYPE from [COM_WorkFlow] w WITH(NOLOCK)
+					JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
+					where g.UserID=@UserID or g.RoleID =@RoleID and w.Type=2
+				) as V
+				group by WorkFlowID,LevelID
+			) as T
+		END
 		
 		DECLARE @SPInvoice cursor, @nStatusOuter int,@WID int,@Userlevel int,@escDays float,@escHrs float,@dt datetime,@TempUserlevel int
 		SET @SPInvoice = cursor for 
@@ -148,7 +188,8 @@ SET NOCOUNT ON;
 			select @escHrs=isnull(sum(escdays),0) from (select max(eschours) escdays from [COM_WorkFlow] a WITH(NOLOCK) 
 			where a.workflowid=@WID and a.LevelID<@Userlevel and a.LevelID>@TempUserlevel --and a.LevelID>@Level
 			group by a.LevelID) as t
-
+			
+			set @escHrs=@escHrs/24
 			--set @dt=dateadd("HH",-@escHrs,@dt),convert(float,@dt)
 
 			if (@escDays>0 or @escHrs>0) and @TempUserlevel<@Userlevel
@@ -200,8 +241,8 @@ SET NOCOUNT ON;
 		set @SQL=(SELECT  VALUE FROM COM_COSTCENTERPREFERENCES with(nolock) WHERE COSTCENTERID=3 AND NAME ='ProductCopyReports')
 		if @SQL is not null and @SQL!=''
 		begin
-			SET @SQL='DECLARE @UserID BIGINT,@RoleID BIGINT
-declare @TblRID as table(RID bigint)
+			SET @SQL='DECLARE @UserID INT,@RoleID INT
+declare @TblRID as table(RID INT)
 SET @UserID='+CONVERT(NVARCHAR,@UserID)+'              
 SET @RoleID='+CONVERT(NVARCHAR,@RoleID)+'
 insert into @TblRID
@@ -270,8 +311,8 @@ order by ReportName'
 			set @strXML=''
 		else
 			set @strXML=' and ReportName like ''%'+@strXML+'%'''
-		SET @SQL='DECLARE @UserID BIGINT,@RoleID BIGINT
-declare @TblRID as table(RID bigint)
+		SET @SQL='DECLARE @UserID INT,@RoleID INT
+declare @TblRID as table(RID INT)
 SET @UserID='+CONVERT(NVARCHAR,@Param1)+'
 SET @RoleID='+CONVERT(NVARCHAR,@RoleID)+'
 insert into @TblRID
@@ -350,7 +391,7 @@ order by ReportName'
 		if exists (select Txt from @table where ID=1 and Txt like '%txt.dcAlpha%')
 			set @SQL=@SQL+' left join COM_DocTextData txt with(nolock) on txt.InvDocDetailsID=ACC.InvDocDetailsID '
 		set @SQL=@SQL+(select Txt from @table where ID=2)+' WHERE B.BillWiseID IN ('+(select Txt from @table where ID=3)+ ') and (B.AccountID=ACC.DebitAccount or B.AccountID=ACC.CreditAccount)'
-		--print(@SQL)
+		print(@SQL)
 		exec(@SQL)
 	END
 	ELSE IF @Type=17
@@ -434,7 +475,7 @@ order by ReportName'
 		LEFT JOIN COM_Address AD WITH(NOLOCK) ON AD.FeatureID='+convert(nvarchar,@Param1)+' AND AD.FeaturePK=C.'+@PK+' AND AD.AddressTypeID=1
 		'+@CustomQuery1+'
 		WHERE C.'+@PK+' IN ('+@strXML+')'
-	--	print(@SQL)
+		print(@SQL)
 		exec(@SQL)
 	END
 
@@ -455,4 +496,5 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
 GO

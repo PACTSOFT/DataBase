@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetDocumentDefine]
-	@COSTCENTERID [bigint],
+	@COSTCENTERID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -56,7 +56,15 @@ SET NOCOUNT ON;
 	select * FROM [ADM_DocumentMap] with(nolock)
 	where [CostCenterID]=@CostCenterID
 
+	--10 -- DOWN PAYMENT MAP
+	select  L.ResourceData as FieldName, a.CostCenterColID, a.SysColumnName
+	from adm_costcenterdef a WITH(NOLOCK)
+	join com_languageresources l WITH(NOLOCK) on a.resourceid=l.resourceid and l.languageid=1
+	where a.CostCenterID=@CostCenterID AND a.IsColumnInUse=1 AND a.SysColumnName LIKE 'dcNUM%'
 	
+	--11 -- GETTTING ALL USED NUMERIC COLUMNS
+	SELECT Name as SysColumnName From Sys.columns where object_id=OBJECT_ID('COM_DocNUMData') AND Name LIKE 'dcNUM%' ORDER BY Name
+
 
 SET NOCOUNT OFF;              
 RETURN 1              
@@ -76,5 +84,6 @@ BEGIN CATCH
 	END              
 SET NOCOUNT OFF                
 RETURN -999                 
-END CATCH   
+END CATCH
+
 GO

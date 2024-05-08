@@ -3,8 +3,10 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_CancelContract]
-	@ContractID [bigint],
-	@SCostCenterID [bigint],
+	@ContractID [int],
+	@SCostCenterID [int],
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
@@ -16,21 +18,49 @@ BEGIN TRANSACTION
 BEGIN TRY        
 SET NOCOUNT ON;     
     
-	DECLARE @Dt float,@XML xml,@CNT bigint,@I BIGINT,@return_value int,@AUDITSTATUS NVARCHAR(50),@CancelDOCID bigint
-	DECLARE     @DELETEDOCID BIGINT , @DELETECCID BIGINT , @DELETEISACC BIT,@AuditTrial BIT,@IsAccDoc BIT
+	DECLARE @Dt float,@XML xml,@CNT INT,@I INT,@return_value int,@AUDITSTATUS NVARCHAR(50),@CancelDOCID INT
+	DECLARE     @DELETEDOCID INT , @DELETECCID INT , @DELETEISACC BIT,@AuditTrial BIT,@IsAccDoc BIT
 	DECLARE @DELDocPrefix NVARCHAR(50), @DELDocNumber NVARCHAR(500),@CostCenterID int,@stat int
 	SET @Dt=convert(float,getdate())
 
-	SET @AUDITSTATUS= 'CancelContract'  
+	SET @AUDITSTATUS= 'SUSPEND'  
+	 
+	SET @AuditTrial=0    
+	SELECT @AuditTrial= CONVERT(BIT,VALUE)  FROM [COM_COSTCENTERPreferences]  WITH(NOLOCK)  
+	WHERE CostCenterID=@SCostCenterID  AND NAME='AllowAudit' 
+
+	
+
+	IF (@AuditTrial=1 AND (@SCostCenterID=95 OR @SCostCenterID=104))  
+	BEGIN  
+		EXEC [spCOM_SaveHistory]  
+			@CostCenterID =@SCostCenterID,    
+			@NodeID =@ContractID,
+			@HistoryStatus =@AUDITSTATUS,
+			@UserName=@UserName,
+			@DT=@DT    
+	END 
 	
 	SElect @stat=STATUSID from REN_CONTRACT  WITH(NOLOCK)	
 	WHERE ContractID = @ContractID
 	
-	if(@stat in(428,465))
+	--Suspend/Cancel Contract External function
+	IF (@ContractID>0)
 	BEGIN
+		DECLARE @tablename NVARCHAR(200)
+		set @tablename=''
+		select @tablename=SpName from ADM_DocFunctions  WITH(NOLOCK) where CostCenterID=95 and Mode=11
+		if(@tablename<>'')
+			exec @tablename 95,@ContractID,'',@UserID,@LangID	
+	END	
+	
+	if(@stat in(428,465))
+	BEGIN			
 		Exec @return_value =[dbo].[spREN_CancelTermination]    
 			@ContractID=@ContractID,      
-			@SCostCenterID=@SCostCenterID,  
+			@SCostCenterID=@SCostCenterID,   
+			@SysInfo =@SysInfo, 
+			@AP =@AP,
 			@CompanyGUID=@CompanyGUID,      
 			@UserName=@UserName,    
 			@UserID =@UserID,      
@@ -48,7 +78,7 @@ SET NOCOUNT ON;
 IF( @SCostCenterID  = 95)  
 BEGIN    
       
-    DECLARE  @tblXML TABLE(ID int identity(1,1),DOCID bigint,COSTCENTERID int,IsAccDoc bit)
+    DECLARE  @tblXML TABLE(ID int identity(1,1),DOCID INT,COSTCENTERID int,IsAccDoc bit)
 	INSERT INTO @tblXML       
     select DocID,COSTCENTERID,IsAccDoc from [REN_ContractDocMapping]  with(nolock)
     where  [ContractID]=@ContractID and [Type]>0 and ContractCCID=95
@@ -73,6 +103,8 @@ BEGIN
 			 @DocPrefix = @DELDocPrefix,  
 			 @DocNumber = @DELDocNumber, 
 			 @Remarks=N'', 
+			 @SysInfo =@SysInfo, 
+			 @AP =@AP, 
 			 @UserID = @UserID,  
 			 @UserName = @UserName,
 			 @RoleID=@RoleID,
@@ -92,6 +124,8 @@ BEGIN
 				 @DocPrefix = @DELDocPrefix,  
 				 @DocNumber = @DELDocNumber, 
 				 @Remarks=N'', 
+				 @SysInfo =@SysInfo, 
+				 @AP =@AP, 
 				 @UserID = @UserID,  
 				 @UserName = @UserName, 
 				 @RoleID=@RoleID, 

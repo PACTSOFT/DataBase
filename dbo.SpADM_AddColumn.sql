@@ -13,7 +13,7 @@ BEGIN
 
 
 	declare @DbIndex INT,@colsql NVARCHAR(max),@tablename NVARCHAR(50),@CCTableName  NVARCHAR(50)
-	DECLARE @FNAME NVARCHAR(500),@RESDATA NVARCHAR(500),@ResID BIGINT
+	DECLARE @FNAME NVARCHAR(500),@RESDATA NVARCHAR(500),@ResID INT
 
 	SELECT @FNAME=Name,@CCTableName=TableName FROM ADM_Features WITH(NOLOCK) WHERE FeatureID=@ColumnCostCenterID
 	SELECT @ResID=MAX([ResourceID])+1 FROM [com_languageresources] WITH(NOLOCK)
@@ -38,9 +38,9 @@ BEGIN
 			
 			if not exists (select Name from sys.columns where Name=@ColumnName and object_id=object_id(@tablename))
 			begin
-				set @colsql='alter table '+@tablename+' add '+@ColumnName+' bigint not null default(1)'
+				set @colsql='alter table '+@tablename+' add '+@ColumnName+' INT not null default(1)'
 				exec(@colsql)
-				set @colsql='alter table '+@tablename+'_History add '+@ColumnName+' bigint not null default(1)'
+				set @colsql='alter table '+@tablename+'_History add '+@ColumnName+' INT not null default(1)'
 				exec(@colsql)
 			end
 		end
@@ -58,19 +58,19 @@ BEGIN
 	ELSE
 	BEGIN
 			
-		SELECT @DbIndex=count(*)+1  FROM ADM_CostCenterDef with(nolock) 
-		WHERE COSTCENTERID=@CostCenterID AND SYSCOLUMNNAME LIKE '%Alpha%' 
+		SET @DbIndex=1		
+		WHILE (1=1)
+		BEGIN
+			IF EXISTS (SELECT * FROM ADM_CostCenterDef with(nolock) WHERE COSTCENTERID=@CostCenterID AND SYSCOLUMNNAME LIKE '%Alpha'+CONVERT(NVARCHAR,@DbIndex))
+				SET @DbIndex=@DbIndex+1
+			ELSE
+				BREAK
+		END
 		
 		if (@ColumnName is null or @ColumnName='')
 			set @ColumnName='Alpha'+convert(nvarchar,@DbIndex)
 
-		if(@CostCenterID =95)
-			set @tablename='REN_ContractExtended'
-		else  if(@CostCenterID in(103,129))
-			set @tablename='REN_QuotationExtended'
-		else  if(@CostCenterID in(92))
-			set @tablename='REN_PropertyExtended'
-		else  if(@CostCenterID=2)
+		if(@CostCenterID=2)
 		BEGIN
 			set @tablename='ACC_AccountsExtended'
 			set @ColumnName='ac'+@ColumnName	
@@ -80,40 +80,66 @@ BEGIN
 			set @tablename='INV_ProductExtended'	
 			set @ColumnName='pt'+@ColumnName		
 		END	
-		else  if(@CostCenterID in(93))
+		else if(@CostCenterID=92)
+			set @tablename='REN_PropertyExtended'
+		else    if(@CostCenterID=93)
 			set @tablename='REN_UnitsExtended'
-		else  if(@CostCenterID in(94))
+		else  if(@CostCenterID=94)
 			set @tablename='REN_TenantExtended'
+		else if(@CostCenterID in (95,104))
+			set @tablename='REN_ContractExtended'
+		else  if(@CostCenterID in(103,129))
+			set @tablename='REN_QuotationExtended'
+		else  if(@CostCenterID=83)
+		BEGIN
+			set @tablename='CRM_CustomerExtended'	
+			set @ColumnName='cu'+@ColumnName		
+		END	
+		else  if(@CostCenterID=86)
+		BEGIN
+			set @tablename='CRM_LeadsExtended'	
+			set @ColumnName='LD'+@ColumnName		
+		END	
+		else  if(@CostCenterID=88)
+		BEGIN
+			set @tablename='CRM_CampaignsExtended'	
+			set @ColumnName='ca'+@ColumnName		
+		END	
+		else  if(@CostCenterID=89)
+		BEGIN
+			set @tablename='CRM_OpportunitiesExtended'	
+			set @ColumnName='op'+@ColumnName		
+		END	
+		else  if(@CostCenterID=65)
+		BEGIN
+			set @tablename='COM_ContactsExtended'	
+			set @ColumnName='ac'+@ColumnName		
+		END	
 		else  if(@CostCenterID >50000)	
 		begin			  					
 			select @tablename=TableName from adm_features with(nolock) where featureid=@CostCenterID
 			set @ColumnName='cc'+@ColumnName	
 		end
 					
-		while exists(select * from sys.columns where object_id=object_id(@tablename) and name=@ColumnName)
-		begin
-			set @DbIndex=@DbIndex+1
-			set @ColumnName='Alpha'+convert(nvarchar,@DbIndex)
-			
-			if(@CostCenterID=2)
-				set @ColumnName='ac'+@ColumnName		
-			else if(@CostCenterID=3)	
-				set @ColumnName='pt'+@ColumnName	
-			else if(@CostCenterID >50000)
-				set @ColumnName='cc'+@ColumnName		
-		END
-				
-		select @ResID=MAX([ResourceID])+1 from [com_languageresources] with(nolock)
+		if not exists(SELECT * FROM ADM_CostCenterDef with(nolock) WHERE COSTCENTERID=@CostCenterID AND SYSCOLUMNNAME=@ColumnName)
+		begin	
+			select @ResID=MAX([ResourceID])+1 from [com_languageresources] with(nolock)
 
-		INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
-		VALUES (@ResID, @ColumnName,1,'English', @ColumnName,'')
-		INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
-		VALUES (@ResID, @ColumnName,2,'Arabic', @ColumnName,'')
-		
-		INSERT INTO ADM_CostCenterDef (CostCenterID,ResourceID,CostCenterName,SysTableName,UserColumnName,SysColumnName,ColumnTypeSeqNumber,UserColumnType,ColumnDataType,UserDefaultValue,UserProbableValues,ColumnOrder,IsMandatory,IsEditable,IsVisible,IsCostCenterUserDefined,IsColumnUserDefined,IsCCDeleted,IsColumnDeleted,ColumnCostCenterID,ColumnCCListViewTypeID,FetchMaxRows,IsColumnGroup,ColumnGroupNumber,SectionSeqNumber,SectionID,SectionName,RowNo,ColumnNo,ColumnSpan,IsColumnInUse,UIWidth,CompanyGUID,GUID,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate)
-		SELECT @CostCenterID,@ResID,Name,@tablename,@ColumnName,@ColumnName,NULL,'TEXT','TEXT','','',0,0,1,1,0,1,0,0,0,0,NULL,0,NULL,49,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL
-		FROM ADM_features with(nolock) WHERE FeatureID=@CostCenterID
-		SET @CostCenterColID=SCOPE_IDENTITY()
+			INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
+			VALUES (@ResID, @ColumnName,1,'English', @ColumnName,'')
+			INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
+			VALUES (@ResID, @ColumnName,2,'Arabic', @ColumnName,'')
+			
+			INSERT INTO ADM_CostCenterDef (CostCenterID,ResourceID,CostCenterName,SysTableName,UserColumnName,SysColumnName,ColumnTypeSeqNumber,UserColumnType,ColumnDataType,UserDefaultValue,UserProbableValues,ColumnOrder,IsMandatory,IsEditable,IsVisible,IsCostCenterUserDefined,IsColumnUserDefined,IsCCDeleted,IsColumnDeleted,ColumnCostCenterID,ColumnCCListViewTypeID,FetchMaxRows,IsColumnGroup,ColumnGroupNumber,SectionSeqNumber,SectionID,SectionName,RowNo,ColumnNo,ColumnSpan,IsColumnInUse,UIWidth,CompanyGUID,GUID,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate)
+			SELECT @CostCenterID,@ResID,Name,@tablename,@ColumnName,@ColumnName,NULL,'TEXT','TEXT','','',0,0,1,1,0,1,0,0,0,0,NULL,0,NULL,49,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL
+			FROM ADM_features with(nolock) WHERE FeatureID=@CostCenterID
+			SET @CostCenterColID=SCOPE_IDENTITY()
+		END
+		else
+		begin
+			SELECT @CostCenterColID=CostCenterColID FROM ADM_CostCenterDef with(nolock) 
+			WHERE COSTCENTERID=@CostCenterID AND SYSCOLUMNNAME=@ColumnName
+		end
 				
 		if not exists (select Name from sys.columns where Name=@ColumnName and object_id=object_id(@tablename))
 		begin

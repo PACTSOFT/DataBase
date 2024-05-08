@@ -33,8 +33,14 @@ SET NOCOUNT ON;
 	WHERE CostCenterIDLinked=@ParentCCCID AND CostCenterIDBase=144)   
 
 	if(@ParentCCCID>0)
-		select Value,Name from com_costcenterpreferences  WITH(NOLOCK)
-		where name in ('ActivityAsPopup','DisableDimensionsatActivities','UseActivityQuickAdd')  and costcenterid=@ParentCCCID
+	BEGIN
+		if(@ParentCCCID between 40000 and 50000)
+			select prefvalue Value,prefname Name from com_Documentpreferences  WITH(NOLOCK)
+			where prefname in ('ActivityAsPopup','ActivityFields')  and costcenterid=@ParentCCCID
+		else
+			select Value,Name from com_costcenterpreferences  WITH(NOLOCK)
+			where name in ('ActivityAsPopup','DisableDimensionsatActivities','UseActivityQuickAdd')  and costcenterid=@ParentCCCID
+	END	
 	else
 		select '' Value,'' Name
 	
@@ -69,6 +75,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
-
+END CATCH
 GO

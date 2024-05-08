@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_SetWorkFlow]
-	@WorkFlowId [bigint],
+	@WorkFlowId [int],
 	@WorkFlowName [nvarchar](500),
 	@WorkflowXML [nvarchar](max),
 	@Type [int],
@@ -15,7 +15,23 @@ WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION    
 BEGIN TRY    
-SET NOCOUNT ON;  
+SET NOCOUNT ON; 
+	IF (@Type=-1)
+	BEGIN 
+		SET @WorkFlowName=''
+		SELECT TOP 1 @WorkFlowName=F.Name FROM COM_WorkFlowDef WF WITH(NOLOCK) 
+		JOIN ADM_Features F WITH(NOLOCK) ON WF.CostCenterID=F.FeatureID 
+		WHERE WF.WorkFlowId=@WorkFlowId
+		IF (@WorkFlowName IS NOT NULL AND @WorkFlowName<>'')
+		BEGIN
+			set @WorkflowXML='WorkFlow used in Defination of "'+@WorkFlowName+'"'
+			RAISERROR(@WorkflowXML,16,1)
+		END
+		
+		DELETE FROM COM_WorkFlow WHERE WorkFlowId=@WorkFlowId
+	END
+	ELSE
+	BEGIN
 		IF EXISTS (SELECT * FROM COM_WorkFlow WITH(NOLOCK) WHERE [WorkFlowName]=@WorkFlowName and WorkFlowId<>@WorkFlowId)
 		BEGIN  
 			RAISERROR('-112',16,1)  
@@ -37,10 +53,11 @@ SET NOCOUNT ON;
 		
 		INSERT INTO [COM_WorkFlow]([WorkFlowID],[WorkFlowName],[LevelID],[LevelName],[LevelOrder]
            ,[GroupID],[RoleID],[UserID],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]
-           ,[Type],EscDays,EscHours,ApprovalMandatory)
+           ,[Type],EscDays,EscHours,ApprovalMandatory,DisableReject,AllowQueue,FinancePost,PrevLvlOnReject)
 		SELECT @WorkFlowId,@WorkFlowName,X.value('@Seq','int'),X.value('@LevelName','nvarchar(500)'),X.value('@Seq','int')
 		,X.value('@GroupID','int'),X.value('@RoleID','int'),X.value('@UserID','int'),@CompanyGUID,NEWID(),@CreatedBy,@CreatedDate
 		,@Type,isnull(X.value('@EscDays','int'),0),isnull(X.value('@EscHours','int'),0),isnull(X.value('@APPMand','BIT'),0)
+		,isnull(X.value('@DisableReject','BIT'),0),isnull(X.value('@AllowQueue','BIT'),0),isnull(X.value('@FinancePost','BIT'),0),isnull(X.value('@PrevLvlOnReject','BIT'),0)
 		from @XML.nodes('XML/Row') as Data(X)
 		
 		IF @IsNew=1
@@ -48,11 +65,20 @@ SET NOCOUNT ON;
 			INSERT INTO ADM_Assign(CostCenterID,NodeID,UserID,RoleID,GroupID,CreatedBy,CreatedDate)
 			VALUES(100,@WorkFlowId,@UserID,0,0,@CreatedBy,@CreatedDate)			
 		END
-
+	END
 COMMIT TRANSACTION    
-SELECT * FROM [COM_WorkFlow] WITH(nolock) WHERE [WorkFlowID]=@WorkFlowId  
-SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
-WHERE ErrorNumber=100 AND LanguageID=@LangID  
+
+IF (@Type=-1)
+BEGIN
+	SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
+	WHERE ErrorNumber=102 AND LanguageID=@LangID 
+END
+ELSE
+BEGIN
+	SELECT * FROM [COM_WorkFlow] WITH(nolock) WHERE [WorkFlowID]=@WorkFlowId  
+	SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
+	WHERE ErrorNumber=100 AND LanguageID=@LangID  
+END
 SET NOCOUNT OFF;    
 RETURN @WorkFlowId
 END TRY    
@@ -60,8 +86,11 @@ BEGIN CATCH
  --Return exception info [Message,Number,ProcedureName,LineNumber]    
  IF ERROR_NUMBER()=50000  
  BEGIN  
- SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
-  WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID  
+	if isnumeric(ERROR_MESSAGE())=1
+		SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
+		WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID  
+	else
+		SELECT ERROR_MESSAGE() ErrorMessage,-1 ErrorNumber
  END  
  ELSE IF ERROR_NUMBER()=547  
  BEGIN  
@@ -81,5 +110,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION  
  SET NOCOUNT OFF    
  RETURN -999     
-END CATCH  
+END CATCH
 GO

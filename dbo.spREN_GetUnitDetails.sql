@@ -87,13 +87,124 @@ SET NOCOUNT ON
 	WHERE UnitID = @UNITID  
 	
 	--WorkFlow
-	EXEC spCOM_CheckCostCentetWFApprove 93,@UNITID,@UserID,@RoleID  
+	--EXEC spCOM_CheckCostCentetWFApprove 93,@UNITID,@UserID,@RoleID  
 	
 	--History Details
 	select H.HistoryID,H.HistoryCCID CCID,H.HistoryNodeID,convert(datetime,FromDate) FromDate,convert(datetime,ToDate) ToDate,H.Remarks
 	from COM_HistoryDetails H with(nolock) 
 	where H.CostCenterID=93 and H.NodeID=@UNITID --and H.HistoryCCID>50000
 	order by FromDate,H.HistoryID
+
+
+		Declare @WID INT,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@canEdit bit,@Type int,@escDays int,@CreatedDate datetime
+		SELECT @StatusID=Status,@WID=WorkFlowID,@Level=WorkFlowLevel,@CreatedDate=CONVERT(datetime,createdDate)
+		FROM REN_UNITS WITH(NOLOCK) where UnitID=@UnitID
+		if(@WID is not null and @WID>0)  
+		BEGIN  
+			SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]   WITH(NOLOCK)   
+			where WorkFlowID=@WID and  UserID =@UserID
+
+			if(@Userlevel is null)  
+				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow]  WITH(NOLOCK)    
+				where WorkFlowID=@WID and  RoleID =@RoleID
+
+			if(@Userlevel is null)       
+				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
+				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
+				where g.UserID=@UserID and WorkFlowID=@WID
+
+			if(@Userlevel is null)  
+				SELECT @Userlevel=LevelID,@Type=[type] FROM [COM_WorkFlow] W WITH(NOLOCK)
+				JOIN COM_Groups G WITH(NOLOCK) on w.GroupID=g.GID     
+				where g.RoleID =@RoleID and WorkFlowID=@WID
+			
+			if(@Userlevel is null )  	
+				SELECT @Type=[type] FROM [COM_WorkFlow] WITH(NOLOCK) where WorkFlowID=@WID
+
+
+		set @canEdit=1  
+       
+		if(@StatusID =1002)  
+		begin  
+			if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
+			begin  
+				set @canEdit=0   
+			end    
+		end
+		ELSE if(@StatusID=1003)
+		BEGIN
+		    if(@Userlevel is not null and  @Level is not null and @Userlevel<@level)  
+			begin  
+				set @canEdit=1
+			end
+			ELSE
+				set @canEdit=0
+		END
+			print '@Userlevel'
+		
+		if(@StatusID=1001 or @StatusID=1002)  
+		begin    
+			if(@Userlevel is not null and  @Level is not null and @Userlevel>@level)  
+			begin
+				if(@Type=1 or @Level+1=@Userlevel)
+					set @canApprove=1   
+				ELSE
+				BEGIN
+					if exists(select EscDays FROM [COM_WorkFlow]
+					where workflowid=@WID and ApprovalMandatory=1 and LevelID<@Userlevel and LevelID>@Level)
+						set @canApprove=0
+					ELSE
+					BEGIN	
+						select @escDays=sum(escdays) from (select max(escdays) escdays from [COM_WorkFlow] WITH(NOLOCK) 
+						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
+						group by LevelID) as t
+						 
+						set @CreatedDate=dateadd("d",@escDays,@CreatedDate)
+						
+						select @escDays=sum(escdays) from (select max(eschours) escdays from [COM_WorkFlow] WITH(NOLOCK) 
+						where workflowid=@WID and LevelID<@Userlevel and LevelID>@Level
+						group by LevelID) as t
+						
+						set @CreatedDate=dateadd("HH",@escDays,@CreatedDate)
+						
+						if (@CreatedDate<getdate())
+							set @canApprove=1   
+						ELSE
+							set @canApprove=0
+					END	
+				END	
+			end   
+			--else if(@Userlevel is not null and  @Level is not null and @Level=@Userlevel and @StatusID=1001)  
+			--begin
+			--	set @canApprove=1  
+			--end
+			else  
+				set @canApprove= 0   
+		end  		
+		else  
+			set @canApprove= 0   
+
+		IF @WID is not null and @WID>0
+		begin
+
+			
+			select @canEdit canEdit,@canApprove canApprove
+
+			SELECT CONVERT(DATETIME, A.CreatedDate) Date,A.WorkFlowLevel,
+			(SELECT TOP 1 LevelName FROM COM_WorkFlow L with(nolock) WHERE L.WorkFlowID=@WID AND L.LevelID=A.WorkFlowLevel) LevelName,
+			A.CreatedBy,A.StatusID,S.Status,A.Remarks,U.FirstName,U.LastName
+			FROM COM_Approvals A with(nolock),COM_Status S with(nolock),ADM_Users U 
+			with(nolock)
+			WHERE A.RowType=1 AND S.StatusID=A.StatusID AND CCID=93
+			AND CCNodeID=@UnitID AND A.USERID=U.USERID
+			ORDER BY A.CreatedDate
+			
+			select @WID WID,levelID,LevelName from COM_WorkFlow with(nolock) 
+			where WorkFlowID=@WID
+			group by levelID,LevelName
+		end
+		
+		end 
  
         
 COMMIT TRANSACTION    

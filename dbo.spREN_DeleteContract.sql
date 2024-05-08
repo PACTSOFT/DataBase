@@ -3,9 +3,13 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_DeleteContract]
-	@CostCenterID [bigint],
-	@ContractID [bigint] = 0,
-	@UserID [bigint] = 1,
+	@CostCenterID [int],
+	@ContractID [int] = 0,
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
+	@LockDims [nvarchar](max) = '',
+	@UserName [nvarchar](50),
+	@UserID [int] = 1,
 	@RoleID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -14,8 +18,8 @@ BEGIN TRANSACTION
 BEGIN TRY    
 SET NOCOUNT ON;    
   
-	DECLARE @TBLCNT INT,@INCCNT INT,@DELETEDOCID BIGINT,@DELETECCID BIGINT,@DELETEISACC BIT    
-	DECLARE @return_value int,@HasAccess BIT ,@tempCID BIGINT,@sql nvarchar(max),@ScheduleID bigint  
+	DECLARE @TBLCNT INT,@INCCNT INT,@DELETEDOCID INT,@DELETECCID INT,@DELETEISACC BIT    
+	DECLARE @return_value int,@HasAccess BIT ,@tempCID INT,@sql nvarchar(max),@ScheduleID INT  
 	DECLARE @AUDITSTATUS NVARCHAR(50)
  
 	--User acces check
@@ -26,76 +30,49 @@ SET NOCOUNT ON;
 		RAISERROR('-105',16,1)
 	END
 	
-	if exists(select * from REN_Contract where  parentContractID=@ContractID)
+	if(@LockDims is not null and @LockDims<>'')
+	BEGIN
+		set @sql=' if exists(select a.ContractID from REN_Contract a WITH(NOLOCK)
+		join COM_CCCCData b WITH(NOLOCK) on a.ContractID=b.NodeID and a.CostCenterID=b.CostCenterID
+		join ADM_DimensionWiseLockData c WITH(NOLOCK) on a.ContractDate between c.fromdate and c.todate and c.isEnable=1 
+		where  a.CostCenterID='+convert(nvarchar,@CostCenterID)+' and a.ContractID='+convert(nvarchar,@ContractID)+' '+@LockDims
+		+') RAISERROR(''-125'',16,1) '
+		
+		EXEC sp_executesql @sql
+	END
+	
+	if exists(select * from REN_Contract WITH(NOLOCK) where  parentContractID=@ContractID)
 		RAISERROR('Delete child contracts',16,1)
+		
+		
+	--ondelete External function
+	IF (@ContractID>0)
+	BEGIN
+		DECLARE @tablename NVARCHAR(200)
+		set @tablename=''
+		select @tablename=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=8
+		if(@tablename<>'')
+			exec @tablename @CostCenterID,@ContractID,'',@UserID,@LangID	
+	END	
 
 	SET @DELETECCID = 0 
 
-	DECLARE @lft bigint,@rgt bigint ,@Width bigint
+	DECLARE @lft INT,@rgt INT ,@Width INT
 
 	SELECT @lft = lft, @rgt = rgt, @Width = rgt - lft + 1
 	FROM REN_CONTRACT WITH(NOLOCK) WHERE ContractID=@ContractID
 	
-	Declare @temp table(id int identity(1,1), NodeID bigint)  
+	Declare @temp table(id int identity(1,1), NodeID INT)  
 	insert into @temp  
-	select ContractID from REN_CONTRACT WITH(NOLOCK) WHERE lft >= @lft AND rgt <= @rgt  
+	select ContractID from REN_CONTRACT WITH(NOLOCK) WHERE lft >= @lft AND rgt <= @rgt  and costcenterid=@CostCenterID
     
 	declare @i int, @cnt int
-	DECLARE @NodeID bigint, @Dimesion bigint 
-	select @i=1,@cnt=count(*) from @temp  
-	while @i<=@cnt
-	begin
-		set @NodeID=0
-		set @Dimesion=0
-		select @tempCID=NodeID from @temp where id=@i  
-		select  @NodeID = CCNodeID, @Dimesion=CCID from REN_CONTRACT WITH(NOLOCK) where ContractID=@tempCID  
- 
-		if (@Dimesion > 0 and @NodeID is not null and @NodeID>1)  
-		begin  
-
-			Update REN_CONTRACT set CCID=0, CCNodeID=0 where ContractID =@tempCID  
-
-			set @sql='update com_docccdata  
-			set dcccnid'+convert(nvarchar,(@Dimesion-50000))+'=1  
-			from ACC_DocDetails a WITH(NOLOCK) 
-			where com_docccdata.accdocdetailsid=a.accdocdetailsid  
-			and a.refccid='+Convert(NVARCHAR,@CostCenterID)+' and a.refnodeid='+convert(nvarchar,@tempCID)     
-			exec(@sql)  
-
-			set @sql='update com_docccdata  
-			set dcccnid'+convert(nvarchar,(@Dimesion-50000))+'=1  
-			from INV_DocDetails a WITH(NOLOCK) 
-			where com_docccdata.invdocdetailsid=a.invdocdetailsid  
-			and a.refccid='+Convert(NVARCHAR,@CostCenterID)+' and a.refnodeid='+convert(nvarchar,@tempCID)  
-			exec(@sql)  
-
-			set @sql='update com_ccccdata  
-			set ccnid'+convert(nvarchar,(@Dimesion-50000))+'=1  
-			from REN_CONTRACT a WITH(NOLOCK) 
-			where com_ccccdata.Nodeid=a.ContractID   and com_ccccdata.costcenterid='+Convert(NVARCHAR,@CostCenterID)+'
-			and  com_ccccdata.ccnid'+convert(nvarchar,(@Dimesion-50000))+'='+convert(nvarchar,@NodeID)  
-			exec(@sql)  
-
-			SET @return_value = 0
-			IF(@NodeID>1)
-			BEGIN 
-				EXEC @return_value = [dbo].[spCOM_DeleteCostCenter]
-				@CostCenterID = @Dimesion,
-				@NodeID = @NodeID,
-				@RoleID=1,
-				@UserID = @UserID,
-				@LangID = @LangID,
-				@CheckLink = 0
-				--Deleting from Mapping Table
-				Delete from com_docbridge WHERE CostCenterID = @CostCenterID AND RefDimensionNodeID = @NodeID AND RefDimensionID = @Dimesion	
-			END			
-		end
-		set @i=@i+1
-	end
+	DECLARE @NodeID INT, @Dimesion INT 
+	
 				
 	SET @AUDITSTATUS= 'DELETE'
 
-	DECLARE  @tblListDEL TABLE(ID int identity(1,1),ContractID BIGINT , DocID BIGINT, COSTCENTERID BIGINT ,IsAccDoc BIT  )      
+	DECLARE  @tblListDEL TABLE(ID int identity(1,1),ContractID INT , DocID INT, COSTCENTERID INT ,IsAccDoc BIT  )      
 
 	INSERT INTO @tblListDEL    
 	SELECT distinct ACC.REFNODEID , ACC.DocID , ACC.CostCenterID ,1
@@ -122,8 +99,10 @@ SET NOCOUNT ON;
 				 @DocPrefix =  '',  
 				 @DocNumber = '',  
 				 @DocID=@DELETEDOCID ,
+				 @SysInfo =@SysInfo, 
+				 @AP =@AP, 
 				 @UserID = 1,  
-				 @UserName = N'ADMIN',  
+				 @UserName = @UserName,  
 				 @LangID = 1,
 				 @RoleID=1
 		END   
@@ -136,8 +115,10 @@ SET NOCOUNT ON;
 				 @DocPrefix = '',  
 				 @DocNumber = '',  
 				 @DocID=@DELETEDOCID ,
+				 @SysInfo =@SysInfo, 
+				 @AP =@AP, 
 				 @UserID = 1,  
-				 @UserName = N'ADMIN',  
+				 @UserName = @UserName,  
 				 @LangID = 1,
 				 @RoleID=1
 				 
@@ -163,335 +144,72 @@ SET NOCOUNT ON;
 		END  
 		SET @INCCNT = @INCCNT + 1   
 	END   
+	
+	
+	select @i=1,@cnt=count(*) from @temp  
+	while @i<=@cnt
+	begin
+		set @NodeID=0
+		set @Dimesion=0
+		select @tempCID=NodeID from @temp where id=@i  
+		select  @NodeID = CCNodeID, @Dimesion=CCID from REN_CONTRACT WITH(NOLOCK) where ContractID=@tempCID  
+ 
+		if (@Dimesion > 0 and @NodeID is not null and @NodeID>1)  
+		begin  
 
-	DECLARE @AuditTrial BIT=0    
-	SELECT @AuditTrial= CONVERT(BIT,VALUE) FROM [COM_COSTCENTERPreferences] WITH(NOLOCK)  
-	WHERE CostCenterID=@CostCenterID  AND NAME='AllowAudit'  
+			Update REN_CONTRACT set CCID=0, CCNodeID=0 where ContractID =@tempCID  
 
-	IF (@AuditTrial=1 )  
-	BEGIN  
+			set @sql='update com_docccdata  
+			set dcccnid'+convert(nvarchar,(@Dimesion-50000))+'=1  
+			from ACC_DocDetails a WITH(NOLOCK) 
+			where com_docccdata.accdocdetailsid=a.accdocdetailsid  
+			and a.refccid='+Convert(NVARCHAR,@CostCenterID)+' and a.refnodeid='+convert(nvarchar,@tempCID)     
+			exec sp_executesql @sql
 
-		INSERT INTO [REN_Contract_History]
-			   ([ContractID]
-			   ,[ContractPrefix]
-			   ,[ContractDate]
-			   ,[ContractNumber]
-			   ,[StatusID]
-			   ,[PropertyID]
-			   ,[UnitID]
-			   ,[TenantID]
-			   ,[RentAccID]
-			   ,[IncomeAccID]
-			   ,[Purpose]
-			   ,[StartDate]
-			   ,[EndDate]
-			   ,[TotalAmount]
-			   ,[NonRecurAmount]
-			   ,[RecurAmount]
-			   ,[Depth]
-			   ,[ParentID]
-			   ,[lft]
-			   ,[rgt]
-			   ,[IsGroup]
-			   ,[CompanyGUID]
-			   ,[GUID]
-			   ,[CreatedBy]
-			   ,[CreatedDate]
-			   ,[ModifiedBy]
-			   ,[ModifiedDate]
-			   ,[TerminationDate]
-			   ,[Reason]
-			   ,[LocationID]
-			   ,[DivisionID]
-			   ,[CurrencyID]
-			   ,[TermsConditions]
-			   ,[SalesmanID]
-			   ,[AccountantID]
-			   ,[LandlordID]
-			   ,[Narration]
-			   ,[SNO]
-			   ,[CostCenterID]
-			   ,[HistoryStatus]
-			   ,[ExtendTill]
-			  ,[CCNodeID]
-			  ,[CCID]
-			  ,[RefundDate]
-			  ,[VacancyDate]
-			  ,[BasedOn]
-			  ,[RefContractID]
-			  ,[RenewRefID]
-			  ,[QuotationID]
-			  ,[SRTAmount]
-			  ,[RefundAmt]
-			  ,[PDCRefund]
-			  ,[Penalty]
-			  ,[Amt]
-			  ,[TermPayMode]
-			  ,[TermChequeNo]
-			  ,[TermChequeDate]
-			  ,[TermRemarks]
-			  ,[SecurityDeposit]
-			  ,[WorkFlowID]
-			  ,[WorkFlowLevel]
-			  ,[RenewalAmount])
-		  SELECT [ContractID]
-		  ,[ContractPrefix]
-		  ,[ContractDate]
-		  ,[ContractNumber]
-		  ,[StatusID]
-		  ,[PropertyID]
-		  ,[UnitID]
-		  ,[TenantID]
-		  ,[RentAccID]
-		  ,[IncomeAccID]
-		  ,[Purpose]
-		  ,[StartDate]
-		  ,[EndDate]
-		  ,[TotalAmount]
-		  ,[NonRecurAmount]
-		  ,[RecurAmount]
-		  ,[Depth]
-		  ,[ParentID]
-		  ,[lft]
-		  ,[rgt]
-		  ,[IsGroup]
-		  ,[CompanyGUID]
-		  ,[GUID]
-		  ,[CreatedBy]
-		  ,[CreatedDate]
-		  ,[ModifiedBy]
-		  ,[ModifiedDate]
-		  ,[TerminationDate]
-		  ,[Reason]
-		  ,[LocationID]
-		  ,[DivisionID]
-		  ,[CurrencyID]
-		  ,[TermsConditions]
-		  ,[SalesmanID]
-		  ,[AccountantID]
-		  ,[LandlordID]
-		  ,[Narration]
-		  ,[SNO]
-		  ,[CostCenterID] 
-		  ,@AUDITSTATUS 
-		  ,[ExtendTill]
-		  ,[CCNodeID]
-		  ,[CCID]
-		  ,[RefundDate]
-		  ,[VacancyDate]
-		  ,[BasedOn]
-		  ,[RefContractID]
-		  ,[RenewRefID]
-		  ,[QuotationID]
-		  ,[SRTAmount]
-		  ,[RefundAmt]
-		  ,[PDCRefund]
-		  ,[Penalty]
-		  ,[Amt]
-		  ,[TermPayMode]
-		  ,[TermChequeNo]
-		  ,[TermChequeDate]
-		  ,[TermRemarks]
-		  ,[SecurityDeposit]
-		  ,[WorkFlowID]
-		  ,[WorkFlowLevel]
-		  ,[RenewalAmount]
-		FROM [REN_Contract] WITH(NOLOCK) 
-		WHERE  [ContractID]  = @ContractID AND COSTCENTERID = @CostCenterID
+			set @sql='update com_docccdata  
+			set dcccnid'+convert(nvarchar,(@Dimesion-50000))+'=1  
+			from INV_DocDetails a WITH(NOLOCK) 
+			where com_docccdata.invdocdetailsid=a.invdocdetailsid  
+			and a.refccid='+Convert(NVARCHAR,@CostCenterID)+' and a.refnodeid='+convert(nvarchar,@tempCID)  
+			exec sp_executesql @sql
 
+			set @sql='update com_ccccdata  
+			set ccnid'+convert(nvarchar,(@Dimesion-50000))+'=1  
+			from REN_CONTRACT a WITH(NOLOCK) 
+			where com_ccccdata.Nodeid=a.ContractID   and com_ccccdata.costcenterid='+Convert(NVARCHAR,@CostCenterID)+'
+			and  com_ccccdata.ccnid'+convert(nvarchar,(@Dimesion-50000))+'='+convert(nvarchar,@NodeID)  
+			exec sp_executesql @sql
 
-		INSERT INTO  [REN_ContractParticulars_History]
-			   ([NodeID]
-			   ,[ContractID]
-			   ,[CCID]
-			   ,[CCHistoryID]
-			   ,[CreditAccID]
-			   ,[ChequeNo]
-			   ,[ChequeDate]
-			   ,[PayeeBank]
-			   ,[DebitAccID]
-			   ,[Amount]
-			   ,[CompanyGUID]
-			   ,[GUID]
-			   ,[CreatedBy]
-			   ,[CreatedDate]
-			   ,[ModifiedBy]
-			   ,[ModifiedDate]
-			   ,[Sno]
-			   ,[Narration]
-			   ,[IsRecurr],RentAmount,Discount)
-		 SELECT [NodeID]
-		  ,[ContractID]
-		  ,[CCID]
-		  ,[CCNodeID]
-		  ,[CreditAccID]
-		  ,[ChequeNo]
-		  ,[ChequeDate]
-		  ,[PayeeBank]
-		  ,[DebitAccID]
-		  ,[Amount]
-		  ,[CompanyGUID]
-		  ,[GUID]
-		  ,[CreatedBy]
-		  ,[CreatedDate]
-		  ,[ModifiedBy]
-		  ,[ModifiedDate]
-		  ,[Sno]
-		  ,[Narration]
-		  ,[IsRecurr],RentAmount,Discount  
-		FROM  [REN_ContractParticulars] WITH(NOLOCK) 
-		WHERE  [ContractID] = @ContractID
+			SET @return_value = 0
+			IF(@NodeID>1)
+			BEGIN 
+				EXEC @return_value = [dbo].[spCOM_DeleteCostCenter]
+				@CostCenterID = @Dimesion,
+				@NodeID = @NodeID,
+				@RoleID=1,
+				@UserID = @UserID,
+				@LangID = @LangID,
+				@CheckLink = 0
+				--Deleting from Mapping Table
+				Delete from com_docbridge WHERE CostCenterID = @CostCenterID AND RefDimensionNodeID = @NodeID AND RefDimensionID = @Dimesion	
+			END			
+		end
+		set @i=@i+1
+	end
 
-		INSERT INTO  [REN_ContractPayTerms_History]
-			   ([NodeID]
-			   ,[ContractID]
-			   ,[ChequeNo]
-			   ,[ChequeDate]
-			   ,[CustomerBank]
-			   ,[DebitAccID]
-			   ,[Amount]
-			   ,[CompanyGUID]
-			   ,[GUID]
-			   ,[CreatedBy]
-			   ,[CreatedDate]
-			   ,[ModifiedBy]
-			   ,[ModifiedDate]
-			   ,[Sno]
-			   ,[Narration])
-		SELECT [NodeID]
-		  ,[ContractID]
-		  ,[ChequeNo]
-		  ,[ChequeDate]
-		  ,[CustomerBank]
-		  ,[DebitAccID]
-		  ,[Amount]
-		  ,[CompanyGUID]
-		  ,[GUID]
-		  ,[CreatedBy]
-		  ,[CreatedDate]
-		  ,[ModifiedBy]
-		  ,[ModifiedDate]
-		  ,[Sno]
-		  ,[Narration]
-		FROM  [REN_ContractPayTerms] WITH(NOLOCK) 
-		WHERE  [ContractID]  = @ContractID
-
-		INSERT INTO  [REN_ContractExtended_History]
-			   ( [NodeID]
-			   ,[CreatedBy]
-			   ,[CreatedDate]
-			   ,[ModifiedBy]
-			   ,[ModifiedDate]
-			   ,[alpha1]
-			   ,[alpha2]
-			   ,[alpha3]
-			   ,[alpha4]
-			   ,[alpha5]
-			   ,[alpha6]
-			   ,[alpha7]
-			   ,[alpha8]
-			   ,[alpha9]
-			   ,[alpha10]
-			   ,[alpha11]
-			   ,[alpha12]
-			   ,[alpha13]
-			   ,[alpha14]
-			   ,[alpha15]
-			   ,[alpha16]
-			   ,[alpha17]
-			   ,[alpha18]
-			   ,[alpha19]
-			   ,[alpha20]
-			   ,[alpha21]
-			   ,[alpha22]
-			   ,[alpha23]
-			   ,[alpha24]
-			   ,[alpha25]
-			   ,[alpha26]
-			   ,[alpha27]
-			   ,[alpha28]
-			   ,[alpha29]
-			   ,[alpha30]
-			   ,[alpha31]
-			   ,[alpha32]
-			   ,[alpha33]
-			   ,[alpha34]
-			   ,[alpha35]
-			   ,[alpha36]
-			   ,[alpha37]
-			   ,[alpha38]
-			   ,[alpha39]
-			   ,[alpha40]
-			   ,[alpha41]
-			   ,[alpha42]
-			   ,[alpha43]
-			   ,[alpha44]
-			   ,[alpha45]
-			   ,[alpha46]
-			   ,[alpha47]
-			   ,[alpha48]
-			   ,[alpha49]
-			   ,[alpha50]
-			   ,[HistoryStatus])
-		SELECT [NodeID]
-		  ,[CreatedBy]
-		  ,[CreatedDate]
-		  ,[ModifiedBy]
-		  ,[ModifiedDate]
-		  ,[alpha1]
-		  ,[alpha2]
-		  ,[alpha3]
-		  ,[alpha4]
-		  ,[alpha5]
-		  ,[alpha6]
-		  ,[alpha7]
-		  ,[alpha8]
-		  ,[alpha9]
-		  ,[alpha10]
-		  ,[alpha11]
-		  ,[alpha12]
-		  ,[alpha13]
-		  ,[alpha14]
-		  ,[alpha15]
-		  ,[alpha16]
-		  ,[alpha17]
-		  ,[alpha18]
-		  ,[alpha19]
-		  ,[alpha20]
-		  ,[alpha21]
-		  ,[alpha22]
-		  ,[alpha23]
-		  ,[alpha24]
-		  ,[alpha25]
-		  ,[alpha26]
-		  ,[alpha27]
-		  ,[alpha28]
-		  ,[alpha29]
-		  ,[alpha30]
-		  ,[alpha31]
-		  ,[alpha32]
-		  ,[alpha33]
-		  ,[alpha34]
-		  ,[alpha35]
-		  ,[alpha36]
-		  ,[alpha37]
-		  ,[alpha38]
-		  ,[alpha39]
-		  ,[alpha40]
-		  ,[alpha41]
-		  ,[alpha42]
-		  ,[alpha43]
-		  ,[alpha44]
-		  ,[alpha45]
-		  ,[alpha46]
-		  ,[alpha47]
-		  ,[alpha48]
-		  ,[alpha49]
-		  ,[alpha50]
-		  ,@AUDITSTATUS 
-		FROM  [REN_ContractExtended] WITH(NOLOCK) 
-		WHERE  [NodeID]  = @ContractID
-	END 
+	DECLARE @AuditTrial BIT        
+	SET @AuditTrial=0        
+	SELECT @AuditTrial= CONVERT(BIT,VALUE)  FROM [COM_COSTCENTERPreferences] with(nolock)     
+	WHERE CostCenterID=95  AND NAME='AllowAudit'   
+	IF (@AuditTrial=1)      
+	BEGIN 	
+		--INSERT INTO HISTROY   
+		EXEC [spCOM_SaveHistory]  
+			@CostCenterID =@CostCenterID,    
+			@NodeID =@ContractID,
+			@HistoryStatus =@AUDITSTATUS,
+			@UserName=@UserName 
+	END
 	
 	DELETE FROM COM_Files WHERE FEATUREID=@CostCenterID and  FeaturePK=@ContractID 
 		
@@ -525,8 +243,14 @@ SET NOCOUNT ON;
 		WHERE ContractID=@tempCID
 	END
 	
+	UPDATE REN_Quotation SET StatusID=(CASE WHEN CostCenterID=103 THEN 426 ELSE 467 END) 
+	WHERE QuotationID IN (SELECT QuotationID FROM REN_Contract WITH(NOLOCK) WHERE QuotationID IS NOT NULL AND QuotationID>0 AND ContractID=@ContractID)
+	
 	delete from REN_Contract where  ContractID=@ContractID  
-
+	
+	DELETE FROM com_approvals 
+	WHERE CCID=@CostCenterID AND CCNODEID=@ContractID
+	
 COMMIT TRANSACTION  
 SET NOCOUNT OFF;    
 SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
@@ -559,7 +283,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH  
-  
-
+END CATCH
 GO

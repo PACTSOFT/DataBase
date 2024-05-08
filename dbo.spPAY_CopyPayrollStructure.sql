@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_CopyPayrollStructure]
-	@FromGradeID [bigint],
-	@ToGradeID [bigint],
+	@FromGradeID [int],
+	@ToGradeID [int],
 	@FromPayrollMonth [datetime],
 	@ToPayrollMonth [datetime],
 	@CopyOtherGrades [int],
@@ -18,9 +18,11 @@ BEGIN TRANSACTION
 BEGIN TRY    
 	SET NOCOUNT ON;
 	
-	DECLARE @SysDateTime FLOAT,@I INT,@TRC INT,@GRADEID BIGINT
+	DECLARE @SysDateTime FLOAT,@I INT,@TRC INT,@GRADEID INT,@Audit NVARCHAR(100),@HistoryStatus NVARCHAR(300)
 	SET @SysDateTime=CONVERT(FLOAT,GETDATE())
-	DECLARE @TABCPGRADES TABLE(ID BIGINT IDENTITY(1,1),GRADEID BIGINT)
+	DECLARE @TABCPGRADES TABLE(ID INT IDENTITY(1,1),GRADEID INT)
+
+	SELECT @Audit=ISNULL(Value,'False') FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='AllowAuditTrailinCustomizePayroll'
 	
 	IF(@CopyOtherGrades=1)
 	BEGIN
@@ -32,8 +34,8 @@ BEGIN TRY
 		BEGIN
 			DELETE FROM COM_CC50054 WHERE CONVERT(DATETIME,PayrollDate)=CONVERT(DATETIME,@ToPayrollMonth)
 			
-			INSERT INTO COM_CC50054(GradeID, PayrollDate, Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, CompanyGUID, GUID, Description, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures)
-			SELECT GradeID, CONVERT(FLOAT,CONVERT(DATETIME,@ToPayrollMonth)), Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, 'admin', 'GUID', Description, @UserName, @SysDateTime, @UserName, @SysDateTime, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures
+			INSERT INTO COM_CC50054(GradeID, PayrollDate, Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, CompanyGUID, GUID, Description, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures,CarryForwardExpireDays)
+			SELECT GradeID, CONVERT(FLOAT,CONVERT(DATETIME,@ToPayrollMonth)), Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, 'admin', 'GUID', Description, @UserName, @SysDateTime, @UserName, @SysDateTime, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures,CarryForwardExpireDays
 			FROM COM_CC50054 WITH(NOLOCK)
 			WHERE CONVERT(DATETIME,PayrollDate)=CONVERT(DATETIME,@FromPayrollMonth)
 			
@@ -61,8 +63,8 @@ BEGIN TRY
 				IF (@GRADEID<>@FromGradeID)
 				BEGIN
 					DELETE FROM COM_CC50054 WHERE CONVERT(DATETIME,PayrollDate)=CONVERT(DATETIME,@FromPayrollMonth) AND GradeID=@GRADEID
-					INSERT INTO COM_CC50054(GradeID, PayrollDate, Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, CompanyGUID, GUID, Description, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures)
-					SELECT @GRADEID, CONVERT(FLOAT,CONVERT(DATETIME,@ToPayrollMonth)), Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, 'admin', 'GUID', Description, @UserName, @SysDateTime, @UserName, @SysDateTime, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures
+					INSERT INTO COM_CC50054(GradeID, PayrollDate, Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, CompanyGUID, GUID, Description, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures,CarryForwardExpireDays)
+					SELECT @GRADEID, CONVERT(FLOAT,CONVERT(DATETIME,@ToPayrollMonth)), Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, 'admin', 'GUID', Description, @UserName, @SysDateTime, @UserName, @SysDateTime, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures,CarryForwardExpireDays
 					FROM COM_CC50054 WITH(NOLOCK)
 					WHERE CONVERT(DATETIME,PayrollDate)=CONVERT(DATETIME,@FromPayrollMonth) AND GradeID=@FromGradeID
 				END
@@ -77,11 +79,30 @@ BEGIN TRY
 	END
 	ELSE
 	BEGIN
+
+		IF EXISTS (SELECT * FROM [COM_CC50054] with(nolock) WHERE [GradeID]=@GradeID AND CONVERT(DATETIME,PayrollDate)=CONVERT(DATETIME,@ToPayrollMonth))
+		BEGIN
+			set @HistoryStatus='Update'
+		END
+		ELSE
+		BEGIN
+			SET @HistoryStatus='Add'
+		END
+		
 		DELETE FROM COM_CC50054 WHERE GradeID=@ToGradeID AND CONVERT(DATETIME,PayrollDate)=CONVERT(DATETIME,@ToPayrollMonth)
-		INSERT INTO COM_CC50054(GradeID, PayrollDate, Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, CompanyGUID, GUID, Description, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures)
-		SELECT @ToGradeID, CONVERT(FLOAT,CONVERT(DATETIME,@ToPayrollMonth)), Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, 'admin', 'GUID', Description, @UserName, @SysDateTime, @UserName, @SysDateTime, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures
+		INSERT INTO COM_CC50054(GradeID, PayrollDate, Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, CompanyGUID, GUID, Description, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures,CarryForwardExpireDays)
+		SELECT @ToGradeID, CONVERT(FLOAT,CONVERT(DATETIME,@ToPayrollMonth)), Type, SNo, ComponentID, Formula, AddToNet,ShowInDuesEntry,CalculateArrears,CalculateAdjustments, FieldType, Applicable,Behaviour, MaxOTHrs, ROff, TaxMap, Expression, DrAccount, CrAccount, Percentage, MaxLeaves, AtATime, CarryForward, IncludeRExclude, 'admin', 'GUID', Description, @UserName, @SysDateTime, @UserName, @SysDateTime, Message, Action, MaxCarryForwardDays, MaxEncashDays, EncashFormula, LeaveErrorMessage,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures,CarryForwardExpireDays
 		FROM COM_CC50054 WITH(NOLOCK)
 		WHERE GradeID=@FromGradeID AND CONVERT(DATETIME,PayrollDate)=CONVERT(DATETIME,@FromPayrollMonth)
+		
+
+		--INSERT INTO HISTROY
+		IF(@Audit IS NOT NULL AND @Audit='True')
+		BEGIN    
+			insert into [COM_CC50054_History]         
+			select 50054,@HistoryStatus,* FROM COM_CC50054 WITH(NOLOCK) WHERE [GradeID]=@ToGradeID AND CONVERT(DATETIME,PayrollDate)=CONVERT(DATETIME,@FromPayrollMonth)
+		END
+		--END INTO HISTROY
 		
 		IF(@ToGradeID=1)
 		BEGIN
@@ -95,6 +116,7 @@ BEGIN TRY
 	END
 	
 	COMMIT TRANSACTION
+	--ROLLBACK TRANSACTION
 	SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
 WHERE ErrorNumber=100 AND LanguageID=@LangID 
 	SET NOCOUNT OFF; 
@@ -106,8 +128,17 @@ BEGIN CATCH
 	ROLLBACK TRANSACTION  
 	SET NOCOUNT OFF    
 	RETURN -999     
-END CATCH 
+END CATCH
 
-
-
+--gO
+-- spPAY_CopyPayrollStructure 
+-- 1
+-- ,43
+-- ,'01/Apr/2019'
+-- ,'01/Apr/2019'
+-- ,0
+-- ,'admin'
+-- ,1
+-- ,1
+-- ,1
 GO

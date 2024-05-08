@@ -3,17 +3,18 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_SetUnits]
-	@UNITID [bigint] = 0,
-	@PROPERTYID [bigint] = 0,
+	@UNITID [int] = 0,
+	@PROPERTYID [int] = 0,
 	@CODE [nvarchar](max) = NULL,
 	@NAME [nvarchar](max) = NULL,
-	@STATUSID [bigint] = 0,
+	@STATUSID [int] = 0,
 	@IsGroup [bit],
-	@SelectedNodeID [bigint],
+	@SelectedNodeID [int],
 	@DETAILSXML [nvarchar](max) = NULL,
 	@StaticFieldsQuery [nvarchar](max) = NULL,
 	@CustomCostCenterFieldsQuery [nvarchar](max) = NULL,
 	@CustomCCQuery [nvarchar](max) = NULL,
+	@NotesXML [nvarchar](max) = null,
 	@AttachmentsXML [nvarchar](max) = NULL,
 	@UnitRateXML [nvarchar](max) = NULL,
 	@HistoryXML [nvarchar](max) = NULL,
@@ -21,21 +22,24 @@ CREATE PROCEDURE [dbo].[spREN_SetUnits]
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@WID [int] = 0,
+	@IsFromContract [bit] = 0,
 	@RoleID [int] = 1,
 	@UserID [int] = 0,
-	@LangId [int] = 1
+	@LangId [int] = 1,
+	@CodePrefix [nvarchar](200) = null,
+	@CodeNumber [int] = 0,
+	@GroupSeqNoLength [int] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 SET NOCOUNT ON     
 BEGIN TRANSACTION    
 BEGIN TRY  
    
-    DECLARE @Dt FLOAT,@lft bigint,@rgt bigint,@TempGuid nvarchar(50),@Selectedlft bigint,@Selectedrgt bigint,@RefSelectedNodeID BIGINT,
+    DECLARE @Dt FLOAT,@lft INT,@rgt INT,@TempGuid nvarchar(50),@Selectedlft INT,@Selectedrgt INT,@RefSelectedNodeID INT,
     @HasAccess bit,@IsDuplicateNameAllowed bit,@IsLeadCodeAutoGen bit  ,@IsIgnoreSpace bit,@HistoryStatus nvarchar(50),
-	@Depth int,@ParentID bigint,@CCID BIGINT,@DXML XML,@SelectedIsGroup int , @XML XML,@ParentCode nvarchar(MAX),@DetailContact int,    
-	@LinkDim_NodeID int,@PrefValue NVARCHAR(500),@Dimesion bigint ,@CCStatusID bigint ,@DimensionPrefValue bigint 
-  
-	set @DXML=@DETAILSXML    
+	@Depth int,@ParentID INT,@CCID INT,@DXML XML,@SelectedIsGroup int , @XML XML,@ParentCode nvarchar(MAX),@NoofUnits int,    
+	@LinkDim_NodeID int,@PrefValue NVARCHAR(500),@Dimesion INT ,@CCStatusID INT ,@DimensionPrefValue INT 
+   declare @ErrorMsg nvarchar(max)
       
 	--User access check     
 	SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,93,1)    
@@ -95,7 +99,18 @@ BEGIN TRY
 			END      
 		END    
 	END     
-  
+	
+	--User acces check FOR Notes  
+	IF (@NotesXML IS NOT NULL AND @NotesXML <> '')  
+	BEGIN  
+		SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,93,8)  
+
+		IF @HasAccess=0  
+		BEGIN  
+			RAISERROR('-105',16,1)  
+		END  
+	END 
+	
 	--User acces check FOR Attachments  
 	IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')  
 	BEGIN  
@@ -107,10 +122,75 @@ BEGIN TRY
 		END  
 	END      
   
-	SET @Dt=convert(float,getdate())--Setting Current Date      
+	SET @Dt=convert(float,getdate())--Setting Current Date  
+	
+
+
+	--WorkFlow
+Declare @CStatusID int
+Declare @level int,@maxLevel int
+SELECT @CStatusID=ISNULL(Status,0) FROM REN_Units WITH(NOLOCK) where UnitID=@UNITID
+
+  	if(@WID>0)	 
+	  BEGIN
+		set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+		where WorkFlowID=@WID and  UserID =@UserID)
+		if(@level is null )
+			set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
+			where WorkFlowID=@WID and  RoleID =@RoleID)
+
+		if(@level is null ) 
+			set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
+
+		if(@level is null )
+			set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
+			where RoleID =@RoleID))
+
+		select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
+		select @level,@maxLevel
+		if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
+		begin 
+		 	set @StatusID=1001 
+		end	
+		else if(@level is not null and  @maxLevel is not null and @UNITID>0 and @level<@maxLevel and @CStatusID in (1003))--rejected status time
+		begin	
+		 	set @StatusID=1001 
+		end			 
+		 
+	end
 
 	IF @UNITID= 0--------START INSERT RECORD-----------      
-	BEGIN--CREATE Case      
+	BEGIN--CREATE Case 
+		set @NoofUnits=0
+		select @NoofUnits=Units from ren_property with(nolock) where NodeID=@PROPERTYID
+		if(@NoofUnits>0 and @IsFromContract=0 and @IsGroup=0)
+		BEGIN
+			select @Depth=count(*) from REN_Units with(nolock) where [PropertyID]=@PROPERTYID and UnitType=999 and isgroup=0 and ContractID=0
+			if(@Depth>=@NoofUnits)
+			BEGIN	
+				
+				set @ErrorMsg='Units count exceeds:'+convert(nvarchar(max),@NoofUnits)
+				RAISERROR(@ErrorMsg,16,1)
+			END
+		
+		END
+		
+		set @NoofUnits=0
+		select @NoofUnits=Parkings from ren_property with(nolock) where NodeID=@PROPERTYID
+		if(@NoofUnits>0 and @IsFromContract=0 and @IsGroup=0)
+		BEGIN
+			select @Depth=count(*) from REN_Units with(nolock) where [PropertyID]=@PROPERTYID and UnitType=998 and isgroup=0 and ContractID=0
+			if(@Depth>=@NoofUnits)
+			BEGIN	
+				
+				set @ErrorMsg='Parking count exceeds:'+convert(nvarchar(max),@NoofUnits)
+				RAISERROR(@ErrorMsg,16,1)
+			END
+		
+		END
+		
 		 --To Set Left,Right And Depth of Record      
 		SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth      
 		from REN_Units with(NOLOCK) where UnitID=@SelectedNodeID      
@@ -160,7 +240,7 @@ BEGIN TRY
 		BEGIN  
 			set @Dimesion=0  
 			BEGIN try  
-				select @Dimesion=convert(BIGINT,@PrefValue)  
+				select @Dimesion=convert(INT,@PrefValue)  
 			end try  
 			BEGIN catch  
 				set @Dimesion=0   
@@ -181,13 +261,13 @@ BEGIN TRY
 				@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
 				@CustomCostCenterFieldsQuery=@CustomCCQuery,@ContactsXML=NULL,@NotesXML=NULL,
 				@CostCenterID = @Dimesion,@CompanyGUID=@COMPANYGUID,@GUID='',
-				@UserName=@UserName,@RoleID=@RoleID,@UserID=@UserID,@CheckLink = 0
+				@UserName=@UserName,@RoleID=1,@UserID=1,@CheckLink = 0
 
 			END  
 		END 	
 
-		INSERT INTO [REN_Units]([PropertyID],[Code],[Name],[Status],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],CCID,CCNodeID,LinkCCID)    
-		VALUES (@PROPERTYID,@CODE,@NAME,@STATUSID,@Depth,@SelectedNodeID,@lft,@rgt,@IsGroup,@CompanyGUID,newid(),@UserName,convert(float,@Dt),@CCID,@LinkDim_NodeID,@Dimesion)    
+		INSERT INTO [REN_Units]([PropertyID],[Code],[Name],[Status],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],CCID,CCNodeID,LinkCCID,CodePrefix,CodeNumber,GroupSeqNoLength,WorkFlowID,WorkFlowLevel)    
+		VALUES (@PROPERTYID,@CODE,@NAME,@STATUSID,@Depth,@SelectedNodeID,@lft,@rgt,@IsGroup,@CompanyGUID,newid(),@UserName,convert(float,@Dt),@CCID,@LinkDim_NodeID,@Dimesion,@CodePrefix,@CodeNumber,@GroupSeqNoLength,@WID,@level)    
        
 		SET @UNITID=SCOPE_IDENTITY()
 		     
@@ -202,6 +282,12 @@ BEGIN TRY
 		INSERT INTO COM_DocBridge (CostCenterID, NodeID,InvDocID, AccDocID, RefDimensionID  , RefDimensionNodeID ,  
 		CompanyGUID, guid, Createdby, CreatedDate,Abbreviation)
 		values(93, @UNITID,0,0,@Dimesion,@LinkDim_NodeID,'',newid(),@UserName, @dt,'Units')    
+
+	if(@WID>0)
+	BEGIN	 
+		INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)     
+		VALUES(93,@UNITID,@StatusID,CONVERT(FLOAT,getdate()),'',@UserID,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
+	END
 	END --------END INSERT RECORD-----------      
 	ELSE  --------START UPDATE RECORD-----------      
 	BEGIN    
@@ -222,22 +308,24 @@ BEGIN TRY
 			,[CompanyGUID] = @CompanyGUID    
 			,[GUID] = @Guid    
 			,[ModifiedBy] = @UserName    
-			,[ModifiedDate] =@Dt   
+			,[ModifiedDate] =convert(float,@Dt)   
 			,CCID=@CCID
+			,CodePrefix=@CodePrefix,CodeNumber=@CodeNumber,GroupSeqNoLength=@GroupSeqNoLength 
+			,WorkFlowLevel=isnull(@level,0)
 			WHERE UnitID=@UNITID    
 		     
 			if(@PrefValue is not null and @PrefValue<>'')  
 			begin  
 				set @Dimesion=0  
 				begin try  
-					select @Dimesion=convert(BIGINT,@PrefValue)  
+					select @Dimesion=convert(INT,@PrefValue)  
 				end try  
 				begin catch  
 					set @Dimesion=0   
 				end catch  
 
-				declare @NID bigint, @CCIDAcc bigint
-				select @NID = CCNodeID, @CCIDAcc=LinkCCID  from Ren_Units WITH(NOLOCK) where UnitID=@UNITID 
+				declare @NID INT
+				select @NID = CCNodeID from Ren_Units WITH(NOLOCK) where UnitID=@UNITID 
 
 				if(@Dimesion>0 and @NID is not null and @NID <>'' )
 				begin  
@@ -250,11 +338,18 @@ BEGIN TRY
 
 					exec sp_executesql @NodeidXML, @str, @Gid OUTPUT 
 					
+					if(@STATUSID=1001 OR @STATUSID=1002 OR @STATUSID=1003)
+						set @CCStatusID=@STATUSID
+					else
+						select @CCStatusID = statusid from com_status WITH(nolock) where costcenterid=@Dimesion and status = 'Active'  
+
+					if(@Gid is null and @NID >0)
+						set @NID=0
+						
 					SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
 					WHERE CostCenterID=93 AND RefDimensionID=@Dimesion AND NodeID=@SelectedNodeID 
 					SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
 				
-					select @CCStatusID = statusid from com_status WITH(NOLOCK) where costcenterid=@Dimesion and status = 'Active'
 					EXEC	@LinkDim_NodeID = [dbo].[spCOM_SetCostCenter]
 					@NodeID = @NID,@SelectedNodeID = @RefSelectedNodeID,@IsGroup = @IsGroup,
 					@Code = @CODE,
@@ -264,7 +359,7 @@ BEGIN TRY
 					@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
 					@CustomCostCenterFieldsQuery=@CustomCCQuery,@ContactsXML=null,@NotesXML=NULL,
 					@CostCenterID = @Dimesion,@CompanyGUID=@CompanyGUID,@GUID=@Gid,
-					@UserName=@UserName,@RoleID=@RoleID,@UserID=@UserID , @CheckLink = 0 
+					@UserName=@UserName,@RoleID=1,@UserID=1 , @CheckLink = 0 
 
 					Update Ren_Units set LinkCCID=@Dimesion, CCNodeID=@LinkDim_NodeID where UnitID=@UNITID 
 				END
@@ -273,21 +368,21 @@ BEGIN TRY
 	END    
     
     --CHECK WORKFLOW
-	EXEC spCOM_CheckCostCentetWF 93,@UNITID,@WID,@RoleID,@UserID,@UserName,@STATUSID output
+	--EXEC spCOM_CheckCostCentetWF 93,@UNITID,@WID,@RoleID,@UserID,@UserName,@STATUSID output
 	    
     DECLARE @UpdateSql NVARCHAR(MAX)   
     
 	IF(@StaticFieldsQuery IS NOT NULL AND @StaticFieldsQuery <>'')  
 	BEGIN
 		set @UpdateSql='update [REN_Units] SET '+@StaticFieldsQuery+' [ModifiedBy] ='''+ @UserName  
-		+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE UnitID='+convert(nvarchar,@UNITID)  
+		+''',[ModifiedDate] =' + str(@Dt,20,10) +'  WHERE UnitID='+convert(nvarchar,@UNITID)  
 		exec(@UpdateSql)  
 	END
 	
 	IF(@CustomCostCenterFieldsQuery IS NOT NULL AND @CustomCostCenterFieldsQuery <>'')  
 	BEGIN        
 		set @UpdateSql='update [REN_UnitsExtended] SET '+@CustomCostCenterFieldsQuery+'[ModifiedBy] ='''+ @UserName        
-		+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE UnitID='+convert(nvarchar,@UNITID)        
+		+''',[ModifiedDate] =' + str(@Dt,20,10) +' WHERE UnitID='+convert(nvarchar,@UNITID)        
 	       
 		exec(@UpdateSql)       
     END
@@ -295,78 +390,97 @@ BEGIN TRY
 	IF(@CustomCCQuery IS NOT NULL AND @CustomCCQuery <>'')  
 	BEGIN  
 		set @UpdateSql='update COM_CCCCDATA SET '+@CustomCCQuery+'[ModifiedBy] ='''+ @UserName+''',[ModifiedDate] =' + 
-		convert(nvarchar,@Dt) +' WHERE NodeID = '+convert(nvarchar,@UNITID) + ' AND CostCenterID = 93'   
+		str(@Dt,20,10) +' WHERE NodeID = '+convert(nvarchar,@UNITID) + ' AND CostCenterID = 93'   
 		    
 		exec(@UpdateSql)    
 	END   
     
-    DELETE FROM REN_Particulars WHERE PropertyID=@PROPERTYID AND UnitID=@UNITID   
-    insert into REN_Particulars(ParticularID,[PropertyID]    
-           ,[UnitID]    
-           ,[CreditAccountID]    
-           ,[DebitAccountID] ,AdvanceAccountID   
-           ,[Refund]    
-           ,[DiscountPercentage],Vat,InclChkGen  ,VatType,TaxCategoryID,RecurInvoice ,PostDebit  
-           ,[DiscountAmount] 
-           ,[TypeID]
-           ,[ContractType]
-           ,[CompanyGUID]    
-           ,[GUID]    
-           ,[CreatedBy]    
-           ,[CreatedDate])    
-    select  X.value('@Particulars','BIGINT'),    
-    @PROPERTYID,@UNITID,     
-    ISNULL(X.value('@CreditAccount','BIGINT'),0),    
-    ISNULL(X.value('@DebitAccount','BIGINT'),0),
-    X.value('@AdvanceAccountID','BIGINT'),
-    ISNULL(X.value('@Refund','INT'),0),    
-    X.value('@Percentage','FLOAT'), X.value('@Vat','FLOAT'), X.value('@InclChkGen','INT'),
-    X.value('@VatType','Nvarchar(50)'),X.value('@TaxCategoryID','BIGINT'),X.value('@RecurInvoice','BIT'),X.value('@PostDebit','BIT'),
-    X.value('@Amount','FLOAT'),
-    ISNULL(X.value('@TypeID','INT'),0),
-    ISNULL(X.value('@ContractType','INT'),1),@CompanyGUID,newid(),@UserName,@Dt     
-    from @DXML.nodes('/XML/Row') as data(X)    
-      
+    if(@DETAILSXML IS NOT NULL AND @DETAILSXML <> '')
+    begin
+		set @DXML=@DETAILSXML   
+		DELETE FROM REN_Particulars WHERE PropertyID=@PROPERTYID AND UnitID=@UNITID   
+		insert into REN_Particulars(ParticularID,[PropertyID]    
+			   ,[UnitID]    
+			   ,[CreditAccountID]    
+			   ,[DebitAccountID] ,AdvanceAccountID   
+			   ,[Refund]    
+			   ,[DiscountPercentage],Vat,InclChkGen  ,VatType,TaxCategoryID,SPType,RecurInvoice ,PostDebit  
+			   ,[DiscountAmount] ,Months
+			   ,[TypeID]
+			   ,[ContractType]
+			   ,[CompanyGUID]    
+			   ,[GUID]    
+			   ,[CreatedBy]    
+			   ,[CreatedDate],DimNodeID,Display,BankAccountID,PercType)    
+		select  X.value('@Particulars','INT'),    
+		@PROPERTYID,@UNITID,     
+		ISNULL(X.value('@CreditAccount','INT'),0),    
+		ISNULL(X.value('@DebitAccount','INT'),0),
+		X.value('@AdvanceAccountID','INT'),
+		ISNULL(X.value('@Refund','INT'),0),    
+		X.value('@Percentage','FLOAT'), X.value('@Vat','FLOAT'), X.value('@InclChkGen','INT'),
+		X.value('@VatType','Nvarchar(50)'),X.value('@TaxCategoryID','INT'),X.value('@SPType','INT'),X.value('@RecurInvoice','BIT'),X.value('@PostDebit','BIT'),
+		X.value('@Amount','FLOAT'),X.value('@Months','FLOAT'),
+		ISNULL(X.value('@TypeID','INT'),0),
+		ISNULL(X.value('@ContractType','INT'),1),@CompanyGUID,newid(),@UserName,@Dt,
+		ISNULL(X.value('@DimNodeID','INT'),0)  ,X.value('@Display','INT')
+		,ISNULL(X.value('@BankAccountID','INT'),0)  ,X.value('@PercType','INT')
+		from @DXML.nodes('/XML/Row') as data(X)    
+		
+		set @UpdateSql=''
+		select @UpdateSql=X.value('@UpdateQuery','Nvarchar(max)')from @DXML.nodes('/XML') as data(X)    
+		if(@UpdateSql!='')
+		BEGIN
+			set @UpdateSql='update REN_Particulars set '+@UpdateSql+'ParticularID=ParticularID 
+			from @DXML.nodes(''/XML/Row'') as data(X)     
+			where [PropertyID]='+convert(nvarchar(max),@PROPERTYID)+' and [UnitID]='+convert(nvarchar(max),@UNITID)+'
+			and ParticularID=X.value(''@Particulars'',''INT'')'
+			exec sp_executesql @UpdateSql,N'@DXML xml',@DXML
+		END
+    end 
+    
    	IF (@HistoryXML IS NOT NULL AND @HistoryXML <> '')    
 		EXEC spCOM_SetHistory 93,@UNITID,@HistoryXML,@UserName  
-   
-       
-	--Inserts Multiple Attachments  
-	IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')  
+	
+	--Inserts Multiple Notes  
+	IF (@NotesXML IS NOT NULL AND @NotesXML <> '')  
 	BEGIN  
-		SET @XML=@AttachmentsXML  
-  
-		INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,
-		FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,  
+		SET @XML=@NotesXML  
+
+		--If Action is NEW then insert new Notes  
+		INSERT INTO COM_Notes(FeatureID,CostCenterID,FeaturePK,Note,     
 		GUID,CreatedBy,CreatedDate)  
-		SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(50)'),  
-		X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),93,93,@UNITID,  
-		X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt  
-		FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
+		SELECT 93,93,@UNITID,Replace(X.value('@Note','NVARCHAR(MAX)'),'@~','
+'),  
+		newid(),@UserName,@Dt  
+		FROM @XML.nodes('/NotesXML/Row') as Data(X)  
 		WHERE X.value('@Action','NVARCHAR(10)')='NEW'  
-	  
-	   --If Action is MODIFY then update Attachments  
-		UPDATE COM_Files  
-		SET FilePath=X.value('@FilePath','NVARCHAR(500)'),  
-		ActualFileName=X.value('@ActualFileName','NVARCHAR(50)'),  
-		RelativeFileName=X.value('@RelativeFileName','NVARCHAR(50)'),  
-		FileExtension=X.value('@FileExtension','NVARCHAR(50)'),  
-		FileDescription=X.value('@FileDescription','NVARCHAR(500)'),  
-		IsProductImage=X.value('@IsProductImage','bit'),        
-		GUID=X.value('@GUID','NVARCHAR(50)'),  
+
+		--If Action is MODIFY then update Notes  
+		UPDATE COM_Notes  
+		SET Note=Replace(X.value('@Note','NVARCHAR(MAX)'),'@~','
+'),     
+		GUID=newid(),  
 		ModifiedBy=@UserName,  
 		ModifiedDate=@Dt  
-		FROM COM_Files C   
-		INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)    
-		ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID  
-		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
-	  
-	   --If Action is DELETE then delete Attachments  
-		DELETE FROM COM_Files  
-		WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')  
-		FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)  
+		FROM COM_Notes C WITH(NOLOCK)  
+		INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X)    
+		ON convert(INT,X.value('@NoteID','INT'))=C.NoteID  
+		WHERE X.value('@Action','NVARCHAR(10)')='MODIFY'  
+
+		--If Action is DELETE then delete Notes  
+		DELETE FROM COM_Notes  
+		WHERE NoteID IN(SELECT X.value('@NoteID','INT')  
+		FROM @XML.nodes('/NotesXML/Row') as Data(X)  
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
+
 	END  
+    
+      
+	--Inserts Multiple Attachments  
+	IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')  
+		exec [spCOM_SetAttachments] @UNITID,93,@AttachmentsXML,@UserName,@Dt
+	
    
 	IF (@UnitRateXML IS NOT NULL AND @UnitRateXML <> '')  
 	BEGIN  
@@ -397,7 +511,7 @@ BEGIN TRY
 
 		--If Action is DELETE then delete Attachments  
 		DELETE FROM Ren_UnitRate  
-		WHERE UnitRateID IN(SELECT X.value('@UnitRateID','bigint')  
+		WHERE UnitRateID IN(SELECT X.value('@UnitRateID','INT')  
 		FROM @XML.nodes('/UnitRateXML/Row') as Data(X)  
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  AND UNITID = @UNITID
 	END  
@@ -418,28 +532,22 @@ BEGIN TRY
 			@UserID=@UserID,    
 			@LangID=@LangID  
 	end
-	         
-	INSERT INTO [REN_UnitsHistory]
-	([UnitID],[PropertyID],[Code],[Name],[Status],[CCID],[NodeID],[RentableArea],[BuildUpArea],[FloorLookUpID],[ViewLookUpID]
-	,[NoOfBathrooms],[NoOfParkings],[ElectricityCode],[ElectricityKW],[Rent],[RentTypeID],[DiscountPercentage],[DiscountAmount]
-	,[AnnualRent],[MonthlyRent],[RentPerSQFT],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]
-	,[ModifiedBy],[ModifiedDate],[TermsConditions],[SalesmanID],[AccountantID],[LandlordID],[UnitStatus],[RentalIncomeAccountID],[RentalReceivableAccountID]
-	,[AdvanceRentAccountID],[BankAccount],[BankLoanAccount],[CCNodeID],[LinkCCID],[RentalAccount],[RentPayableAccount],[AdvanceRentPaid]
-	,[LocationID],[BasedOn],[ContractID],[PenaltyAccountID],[AdvanceReceivableAccountID],[AdvReceivableCloseAccID],[HistoryStatus])
-	select [UnitID],[PropertyID],[Code],[Name],[Status],[CCID],[NodeID],[RentableArea],[BuildUpArea],[FloorLookUpID],[ViewLookUpID]
-	,[NoOfBathrooms],[NoOfParkings],[ElectricityCode],[ElectricityKW],[Rent],[RentTypeID],[DiscountPercentage],[DiscountAmount]
-	,[AnnualRent],[MonthlyRent],[RentPerSQFT],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]
-	,[ModifiedBy],[ModifiedDate],[TermsConditions],[SalesmanID],[AccountantID],[LandlordID],[UnitStatus],[RentalIncomeAccountID],[RentalReceivableAccountID]
-	,[AdvanceRentAccountID],[BankAccount],[BankLoanAccount],[CCNodeID],[LinkCCID],[RentalAccount],[RentPayableAccount],[AdvanceRentPaid]
-	,[LocationID],[BasedOn],[ContractID],[PenaltyAccountID],[AdvanceReceivableAccountID],[AdvReceivableCloseAccID],@HistoryStatus
-	from ren_units with(nolock) where unitid=@UnitID
-
-    --Insert into Account history  Extended  
-   insert into REN_UnitsExtendedHistory  
-   select *,@HistoryStatus from REN_UnitsExtended with(nolock) WHERE unitid=@UnitID
+	 --validate Data External function
+	DECLARE @tempCCCode NVARCHAR(200)
+	set @tempCCCode=''
+	select @tempCCCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=93 and Mode=9
+	if(@tempCCCode<>'')
+	begin
+		exec @tempCCCode 93,@UNITID,@UserID,@LangID
+	end        
+	--INSERT INTO HISTROY   
+	EXEC [spCOM_SaveHistory]  
+		@CostCenterID =93,    
+		@NodeID =@UNITID,
+		@HistoryStatus =@HistoryStatus,
+		@UserName=@UserName,
+		@Dt=@Dt
   
-
-	         
 COMMIT TRANSACTION    
 --ROLLBACK TRANSACTION    
  
@@ -453,8 +561,10 @@ BEGIN CATCH
 	--Return exception info [Message,Number,ProcedureName,LineNumber]        
 	IF ERROR_NUMBER()=50000      
 	BEGIN      
-		SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)       
-		WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID      
+			if isnumeric(ERROR_MESSAGE())=1
+				SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock) WHERE ErrorNumber=ERROR_MESSAGE() AND LanguageID=@LangID
+			else
+				SELECT ERROR_MESSAGE() ErrorMessage,-1 ErrorNumber
 	END      
 	ELSE IF ERROR_NUMBER()=547      
 	BEGIN      
@@ -478,4 +588,5 @@ BEGIN CATCH
 	SET NOCOUNT OFF        
 	RETURN -999         
 END CATCH 
+
 GO

@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetCostCenterPreferences]
 	@PreferenceXml [nvarchar](max) = '',
-	@CostCenterID [bigint] = 0,
+	@CostCenterID [int] = 0,
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
@@ -18,10 +18,10 @@ SET NOCOUNT ON;
 		
 		--Declaration Section
 		DECLARE @DATA XML,@TempGuid NVARCHAR(50),@HasAccess BIT,@COUNT INT,@I INT,@KEY NVARCHAR(500),@VALUE NVARCHAR(MAX)
-		declare @tempvalue nvarchar(MAX)
+		declare @tempvalue nvarchar(MAX),@TableName nvarchar(50)
 		DECLARE @TEMP TABLE (ID INT IDENTITY(1,1),[KEY] NVARCHAR(500),[VALUE] NVARCHAR(MAX))
-		DECLARE	@CCID bigint,@ColID bigint, @Rid bigint,@TabID bigint,@CostCenterName nvarchar(100),@cnt int,@icnt int
-		declare @bindim nvarchar(50),@ParentCostCenterSysName nvarchar(50),@ParentCCDefaultColID bigint
+		DECLARE	@CCID INT,@ColID INT, @Rid INT,@TabID INT,@CostCenterName nvarchar(100),@cnt int,@icnt int
+		declare @bindim nvarchar(50),@ParentCostCenterSysName nvarchar(50),@ParentCCDefaultColID INT
 		declare @tab table (id int identity(1,1),val int)
 	
 		--SP Required Parameters Check
@@ -132,7 +132,7 @@ SET NOCOUNT ON;
 							set @CCID=@CCID-50000						
 							if not exists(select * from sys.columns where Object_id	=Object_id('ADM_TypeRestrictions') and name='DcCCNID'+convert(nvarchar(max),@CCID))
 							BEGIN
-								set @TempVALUE='alter table ADM_TypeRestrictions add DcCCNID'+convert(nvarchar(max),@CCID)+' bigint'
+								set @TempVALUE='alter table ADM_TypeRestrictions add DcCCNID'+convert(nvarchar(max),@CCID)+' INT'
 								exec(@TempVALUE)
 							END
 						END
@@ -140,7 +140,7 @@ SET NOCOUNT ON;
 						BEGIN
 							if not exists(select * from sys.columns where Object_id	=Object_id('ADM_TypeRestrictions') and name='GroupID')
 							BEGIN
-								set @TempVALUE='alter table ADM_TypeRestrictions add GroupID bigint'
+								set @TempVALUE='alter table ADM_TypeRestrictions add GroupID INT'
 								exec(@TempVALUE)
 							END
 						END	
@@ -184,7 +184,7 @@ SET NOCOUNT ON;
 			set ColumnCostCenterID=@CCID,ColumnCCListViewTypeID=1,
 			ParentCostCenterID=@CCID,ParentCostCenterSysName=T.ParentCostCenterSysName,
 			ParentCostCenterColSysName=T.ParentCostCenterColSysName,ParentCCDefaultColID=T.ParentCCDefaultColID
-			from adm_costcenterdef C
+			from adm_costcenterdef C WITH(NOLOCK)
 			,(select top 1 ParentCostCenterSysName,ParentCostCenterColSysName,ParentCCDefaultColID from adm_costcenterdef with(nolock) where costcenterid=40001 and SysTableName='COM_DocCCData' and ColumnCOstCenterID=@CCID) T
 			where C.costcenterid=72 and C.costcentercolid=25472
 			
@@ -218,7 +218,7 @@ SET NOCOUNT ON;
 			select @VALUE =VALUE from COM_CostCenterPreferences with(nolock)
 			where [Name]='StageDimension' and CostCenterID=@CostCenterID
 					
-			if(@VALUE is not null and @VALUE<>'' and @tempvalue!=@VALUE and exists(select StageID from PRD_BOMStages where StageID>1))
+			if(@VALUE is not null and @VALUE<>'' and @tempvalue!=@VALUE and exists(select StageID from PRD_BOMStages WITH(NOLOCK) where StageID>1))
 			begin
 				RAISERROR('Stage dimension can not be modified, because stages mapped in BOM.',16,1)
 			end
@@ -233,7 +233,7 @@ SET NOCOUNT ON;
 					
 			if(@tempvalue!=@VALUE and ISNUMERIC(@tempvalue)=1)
 			begin
-				set @CCID=CONVERT(BIGINT,@tempvalue) 
+				set @CCID=CONVERT(INT,@tempvalue) 
 				
 				if(@CCID>50000)
 				begin
@@ -277,6 +277,28 @@ SET NOCOUNT ON;
 					update ADM_CostCenterDef set UserColumnName='Efficiency', UserColumnType='NUMERIC', ColumnDataType='FLOAT', SectionSeqNumber=0, 
 					SectionID=@TabID, RowNo=0, ColumnNo=3, ColumnSpan=1,IsColumnDeleted=0,IsColumnInUse=1, LinkData=0, LocalReference=0, TextFormat=0, 
 					dependancy=0, dependanton=0, cformula='' where CostCenterColID=@ColID and CostCenterID=@CCID
+					
+					select @TableName =TableName from ADM_Features WITH(NOLOCK) where FeatureID=@CCID
+					if not exists (select Name from sys.columns where Name='ccAlpha47' and object_id=object_id(@TableName))
+					begin
+						set @tempvalue='alter table '+@TableName+' add ccAlpha47 float'
+						Exec sp_executesql @tempvalue
+					END
+					if not exists (select Name from sys.columns where Name='ccAlpha48' and object_id=object_id(@TableName))
+					begin
+						set @tempvalue='alter table '+@TableName+' add ccAlpha48 float'
+						Exec sp_executesql @tempvalue
+					END
+					if not exists (select Name from sys.columns where Name='ccAlpha49' and object_id=object_id(@TableName))
+					begin
+						set @tempvalue='alter table '+@TableName+' add ccAlpha49 float'
+						Exec sp_executesql @tempvalue
+					END
+					if not exists (select Name from sys.columns where Name='ccAlpha50' and object_id=object_id(@TableName))
+					begin
+						set @tempvalue='alter table '+@TableName+' add ccAlpha50 float'
+						Exec sp_executesql @tempvalue
+					END
 				end
 			end
 			
@@ -290,14 +312,14 @@ SET NOCOUNT ON;
 				
 			if(@tempvalue!=@VALUE and ISNUMERIC(@tempvalue)=1)
 			begin
-				set @CCID=CONVERT(BIGINT,@tempvalue) 
+				set @CCID=CONVERT(INT,@tempvalue) 
 				
 				if(@CCID>50000)
 				begin
 					--select @CCID
 					
-					declare @FID bigint, @FAID bigint
-					select @FAID=featureactionid from ADM_RibbonView where FeatureID=@tempvalue
+					declare @FID INT, @FAID INT
+					select @FAID=featureactionid from ADM_RibbonView WITH(NOLOCK) where FeatureID=@tempvalue
 					update ADM_RibbonView set FeatureActionID=@FAID, FeatureID=@tempvalue
 					where DrpName='Jobs' and TabID=4 and GroupID=32
 				
@@ -426,11 +448,11 @@ SET NOCOUNT ON;
 					set IsVisible=0
 					where costcenterid=@CCID and SysColumnName in('CreditDays','CreditLimit','PurchaseAccount','SalesAccount','DebitDays','DebitLimit')
 					
-					select @Rid=ResourceID from COM_Status where CostCenterID=@CCID and [Status]='Active'
+					select @Rid=ResourceID from COM_Status WITH(NOLOCK) where CostCenterID=@CCID and [Status]='Active'
 					update COM_LanguageResources set ResourceData='In Process'
 					where ResourceID=@Rid
 					
-					select @Rid=ResourceID from COM_Status where CostCenterID=@CCID and [Status]='In Active'
+					select @Rid=ResourceID from COM_Status WITH(NOLOCK) where CostCenterID=@CCID and [Status]='In Active'
 					update COM_LanguageResources set ResourceData='Completed'
 					where ResourceID=@Rid
 					
@@ -500,6 +522,51 @@ SET NOCOUNT ON;
 		INSERT INTO @TEMP ([KEY],[VALUE])
 		SELECT X.value('@Name','nvarchar(300)'),X.value('@Value','nvarchar(max)')
 		FROM @DATA.nodes('/XML/Row') as DATA(X)
+
+
+		
+		if(@CostCenterID>50000 and @CostCenterID<=50050 and exists (select top 1 Value from @TEMP where [Key]='CreateUserOnDim' and Value='True'))
+		begin			
+			SELECT @TableName=TableName FROM ADM_Features WITH(NOLOCK) WHERE FeatureID=@CostCenterID
+			if not exists (select Name from sys.columns where Name='UserNameAlpha' and object_id=object_id(@TableName))
+			begin
+				select @CostCenterName=CostCenterName from [adm_costcenterdef] with(nolock) where CostCenterID=@CostCenterID
+			
+				select @colid=max([CostCenterColID]) from [adm_costcenterdef] with(nolock)
+				select @rid=max(ResourceID) from [com_languageresources] with(nolock)
+
+				INSERT INTO [com_languageresources] ([ResourceID],[ResourceName],[LanguageID],[LanguageName],[ResourceData],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[FEATURE])
+				VALUES(@rid+1,'User Name',1,'English','User Name','448BFA36',NULL,'ADMIN',4,NULL,NULL,'')
+
+				INSERT INTO [com_languageresources] ([ResourceID],[ResourceName],[LanguageID],[LanguageName],[ResourceData],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[FEATURE])
+				VALUES(@rid+1,'User Name',2,'Arabic','User Name','448BFA36',NULL,'ADMIN',4,NULL,NULL,'')
+
+				INSERT INTO [com_languageresources] ([ResourceID],[ResourceName],[LanguageID],[LanguageName],[ResourceData],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[FEATURE])
+				VALUES(@rid+2,'Password',1,'English','Password','448BFA36',NULL,'ADMIN',4,NULL,NULL,'')
+
+				INSERT INTO [com_languageresources] ([ResourceID],[ResourceName],[LanguageID],[LanguageName],[ResourceData],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[FEATURE])
+				VALUES(@rid+2,'Password',2,'Arabic','Password','448BFA36',NULL,'ADMIN',4,NULL,NULL,'')
+
+				set identity_insert [adm_costcenterdef] ON
+				INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat])
+				VALUES(@CostCenterID,@colid+1,@rid+1,@CostCenterName,@TableName,'User Name','UserNameAlpha',NULL,'TEXT','TEXT',NULL,NULL,0,0,1,1,0,0,0,0,0,0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,NULL,'693E656C-CD0D-486D-AFAC-FC36CBFFAF0D','A5203D77-8DD2-499D-8BB7-9495333DC917',NULL,'Admin',4,NULL,NULL,0,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+
+				INSERT INTO [adm_costcenterdef] ([CostCenterID],[CostCenterColID],[ResourceID],[CostCenterName],[SysTableName],[UserColumnName],[SysColumnName],[ColumnTypeSeqNumber],[UserColumnType],[ColumnDataType],[UserDefaultValue],[UserProbableValues],[ColumnOrder],[IsMandatory],[IsEditable],[IsVisible],[IsCostCenterUserDefined],[IsColumnUserDefined],[IsCCDeleted],[IsColumnDeleted],[ColumnCostCenterID],[ColumnCCListViewTypeID],[FetchMaxRows],[IsColumnGroup],[ColumnGroupNumber],[SectionSeqNumber],[SectionID],[SectionName],[RowNo],[ColumnNo],[ColumnSpan],[IsColumnInUse],[UIWidth],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[IsUnique],[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID],[LinkData],[LocalReference],[Decimal],[TextFormat])
+				VALUES(@CostCenterID,@colid+2,@rid+2,@CostCenterName,@TableName,'Password','PasswordAlpha',NULL,'PASS','PASS',NULL,NULL,0,0,1,1,0,0,0,0,0,0,NULL,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,1,NULL,'693E656C-CD0D-486D-AFAC-FC36CBFFAF0D','A5203D77-8DD2-499D-8BB7-9495333DC917',NULL,'Admin',4,NULL,NULL,0,0,NULL,NULL,1,NULL,NULL,NULL,NULL,NULL,NULL,NULL)
+				set identity_insert [adm_costcenterdef] OFF
+
+				select @cnt=max(RowNo) from [adm_costcenterdef] with(nolock) where CostCenterID=@CostCenterID
+				update [adm_costcenterdef] set SectionID=null,RowNo=@cnt+1,ColumnNo=0,IsMandatory=1 where CostCenterColID=@colid+1
+				update [adm_costcenterdef] set SectionID=null,RowNo=@cnt+1,ColumnNo=1,IsMandatory=1 where CostCenterColID=@colid+2
+
+			--	select * from adm_costcenterdef where CostCenterID=50001 order by [CostCenterColID] desc
+
+
+				SET @SQL='ALTER TABLE '+@TableName+' ADD UserNameAlpha NVARCHAR(100),PasswordAlpha NVARCHAR(100)'
+				EXEC (@SQL)
+			END
+		end
+
 		 
 		SELECT @COUNT=COUNT(*) FROM @TEMP
  
@@ -519,7 +586,7 @@ SET NOCOUNT ON;
 			
 			if(@CostCenterID =3 and @KEY='BinsDimension' 
 			and exists(select costcenterid from [COM_CostCenterPreferences] with(nolock)
-			where Name='BinsDimension' and costcenterid=3 and ISNUMERIC(Value)=1 and CONVERT(bigint,Value)>50000)
+			where Name='BinsDimension' and costcenterid=3 and ISNUMERIC(Value)=1 and CONVERT(INT,Value)>50000)
 			and exists(select InvDocDetailsID from INV_BinDetails with(nolock))
 			and @VALUE!=(select Value from [COM_CostCenterPreferences] with(nolock)
 			where Name='BinsDimension' and costcenterid=3))
@@ -530,7 +597,7 @@ SET NOCOUNT ON;
 			if(@CostCenterID =93 and @KEY='UnitLinkDimension' 
 			and @VALUE IS NOT NULL AND @VALUE<>'' and ISNUMERIC(@VALUE)=1 AND CONVERT(INT,@VALUE)>50000
 			and exists(select costcenterid from [COM_CostCenterPreferences] with(nolock)
-			where Name='UnitLinkDimension' and costcenterid=@CostCenterID and ISNUMERIC(Value)=1 and CONVERT(bigint,Value)>50000)
+			where Name='UnitLinkDimension' and costcenterid=@CostCenterID and ISNUMERIC(Value)=1 and CONVERT(INT,Value)>50000)
 			and @VALUE!=(select Value from [COM_CostCenterPreferences] with(nolock)
 			where Name='UnitLinkDimension' and costcenterid=@CostCenterID))
 			BEGIN
@@ -573,7 +640,7 @@ SET NOCOUNT ON;
 			if(@Dim is not null and @Dim!='' and isnumeric(@Dim)=1)
 			begin
 				select @ParentCostCenterSysName=ParentCostCenterSysName,@ParentCCDefaultColID=ParentCCDefaultColID
-				from adm_costcenterdef C where CostcenterID=40001 and SysColumnName='dcCCNID'+convert(nvarchar,(@Dim-50000))
+				from adm_costcenterdef C WITH(NOLOCK) where CostcenterID=40001 and SysColumnName='dcCCNID'+convert(nvarchar,(@Dim-50000))
 				
 				update adm_costcenterdef
 				set ColumnCostCenterID=@Dim,IsForeignKey=1,ParentCostCenterID=@Dim,ParentCostCenterSysName=@ParentCostCenterSysName
@@ -585,7 +652,7 @@ SET NOCOUNT ON;
 			if(@Dim is not null and @Dim!='' and isnumeric(@Dim)=1)
 			begin
 				select @ParentCostCenterSysName=ParentCostCenterSysName,@ParentCCDefaultColID=ParentCCDefaultColID
-				from adm_costcenterdef C where CostcenterID=40001 and SysColumnName='dcCCNID'+convert(nvarchar,(@Dim-50000))
+				from adm_costcenterdef C WITH(NOLOCK) where CostcenterID=40001 and SysColumnName='dcCCNID'+convert(nvarchar,(@Dim-50000))
 				
 				update adm_costcenterdef
 				set ColumnCostCenterID=@Dim,IsForeignKey=1,ParentCostCenterID=@Dim,ParentCostCenterSysName=@ParentCostCenterSysName
@@ -597,7 +664,7 @@ SET NOCOUNT ON;
 			if(@Dim is not null and @Dim!='' and isnumeric(@Dim)=1)
 			begin
 				select @ParentCostCenterSysName=ParentCostCenterSysName,@ParentCCDefaultColID=ParentCCDefaultColID
-				from adm_costcenterdef C where CostcenterID=40001 and SysColumnName='dcCCNID'+convert(nvarchar,(@Dim-50000))
+				from adm_costcenterdef C WITH(NOLOCK) where CostcenterID=40001 and SysColumnName='dcCCNID'+convert(nvarchar,(@Dim-50000))
 				
 				update adm_costcenterdef
 				set ColumnCostCenterID=@Dim,IsForeignKey=1,ParentCostCenterID=@Dim,ParentCostCenterSysName=@ParentCostCenterSysName
@@ -635,5 +702,5 @@ BEGIN CATCH
 	ROLLBACK TRANSACTION
 	SET NOCOUNT OFF  
 	RETURN -999   
-END CATCH 
+END CATCH
 GO

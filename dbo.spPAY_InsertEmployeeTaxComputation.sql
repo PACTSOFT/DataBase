@@ -29,8 +29,8 @@ BEGIN
 	DELETE FROM PAY_EmpTaxComputation WHERE EmpNode=@EmpNode AND Year=@Year
 
 	SET @XML=@EmpTaxXML
-	INSERT INTO PAY_EmpTaxComputation(Year,EmpNode,HeaderID,HeaderName,ComponentID,ComponentAmount,TotalAmount,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate)
-	SELECT  @Year,@EmpNode,A.value('@HeaderID','int'),A.value('@HeaderName','nvarchar(400)'),A.value('@ComponentID','int'),A.value('@ComponentAmount','float'),A.value('@TotalAmount','float'),@CreatedBy,getdate(),@CreatedBy,getdate()
+	INSERT INTO PAY_EmpTaxComputation(Year,EmpNode,HeaderID,HeaderName,ComponentID,ComponentAmount,TotalAmount,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,RegimeType)
+	SELECT  @Year,@EmpNode,A.value('@HeaderID','int'),A.value('@HeaderName','nvarchar(400)'),A.value('@ComponentID','int'),A.value('@ComponentAmount','float'),A.value('@TotalAmount','float'),@CreatedBy,getdate(),@CreatedBy,getdate(),A.value('@RegimeType','int')
 	FROM @XML.nodes('Rows/row') as Data(A)	
 END
 ELSE IF(@Flag=1)
@@ -85,5 +85,4 @@ Begin Catch
 	SET NOCOUNT OFF    
 	RETURN -999     
 End Catch
-
 GO

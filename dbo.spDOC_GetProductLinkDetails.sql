@@ -3,15 +3,15 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetProductLinkDetails]
-	@CCID [bigint],
-	@ProductID [bigint],
-	@LocationID [bigint] = 0,
-	@DivisionID [bigint] = 0,
+	@CCID [int],
+	@ProductID [int],
+	@LocationID [int] = 0,
+	@DivisionID [int] = 0,
 	@DocDate [datetime] = null,
 	@DueDate [datetime] = null,
 	@DimensionWhere [nvarchar](max),
-	@DbAcc [bigint] = 0,
-	@CrAcc [bigint] = 0,
+	@DbAcc [int] = 0,
+	@CrAcc [int] = 0,
 	@UserID [int] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -20,8 +20,8 @@ BEGIN TRY
 SET NOCOUNT ON    
     
   --Declaration Section    
-  DECLARE @Tolerance nvarchar(50),@HasAccess bit,@CostCenterID int,@ColumnName nvarchar(50),@lINKColumnName nvarchar(50),@ColHeader nvarchar(200) ,@DocumentLinkDefID BIGINT,@docType int
-  DECLARE @Query nvarchar(max),@LinkCostCenterID int,@ColID bigint,@lINKColID bigint,@PrefValue nvarchar(50),@ProductColName  nvarchar(50),@Vouchers nvarchar(max),@LinkdocType int
+  DECLARE @Tolerance nvarchar(50),@HasAccess bit,@CostCenterID int,@ColumnName nvarchar(50),@lINKColumnName nvarchar(50),@ColHeader nvarchar(200) ,@DocumentLinkDefID INT,@docType int
+  DECLARE @Query nvarchar(max),@LinkCostCenterID int,@ColID INT,@lINKColID INT,@PrefValue nvarchar(50),@ProductColName  nvarchar(50),@Vouchers nvarchar(max),@LinkdocType int
   --DECLARE @DocDate Datetime     
   --SP Required Parameters Check    
   IF (@DocumentLinkDefID <1)    
@@ -29,12 +29,12 @@ SET NOCOUNT ON
    RAISERROR('-100',16,1)    
   END    
   --Create temporary table     
-  declare  @tblDocLinkDef TABLE(ID INT IDENTITY (1,1), DocumentLinkDefID BIGINT ,CCID BIGINT)      
+  declare  @tblDocLinkDef TABLE(ID INT IDENTITY (1,1), DocumentLinkDefID INT ,CCID INT)      
      
   INSERT INTO @tblDocLinkDef      
   SELECT  [DocumentLinkDefID],[CostCenterIDLinked] FROM [COM_DocumentLinkDef] with(nolock) where  CostCenterIDBase =  @CCID    
     --Create temporary table     
-  declare @tblList TABLE(ID int identity(1,1),DocDetailsID bigint,Val float,PercentValue FLOAT)      
+  declare @tblList TABLE(ID int identity(1,1),DocDetailsID INT,Val float,PercentValue FLOAT)      
       
    DECLARE @iCnt int ,@iTotCnt int     
    Set  @iCnt = 1    
@@ -65,7 +65,7 @@ SET NOCOUNT ON
     
    --Create temporary table  
 	set @Tolerance=''
-	select @Tolerance=PrefValue from COM_DocumentPreferences        
+	select @Tolerance=PrefValue from COM_DocumentPreferences with(nolock)        
 	where CostCenterID=@CCID and PrefName='Enabletolerance'          
 
 	set @Query=''
@@ -170,7 +170,7 @@ SET NOCOUNT ON
   end  
   
   set @PrefValue=''
-	select @PrefValue=PrefValue from COM_DocumentPreferences    
+	select @PrefValue=PrefValue from COM_DocumentPreferences with(nolock)    
 	where CostCenterID=@CostCenterID and PrefName='Debit Account'        
 
 	if(@PrefValue is NOT null AND  @PrefValue='True') --FOr Debit Account filter      
@@ -191,7 +191,7 @@ SET NOCOUNT ON
 		END	
 	END  
 	set @PrefValue=''
-	select @PrefValue=PrefValue from COM_DocumentPreferences    
+	select @PrefValue=PrefValue from COM_DocumentPreferences with(nolock)    
 	where CostCenterID=@CostCenterID and PrefName='Credit Account'        
 
 
@@ -281,14 +281,13 @@ SET NOCOUNT ON
    join @tblList c on a.InvDocDetailsID=c.DocDetailsID    
    where a.statusid=369 and a.linkstatusid<>445   
        
-   select @ProductColName=SysColumnName from ADM_COSTCENTERDEF 
+   select @ProductColName=SysColumnName from ADM_COSTCENTERDEF with(nolock) 
    where COSTCENTERID=@LinkCostCenterID and SysColumnName like 'dcalpha%' and ColumnCostCenterID=3
     
       
    SELECT c.Val ,@lINKColumnName,@ColHeader,@ColumnName,@ProductColName ProductColName,A.InvDocDetailsID AS DocDetailsID,A.[AccDocDetailsID],a.VoucherNO      
          ,a.[DocID]      
-         ,a.[CostCenterID]      
-         ,a.[DocumentTypeID]      
+         ,a.[CostCenterID]       
          ,a.[DocumentType]      
          ,a.[VersionNo]      
          ,a.[DocAbbr]      
@@ -318,11 +317,10 @@ SET NOCOUNT ON
          ,a.[Gross], a.[GrossFC]     
          ,a.[StockValue]  ,a.[StockValueFC]     
          ,a.[CurrencyID]      
-         ,a.[ExchangeRate]      
-         ,a.[CompanyGUID]      
-         ,a.[GUID]      
+         ,a.[ExchangeRate]       
          ,a.[CreatedBy]      
-         ,a.[CreatedDate],UOMConversion,UOMConvertedQty, Cr.AccountName as CreditAcc, Dr.AccountName as DebitAcc,a.DynamicInvDocDetailsID,a.ReserveQuantity  FROM  [INV_DocDetails] a with(nolock)      
+         ,a.[CreatedDate],UOMConversion,UOMConvertedQty, Cr.AccountName as CreditAcc, Dr.AccountName as DebitAcc,a.DynamicInvDocDetailsID,a.ReserveQuantity  
+         FROM  [INV_DocDetails] a with(nolock)      
    join dbo.INV_Product p with(nolock) on  a.ProductID=p.ProductID  
    join dbo.Acc_Accounts Cr  WITH(NOLOCK) on  Cr.AccountID=a.CreditAccount    
      join dbo.Acc_Accounts Dr WITH(NOLOCK)  on  Dr.AccountID=a.DebitAccount      
@@ -333,21 +331,21 @@ SET NOCOUNT ON
     
     
    --GETTING DOCUMENT EXTRA COSTCENTER FEILD DETAILS      
-   SELECT * FROM  [COM_DocCCData]      
+   SELECT * FROM  [COM_DocCCData] with(nolock)      
    WHERE InvDocDetailsID IN (SELECT a.InvDocDetailsID FROM  [INV_DocDetails] a with(nolock)      
    join @tblList c on a.InvDocDetailsID=c.DocDetailsID      
    WHERE VoucherNo IN ( select voucherno from @tempVoucher ) AND  a.ProductID = @ProductID)      
    order by InvDocDetailsID      
          
    --GETTING DOCUMENT EXTRA NUMERIC FEILD DETAILS      
-   SELECT * FROM [COM_DocNumData]      
+   SELECT * FROM [COM_DocNumData] with(nolock)      
    WHERE InvDocDetailsID IN (SELECT a.InvDocDetailsID FROM  [INV_DocDetails] a with(nolock)      
    join @tblList c on a.InvDocDetailsID=c.DocDetailsID      
    WHERE VoucherNo IN ( select voucherno from @tempVoucher ) AND  a.ProductID = @ProductID)      
    order by InvDocDetailsID      
       
    --GETTING DOCUMENT EXTRA TEXT FEILD DETAILS      
-   SELECT * FROM [COM_DocTextData]      
+   SELECT * FROM [COM_DocTextData] with(nolock)      
    WHERE InvDocDetailsID IN (SELECT a.InvDocDetailsID FROM  [INV_DocDetails] a  with(nolock)     
    join @tblList c on a.InvDocDetailsID=c.DocDetailsID      
    WHERE VoucherNo IN ( select voucherno from @tempVoucher ) AND  a.ProductID = @ProductID)      
@@ -373,7 +371,7 @@ SET NOCOUNT ON
    WHERE VoucherNo IN ( select voucherno from @tempVoucher ) AND  a.ProductID = @ProductID)  
       
     
-     SELECT C.*,TBL.SysColumnName FROM ADM_COSTCENTERDEF C    
+     SELECT C.*,TBL.SysColumnName FROM ADM_COSTCENTERDEF C with(nolock)    
   INNER JOIN  (  
      SELECT  case when L.SysColumnName IS null then B.SysColumnName else L.SysColumnName end as SysColumnName,A.[VIEW]   FROM COM_DocumentLinkDetails A   with(nolock)  
    JOIN ADM_CostCenterDef B with(nolock) ON B.CostCenterColID=A.CostCenterColIDBase    
@@ -391,7 +389,7 @@ SET NOCOUNT ON
    as t on f.FeatureID=t.CostCenterID and f.FeaturePK=t.DocID
  
 		set @PrefValue=''
-    select @PrefValue=PrefValue from COM_DocumentPreferences        
+    select @PrefValue=PrefValue from COM_DocumentPreferences with(nolock)        
     where CostCenterID=@CostCenterID and PrefName='CopySerialNos'     
          
 	if(@PrefValue is not null and @PrefValue='True')
@@ -408,14 +406,14 @@ SET NOCOUNT ON
 		  ,a.[RefInvDocDetailsID]  
 		  ,a.[Narration] FROM INV_SerialStockProduct A WITH(NOLOCK)  
    		join @tblList t on t.DocDetailsID=A.InvDocDetailsID 
-   		left join inv_docdetails b on a.InvDocDetailsID=b.LinkedInvDocDetailsID 
-		left  join INV_SerialStockProduct bs on bs.InvDocDetailsID=b.InvDocDetailsID and a.[SerialNumber]=bs.SerialNumber
+   		left join inv_docdetails b with(nolock) on a.InvDocDetailsID=b.LinkedInvDocDetailsID 
+		left  join INV_SerialStockProduct bs with(nolock) on bs.InvDocDetailsID=b.InvDocDetailsID and a.[SerialNumber]=bs.SerialNumber
 		where bs.SerialProductID is null 
 	END
 	ELSE
 		SELECT 1 where 1=2
 		
-	select a.InvDocDetailsID,a.Fld1,a.Fld2,a.Fld3,a.Fld4,a.Fld5,a.Fld6,a.Fld7,a.Fld8,a.Fld9,a.Fld10
+	select a.*
 	from   COM_DocQtyAdjustments a WITH(NOLOCK)  
 	join @tblList t on a.InvDocDetailsID=t.DocDetailsID	
 	
@@ -427,7 +425,7 @@ SET NOCOUNT ON
     SELECT 1 where 1=2
     
 	set @PrefValue=''
-    select @PrefValue=PrefValue from COM_DocumentPreferences        
+    select @PrefValue=PrefValue from COM_DocumentPreferences with(nolock)        
     where CostCenterID=@CostCenterID and PrefName='CopyBins'     
          
 	if(@PrefValue is not null and @PrefValue='True')

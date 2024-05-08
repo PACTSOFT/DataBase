@@ -3,14 +3,16 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDoc_ProjectPlan]
-	@InvDocDetID [bigint],
-	@CostCenterID [bigint],
-	@DimensionID [bigint],
-	@DimensionNodeID [bigint],
+	@InvDocDetID [int],
+	@DocID [int],
+	@CostCenterID [int],
+	@DimensionID [int],
+	@DimensionNodeID [int],
 	@ProjectXML [nvarchar](max),
 	@CompanyGUID [varchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int],
+	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -18,8 +20,8 @@ BEGIN TRANSACTION
 BEGIN TRY        
 SET NOCOUNT ON;      
 	
-	declare @retVal bigint,@CNT FLOAT,@SQL NVARCHAR(MAX),@NodeID bigint,@XML xml,@Groups NVARCHAR(MAX),@Roles NVARCHAR(MAX),@Users NVARCHAR(MAX)
-	declare @cctablename nvarchar(50)
+	declare @retVal INT,@CNT FLOAT,@SQL NVARCHAR(MAX),@NodeID INT,@XML xml,@Groups NVARCHAR(MAX),@Roles NVARCHAR(MAX),@Users NVARCHAR(MAX)
+	declare @cctablename nvarchar(50),@Fldname nvarchar(50),@Val nvarchar(50)
 	
 	select @cctablename=tablename from ADM_Features WITH(NOLOCK) where FeatureID=@DimensionID
 
@@ -28,11 +30,11 @@ SET NOCOUNT ON;
 	
 	insert into @Preftab
 	SELECT Name,Value FROM ADM_GlobalPreferences with(nolock)
-	WHERE Name IN ('PMLevel1Dimension','PMLevel2Dimension','PMLevel3Dimension','PMTaskDimension')
+	WHERE Name IN ('PMLevel1Dimension','PMLevel2Dimension','PMLevel3Dimension','PMTaskDimension','ProjPlanDim')
 	
 	SET @SQL='select @NodeID=dcalpha10 from com_docTextData WITH(NOLOCK) WHERE InvDocDetailsID ='+CONVERT(NVARCHAR,@InvDocDetID)
 	--print @SQL
-	EXEC sp_executesql @SQL,N'@NodeID bigint OUTPUT',@NodeID output
+	EXEC sp_executesql @SQL,N'@NodeID INT OUTPUT',@NodeID output
 
 	set @Groups='set CCNID'+CONVERT(NVARCHAR,(@DimensionID-50000))+'='+CONVERT(NVARCHAR,@NodeID)
 	
@@ -55,30 +57,56 @@ SET NOCOUNT ON;
 	   set @Groups=@Groups+',CCNID'+CONVERT(NVARCHAR,(@retVal-50000))+'=dcCCNID'+CONVERT(NVARCHAR,(@retVal-50000))	
 	END
 	
+	set @retVal=0
+	select @retVal=Value from @Preftab where Name='ProjPlanDim' and isnumeric(Value)=1
+	if (@retVal>50000)
+	BEGIN	
+	   set @Groups=@Groups+',CCNID'+CONVERT(NVARCHAR,(@retVal-50000))+'=dcCCNID'+CONVERT(NVARCHAR,(@retVal-50000))	
+	END
+	
 	SET @SQL='UPDATE COM_CCCCData '+@Groups+'
 	 From COM_DocCCData c WITH(NOLOCK)
 	 WHERE InvDocDetailsID ='+CONVERT(NVARCHAR,@InvDocDetID) +' and COSTCENTERID='+CONVERT(NVARCHAR,@DimensionID)+' AND NodeID='+CONVERT(NVARCHAR,@DimensionNodeID)
 	--print @SQL
 	EXEC(@SQL)
 	
-	UPDATE COM_DocTextData 
-	set dcAlpha25=(case when (dcAlpha25 is null or dcAlpha25='') then dcAlpha15 else dcAlpha25 end)
-	,dcAlpha26=(case when (dcAlpha26 is null or dcAlpha26='') then dcAlpha16 else dcAlpha26 end)
-	WHERE InvDocDetailsID=@InvDocDetID
+	set @SQL='UPDATE COM_DocTextData 
+	set dcAlpha25=(case when (dcAlpha25 is null or dcAlpha25='''') then dcAlpha15 else dcAlpha25 end)
+	,dcAlpha26=(case when (dcAlpha26 is null or dcAlpha26='''') then dcAlpha16 else dcAlpha26 end)
+	WHERE InvDocDetailsID='+CONVERT(NVARCHAR,@InvDocDetID)
+	EXEC(@SQL)
 	
-	set @SQL='[ccAlpha1] = C.[dcAlpha1]'
-	set @CNT=1
+	set @Fldname=''
+	SELECT @Fldname=PrefValue FROM [com_documentpreferences] with(nolock)
+	where prefname='MandAttachfld' and PrefValue<>''
+	if(@Fldname<>'')
+	BEGIN
+		set @Val=''
+		set @SQL='select @Val='+@Fldname+' from COM_DocTextData WITH(NOLOCK)		
+		WHERE InvDocDetailsID='+CONVERT(NVARCHAR,@InvDocDetID)
+		EXEC sp_executesql @SQL,N'@Val nvarchar(50) OUTPUT',@Val output
+		if(@Val in('true','1','Yes'))
+			set @SQL='DebitDays=1'
+		else
+			set @SQL='DebitDays=0'	
+	END
+	ELSE
+		set @SQL='DebitDays=0'
+		
+	
+	set @CNT=0
 	WHILE(@CNT<26)
 	BEGIN
 		set @CNT=@CNT+1
 		set @SQL=@SQL+',[ccAlpha'+CONVERT(NVARCHAR,@CNT)+'] = C.[dcAlpha'+CONVERT(NVARCHAR,@CNT)+']'
 	end
 	
+		
 	SET @SQL='UPDATE '+@cctablename+' 
 		set '+@SQL+'
 	 From COM_DocTextData c WITH(NOLOCK)
 	 WHERE C.InvDocDetailsID ='+CONVERT(NVARCHAR,@InvDocDetID) +' AND NodeID='+CONVERT(NVARCHAR,@DimensionNodeID)
-	--print @SQL
+	print @SQL
 	EXEC(@SQL)
 	
 	--set @actid=0
@@ -109,6 +137,7 @@ SET NOCOUNT ON;
 	INSERT INTO @TblApp(G)
 	EXEC [SPSplitString] @Groups,','
 	
+
 	insert into INV_DocExtraDetails(InvDocDetailsID,[Type],[RefID])
 	select @InvDocDetID,6,G from @TblApp
 	
@@ -136,6 +165,8 @@ SET NOCOUNT ON;
 	insert into INV_DocExtraDetails(InvDocDetailsID,[Type],Fld1)
 	select @InvDocDetID,9,G from @TblApp
 	
+	EXEC spCOM_SetNotifEvent 153,@CostCenterID,@DocID,@CompanyGUID,@UserName,@UserID,@RoleID   
+
      
 COMMIT TRANSACTION          
 SET NOCOUNT OFF;       

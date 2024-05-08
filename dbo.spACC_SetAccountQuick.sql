@@ -3,14 +3,14 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_SetAccountQuick]
-	@AccountID [bigint],
+	@AccountID [int],
 	@AccountCode [nvarchar](200),
 	@AccountName [nvarchar](500),
 	@AccountTypeID [int],
 	@IsGroup [bit],
 	@StatusID [int],
 	@CodePrefix [nvarchar](200),
-	@CodeNumber [bigint],
+	@CodeNumber [int],
 	@StaticFieldsQuery [nvarchar](max),
 	@CustomFieldsQuery [nvarchar](max),
 	@CustomCostCenterFieldsQuery [nvarchar](max),
@@ -212,7 +212,9 @@ SET NOCOUNT ON;
 		  +''',[ModifiedDate] =@ModDate WHERE AccountID='+convert(NVARCHAR,@AccountID)
 		EXEC sp_executesql @SQL,N'@ModDate float',@Dt
 	END
-	if exists (select CostCenterColID from adm_costcenterdef where CostCenterID=2 and CostCenterColID=244)
+	
+	if exists (select CostCenterColID from adm_costcenterdef with(nolock) where CostCenterID=2 and CostCenterColID=244)
+	and ((select count(*) from sys.columns where object_id=object_id('ACC_AccountsExtended') and name in ('acAlpha51','acAlpha60'))=2)
 	begin
 		set @SQL='
 		if exists (select acAlpha60 from ACC_AccountsExtended with(nolock) where AccountID=@AccountID and acAlpha60=0)
@@ -221,7 +223,7 @@ SET NOCOUNT ON;
 		end'
 		EXEC sp_executesql @SQL,N'@AccountID int',@AccountID
 		set @SQL='
-declare @TRN nvarchar(max),@GA bigint
+declare @TRN nvarchar(max),@GA INT
 select @TRN=acAlpha51,@GA=acAlpha60 from ACC_AccountsExtended with(nolock) where AccountID=@AccountID
 if @TRN is not null and @TRN!=''''
 begin
@@ -230,7 +232,7 @@ begin
 	else
 	begin
 		begin try
-			select convert(bigint,@TRN)
+			select convert(INT,@TRN)
 		end try
 		begin catch
 			RAISERROR(''Invalid Tax Registration Number - TRN/TIN'',16,1)
@@ -264,7 +266,7 @@ end'
 	exec [spCOM_CheckUniqueCostCenter] @CostCenterID=2,@NodeID =@AccountID,@LangID=@LangID
 	
 	--Series Check
-	declare @retSeries bigint
+	declare @retSeries INT
 	EXEC @retSeries=spCOM_ValidateCodeSeries 2,@AccountID,@LangId
 	if @retSeries>0
 	begin
@@ -320,10 +322,10 @@ end'
 					--select @CCID
 					if(@CCID>50000)
 					begin
-						declare @CCStatusID bigint
-						set @CCStatusID = (select top 1 statusid from com_status where costcenterid=@CCID)
-			 			declare @NID bigint, @CCIDAcc bigint
-						select @NID = CCNodeID, @CCIDAcc=CCID  from acc_Accounts where Accountid=@AccountID
+						declare @CCStatusID INT
+						set @CCStatusID = (select top 1 statusid from com_status with(nolock) where costcenterid=@CCID)
+			 			declare @NID INT, @CCIDAcc INT
+						select @NID = CCNodeID, @CCIDAcc=CCID  from acc_Accounts with(nolock) where Accountid=@AccountID
 						iF(@CCIDAcc<>@CCID)
 						BEGIN
 							if(@NID>0)
@@ -368,7 +370,7 @@ end'
 							select @Table=Tablename from adm_features where featureid=@CCID
 							declare @str nvarchar(max) 
 							set @str='@Gid nvarchar(50) output' 
-							set @NodeidXML='set @Gid= (select GUID from '+convert(nvarchar,@Table)+' where NodeID='+convert(nvarchar,@NID)+')'
+							set @NodeidXML='set @Gid= (select GUID from '+@Table+' with(nolock) where NodeID='+convert(nvarchar,@NID)+')'
 								exec sp_executesql @NodeidXML, @str, @Gid OUTPUT 
 								
 							EXEC @return_value = [dbo].[spCOM_SetCostCenter]
@@ -407,7 +409,7 @@ end'
 		DECLARE @Action NVARCHAR(100)
 		DECLARE @CCCCCData xml
 		SET @CCCCCData=@AssignCCCCData
-	    declare @Val bit,   @NodeID bigint,@DATA xml,@DefCCID INT
+	    declare @Val bit,   @NodeID INT,@DATA xml,@DefCCID INT
 		set @DATA=@CCCCCData   
 
 		EXEC [spCOM_SetCCCCMap] 2,@AccountID,@CCCCCData,@UserName,@LangID 
@@ -415,16 +417,16 @@ end'
 	    if(@IsGroup=1 and not exists(select Name from com_costcenterpreferences with(nolock) where CostCenterID=2 and Name='DontAssignGroupToNodes' and Value='True'))
 		begin
 			declare @count int, @a int
-			create table #temp (id int identity(1,1), Accountid bigint )
+			create table #temp (id int identity(1,1), Accountid INT )
 			insert into #temp
 			select AccountID from acc_accounts with(nolock) where lft between (select lft from acc_accounts with(nolock) where accountid=@AccountID) 
 			and (select rgt from acc_accounts with(nolock) where accountid=@AccountID) and accountid<>@AccountID order by lft
-			select @count=count(*) from #temp
+			select @count=count(*) from #temp with(nolock)
 			set @a=1
 			while @a<=@count
 			begin
-				declare @acc bigint 
-				select @acc=Accountid from #temp where id=@a 
+				declare @acc INT 
+				select @acc=Accountid from #temp with(nolock) where id=@a 
 				
 				if(@Val =1)
 				begin
@@ -438,16 +440,16 @@ end'
 							where (debitaccount =@NodeID or CreditAccount=@NodeID) and cc.dcCCNID2 in  
 							(Select cc.NodeID    from COM_CostCenterCostCenterMap cc with(nolock)
 							left join @DATA.nodes('/ASSIGNMAPXML/ASSIGN/R') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID 
-							and costcenterid=A.value('@CCID','BIGINT') and NodeID=A.value('@ID','BIGINT')
+							and costcenterid=A.value('@CCID','INT') and NodeID=A.value('@ID','INT')
 							where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 
-							and A.value('@ID','BIGINT') is null))
+							and A.value('@ID','INT') is null))
 							or exists  (select voucherno from ACC_DocDetails d with(nolock)
 							join com_docccdata cc with(nolock) on d.AccDocDetailsID=cc.AccDocDetailsID
 							where (debitaccount =@NodeID or CreditAccount=@NodeID) and cc.dcCCNID2 in  
 							(Select cc.NodeID    from COM_CostCenterCostCenterMap cc with(nolock)
 							left join @DATA.nodes('/ASSIGNMAPXML/ASSIGN/R') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID 
-							and costcenterid=A.value('@CCID','BIGINT') and NodeID=A.value('@ID','BIGINT')
-							where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 and A.value('@ID','BIGINT') is null))
+							and costcenterid=A.value('@CCID','INT') and NodeID=A.value('@ID','INT')
+							where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 and A.value('@ID','INT') is null))
 								RAISERROR('-110',16,1)  
 					END
 					ELSE
@@ -458,16 +460,16 @@ end'
 						where (debitaccount =@NodeID or CreditAccount=@NodeID) and cc.dcCCNID2 in  
 						(Select cc.NodeID    from COM_CostCenterCostCenterMap cc with(nolock)
 						left join @DATA.nodes('/XML/Row') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID 
-						and costcenterid=A.value('@CostCenterId','BIGINT') and NodeID=A.value('@NodeID','BIGINT')
+						and costcenterid=A.value('@CostCenterId','INT') and NodeID=A.value('@NodeID','INT')
 						where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 
-						and A.value('@NodeID','BIGINT') is null))
+						and A.value('@NodeID','INT') is null))
 						or exists  (select voucherno from ACC_DocDetails d with(nolock)
 						join com_docccdata cc with(nolock) on d.AccDocDetailsID=cc.AccDocDetailsID
 						where (debitaccount =@NodeID or CreditAccount=@NodeID) and cc.dcCCNID2 in  
 						(Select cc.NodeID    from COM_CostCenterCostCenterMap cc with(nolock)
 						left join @DATA.nodes('/XML/Row') as DATA(A)  on  ParentCostCenterID=2 AND ParentNodeID=@NodeID 
-						and costcenterid=A.value('@CostCenterId','BIGINT') and NodeID=A.value('@NodeID','BIGINT')
-						where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 and A.value('@NodeID','BIGINT') is null))
+						and costcenterid=A.value('@CostCenterId','INT') and NodeID=A.value('@NodeID','INT')
+						where cc.ParentCostCenterID=2 AND cc.ParentNodeID=@NodeID and cc.CostCenterID=50002 and A.value('@NodeID','INT') is null))
 							RAISERROR('-110',16,1)
 					END
 				end	 
@@ -479,6 +481,15 @@ end'
 	   end
 	END
 	
+	 --validate Data External function
+	DECLARE @tempCode NVARCHAR(200)
+	set @tempCode=''
+	select @tempCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=2 and Mode=9
+	if(@tempCode<>'')
+	begin
+		exec @tempCode 2,@AccountID,@UserID,@LangID
+	end
+	
 	--Insert Notifications
 	EXEC spCOM_SetNotifEvent 3,2,@AccountID,@CompanyGUID,@UserName,@UserID,-1
 	
@@ -487,8 +498,8 @@ end'
 		@CostCenterID =2,    
 		@NodeID =@AccountID,
 		@HistoryStatus =@HistoryStatus,
-		@UserName=@UserName
-		
+		@UserName=@UserName,
+		@DT=@DT
 		
 COMMIT TRANSACTION
 --ROLLBACK TRANSACTION

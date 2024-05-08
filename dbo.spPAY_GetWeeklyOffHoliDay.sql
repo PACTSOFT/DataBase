@@ -5,8 +5,8 @@ GO
 CREATE PROCEDURE [dbo].[spPAY_GetWeeklyOffHoliDay]
 	@FromDate [nvarchar](25) = null,
 	@EmployeeID [int] = 0,
-	@userid [bigint] = 1,
-	@langid [bigint] = 1,
+	@userid [int] = 1,
+	@langid [int] = 1,
 	@DATYPE [nvarchar](100) OUTPUT
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -21,7 +21,7 @@ EXEC spPAY_GetPayrollDate @FROMDATE,@PayrollDate OUTPUT,@STARTDATE OUTPUT, @ToDa
 CREATE TABLE #EMPWEEKLYOFF(Week1_W1 varchar(50),Week1_W2 varchar(50),Week2_W1 varchar(50),Week2_W2 varchar(50), Week3_W1 varchar(50),
 								   Week3_W2 varchar(50),Week4_W1 varchar(50),Week4_W2 varchar(50),Week5_W1 varchar(50),Week5_W2 varchar(50))
 
-DECLARE @EMPMASTWF TABLE(ID INT IDENTITY(1,1),NODEID BIGINT,WeeklyOff1 nvarchar(100),WeeklyOff2 nvarchar(100))
+DECLARE @EMPMASTWF TABLE(ID INT IDENTITY(1,1),NODEID INT,WeeklyOff1 nvarchar(100),WeeklyOff2 nvarchar(100))
 
 DECLARE @WeeklyOffsDefBasedOn NVARCHAR(MAX),@WhereCond NVARCHAR(MAX),@HCCID INT,@CCType NVARCHAR(50),@SQL nvarchar(max)
 SELECT @WeeklyOffsDefBasedOn=ISNULL(Value,'') From ADM_GlobalPreferences WITH(NOLOCK) Where Name='WeeklyOffsDefBasedOn'
@@ -44,15 +44,15 @@ BEGIN
 			BEGIN
 			print @WhereCond
 				SET @WhereCond=@WhereCond+' 
-											AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as CCNID UNION ALL Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+CONVERT(NVARCHAR,@EmployeeID)+') ) '
+											AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+CONVERT(NVARCHAR,@EmployeeID)+') )) '
 			END
 			ELSE
 			BEGIN
-				SET @WhereCond=@WhereCond+' AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as HistoryNodeID UNION ALL SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
+				SET @WhereCond=@WhereCond+' AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN ( SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
 											WHERE NodeID IN('+convert(nvarchar,@EmployeeID)+') AND CostCenterID=50051 AND HistoryCCID='+CONVERT(NVARCHAR,@HCCID)+'   
 											AND (CONVERT(DATETIME,FromDate)<=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR 
 												CONVERT(DATETIME,FromDate) BETWEEN CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@STARTDATE)+''') AND CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@ToDate)+''')) 
-											AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL) ) ORDER BY     CONVERT(DATETIME,ID.DUEDATE) DESC '
+											AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL)) ) ORDER BY     CONVERT(DATETIME,ID.DUEDATE) DESC '
 									
 			END
 		END
@@ -76,7 +76,7 @@ BEGIN
 END
 --PRINT @SQL
 INSERT INTO #EMPWEEKLYOFF
-EXEC (@SQL)	
+EXEC sp_executesql @SQL	
 
 END
 
@@ -101,16 +101,16 @@ BEGIN
 			IF(@CCType='')
 			BEGIN
 				SET @WhereCond=@WhereCond+' 
-											AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as CCNID UNION ALL Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+CONVERT(NVARCHAR,@EmployeeID)+')) '
+											AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN ( Select CCNID'+CONVERT(NVARCHAR,(@HCCID-50000))+' FROM COM_CCCCData WITH(NOLOCK) WHERE CostCenterID=50051 AND NodeID IN('+CONVERT(NVARCHAR,@EmployeeID)+'))) '
 			END
 			ELSE
 			BEGIN
 				SET @WhereCond=@WhereCond+' 
-											AND c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (SELECT 1 as HistoryNodeID UNION ALL SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
+											AND (c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN (1) OR c.dcCCNID'+CONVERT(NVARCHAR,(@HCCID-50000)) +' IN ( SELECT DISTINCT HistoryNodeID FROM COM_HistoryDetails WITH(NOLOCK) 
 											WHERE NodeID IN('+convert(nvarchar,@EmployeeID)+') AND CostCenterID=50051 AND HistoryCCID='+CONVERT(NVARCHAR,@HCCID)+'   
 											AND (CONVERT(DATETIME,FromDate)<=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR 
 												CONVERT(DATETIME,FromDate) BETWEEN CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@STARTDATE)+''') AND CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@ToDate)+''')) 
-											AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL) ) '
+											AND (CONVERT(DATETIME,ToDate)>=CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollDate)+''') OR ToDate IS NULL)) ) '
 			END
 		END
 	FETCH NEXT FROM CUR INTO @HCCID
@@ -136,7 +136,7 @@ END
 
 Declare @TEmp table (ID int Identity(1,1),WEEKDATE Nvarchar(max),Remarks nvarchar(max))
 insert into @TEmp
-exec(@SQL)
+EXEC sp_executesql @SQL
 
 IF(SELECT COUNT(*) FROM @TEmp)>0
 BEGIN
@@ -148,31 +148,31 @@ END
 --END HOLIDAYS
 
 DECLARE @WEEKLYOFF TABLE (WEEKLYWEEKOFFNO int,DAYNAME varchar(100))	
-IF (SELECT COUNT(*) FROM #EMPWEEKLYOFF)>0
+IF (SELECT COUNT(*) FROM #EMPWEEKLYOFF WITH(NOLOCK))>0
 BEGIN
 
 INSERT INTO @WEEKLYOFF
-				select case isnull(Week1_W1,'') when '' then 0 else 1 end,case isnull(Week1_W1,'') when '' then '' else Week1_W1 end FROM #EMPWEEKLYOFF
+				select case isnull(Week1_W1,'') when '' then 0 else 1 end,case isnull(Week1_W1,'') when '' then '' else Week1_W1 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 			UNION ALL
-				select case isnull(Week1_W2,'') when '' then 0 else 1 end,case isnull(Week1_W2,'') when '' then '' else Week1_W2 end FROM #EMPWEEKLYOFF
+				select case isnull(Week1_W2,'') when '' then 0 else 1 end,case isnull(Week1_W2,'') when '' then '' else Week1_W2 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 			UNION ALL
-				select case isnull(Week2_W1,'') when '' then 0 else 2 end,case isnull(Week2_W1,'') when '' then '' else Week2_W1 end FROM #EMPWEEKLYOFF
+				select case isnull(Week2_W1,'') when '' then 0 else 2 end,case isnull(Week2_W1,'') when '' then '' else Week2_W1 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 			UNION ALL
-				select case isnull(Week2_W2,'') when '' then 0 else 2 end,case isnull(Week2_W2,'') when '' then '' else Week2_W2 end FROM #EMPWEEKLYOFF
+				select case isnull(Week2_W2,'') when '' then 0 else 2 end,case isnull(Week2_W2,'') when '' then '' else Week2_W2 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 			UNION ALL
-				select case isnull(Week3_W1,'') when '' then 0 else 3 end,case isnull(Week3_W1,'') when '' then '' else Week3_W1 end FROM #EMPWEEKLYOFF
+				select case isnull(Week3_W1,'') when '' then 0 else 3 end,case isnull(Week3_W1,'') when '' then '' else Week3_W1 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 			UNION ALL
-				select case isnull(Week3_W2,'') when '' then 0 else 3 end,case isnull(Week3_W2,'') when '' then '' else Week3_W2 end FROM #EMPWEEKLYOFF
+				select case isnull(Week3_W2,'') when '' then 0 else 3 end,case isnull(Week3_W2,'') when '' then '' else Week3_W2 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 			UNION ALL
-				select case isnull(Week4_W1,'') when '' then 0 else 4 end,case isnull(Week4_W1,'') when '' then '' else Week4_W1 end FROM #EMPWEEKLYOFF
+				select case isnull(Week4_W1,'') when '' then 0 else 4 end,case isnull(Week4_W1,'') when '' then '' else Week4_W1 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 			UNION ALL
-				select case isnull(Week4_W2,'') when '' then 0 else 4 end,case isnull(Week4_W2,'') when '' then '' else Week4_W2 end FROM #EMPWEEKLYOFF
+				select case isnull(Week4_W2,'') when '' then 0 else 4 end,case isnull(Week4_W2,'') when '' then '' else Week4_W2 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 			UNION ALL
-				select case isnull(Week5_W1,'') when '' then 0 else 5 end,case isnull(Week5_W1,'') when '' then '' else Week5_W1 end FROM #EMPWEEKLYOFF
+				select case isnull(Week5_W1,'') when '' then 0 else 5 end,case isnull(Week5_W1,'') when '' then '' else Week5_W1 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 			UNION ALL
-				select case isnull(Week5_W2,'') when '' then 0 else 5 end,case isnull(Week5_W2,'') when '' then '' else Week5_W2 end FROM #EMPWEEKLYOFF
+				select case isnull(Week5_W2,'') when '' then 0 else 5 end,case isnull(Week5_W2,'') when '' then '' else Week5_W2 end FROM #EMPWEEKLYOFF WITH(NOLOCK)
 
-DECLARE @WEEKOFFCOUNT TABLE (ID BIGINT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,ISVALIDDAY INT,REMARKS VARCHAR(1000))
+DECLARE @WEEKOFFCOUNT TABLE (ID INT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WEEKNO INT,ISVALIDDAY INT,REMARKS VARCHAR(1000))
 		DECLARE @STARTDATE1 DATETIME,@ToDate1 DATETIME
 		
 		SET @STARTDATE1=convert(datetime,@STARTDATE)
@@ -192,8 +192,8 @@ DECLARE @WEEKOFFCOUNT TABLE (ID BIGINT ,WEEKDATE DATETIME,DAYNAME VARCHAR(50),WE
 			--UPDATING WEEKNO IN WEEKOFFCOUNT TABLE BASED ON WEEKDATE OF MONTH
 			--------------------
 						declare @PMS int,@PME int
-						select @PMS=Value From ADM_GlobalPreferences where name='PayDayStart'
-						select @PME=Value From ADM_GlobalPreferences where name='PayDayEnd'
+						select @PMS=Value From ADM_GlobalPreferences WITH(NOLOCK) where name='PayDayStart'
+						select @PME=Value From ADM_GlobalPreferences WITH(NOLOCK) where name='PayDayEnd'
 
 						declare @PS INT,@PE INT
 						declare @wd datetime,@TSwd datetime,@TEwd datetime,@dme datetime
@@ -271,7 +271,7 @@ BEGIN
 
 DECLARE @WOff1 NVARCHAR(100),@WOff2 NVARCHAR(100)
 INSERT INTO @EMPMASTWF
-SELECT NODEID,WeeklyOff1,WeeklyOff2 FROM COM_CC50051 where NodeID=@EmployeeID
+SELECT NODEID,WeeklyOff1,WeeklyOff2 FROM COM_CC50051 WITH(NOLOCK) where NodeID=@EmployeeID
 
 if(SELECT WeeklyOff1 FROM @EMPMASTWF)<>'None'
 BEGIN

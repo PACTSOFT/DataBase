@@ -3,7 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_CancelClosedReservation]
-	@QuotationID [bigint],
+	@QuotationID [int],
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
@@ -14,17 +16,17 @@ BEGIN TRANSACTION
 BEGIN TRY        
 SET NOCOUNT ON;  
 	
-	UPDATE REN_Quotation SET StatusID=467,VacancyDate=NULL,
+	UPDATE REN_Quotation SET StatusID=467,VacancyDate=NULL,SysInfo=@SysInfo,AP=@AP,
 	ModifiedBy=@UserName,ModifiedDate=CONVERT(FLOAT,GETDATE())
 	WHERE QuotationID=@QuotationID
 	
-	DECLARE  @tblXML TABLE(ID int identity(1,1),DOCID bigint,COSTCENTERID int)
+	DECLARE  @tblXML TABLE(ID int identity(1,1),DOCID INT,COSTCENTERID int)
 	
 	INSERT INTO @tblXML       
 	select DocID,COSTCENTERID from [REN_ContractDocMapping] WITH(NOLOCK) 
 	where [ContractID]=@QuotationID and [Type]=101 and ContractCCID=129
 	
-	DECLARE @CNT bigint,@I BIGINT,@return_value int,@DELETEDOCID BIGINT,@DELETECCID BIGINT
+	DECLARE @CNT INT,@I INT,@return_value int,@DELETEDOCID INT,@DELETECCID INT
 	
 	select @I=0,@CNT=max(ID) from @tblXML
 	WHILE(@I <  @CNT)      
@@ -42,6 +44,8 @@ SET NOCOUNT ON;
 			@DocPrefix = '',        
 			@DocNumber = '',   
 			@DOCID = @DELETEDOCID,
+			@SysInfo=@SysInfo, 
+			@AP=@AP,
 			@UserID = 1,        
 			@UserName = N'ADMIN',        
 			@LangID = 1,
@@ -88,6 +92,5 @@ IF ERROR_NUMBER()=50000
  RETURN -999         
     
     
-END CATCH   
-  
+END CATCH
 GO

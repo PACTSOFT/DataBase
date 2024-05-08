@@ -3,9 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_CancelReservation]
-	@QuotationID [bigint],
+	@QuotationID [int],
 	@date [datetime],
 	@PayOption [int],
+	@RemaingPaymentXML [nvarchar](max),
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
@@ -17,16 +20,39 @@ BEGIN TRANSACTION
 BEGIN TRY        
 SET NOCOUNT ON;     
 
-
+	declare @DT float
+	set @DT=CONVERT(float,@date) 
 	UPDATE REN_Quotation  
-	SET STATUSID = 469,CancellationDate=CONVERT(float,@date) 
-	WHERE QuotationID = @QuotationID  
+	SET STATUSID = 469,CancellationDate=@DT
+	WHERE QuotationID = @QuotationID 
+	
+	UPDATE REN_Quotation  
+	SET STATUSID = 469,CancellationDate=@DT
+	WHERE RefQuotation is not  null and RefQuotation= @QuotationID 
+	
+	
+	set @DT=CONVERT(float,getdate()) 
+	DECLARE @AuditTrial BIT        
+	SET @AuditTrial=0        
+	SELECT @AuditTrial= CONVERT(BIT,VALUE)  FROM [COM_COSTCENTERPreferences] with(nolock)     
+	WHERE CostCenterID=95  AND NAME='AllowAudit'   
+	IF (@AuditTrial=1)      
+	BEGIN 		
+		--INSERT INTO HISTROY   
+		EXEC [spCOM_SaveHistory]  
+			@CostCenterID =129,    
+			@NodeID =@QuotationID,
+			@HistoryStatus ='Suspend',
+			@UserName=@UserName,
+			@DT=@DT   
+	END
+	
 	
 --------------------------Cancel  POSTINGS --------------------------  
 
 	IF( @PayOption  = 1)  
 	BEGIN 
-		DECLARE @DELETEDOCID BIGINT , @DELETECCID BIGINT,@return_value int
+		DECLARE @DELETEDOCID INT , @DELETECCID INT,@return_value int
 
 		select @DELETEDOCID=DocID,@DELETECCID=COSTCENTERID from [REN_ContractDocMapping]  WITH(nolock)   
 		where  [ContractID]=@QuotationID and ContractCCID=129
@@ -39,12 +65,82 @@ SET NOCOUNT ON;
 			@DocPrefix = '',  
 			@DocNumber = '', 
 			@Remarks=N'', 
+			@SysInfo =@SysInfo, 
+			@AP =@AP,
 			@UserID = @UserID,  
 			@UserName = @UserName,
 			@RoleID=@RoleID,
 			@LangID = @LangID 
 		END
 	END	
+	else IF(@PayOption  = 2 and @RemaingPaymentXML is not null and @RemaingPaymentXML<>'')  
+	BEGIN 
+			DECLARE @XML xml,@SNO int,@RcptCCID INT,@Prefix nvarchar(200)
+			DECLARE  @AA XML,@DocXml nvarchar(max)   ,@amt float
+			DECLARE @PickAcc nvarchar(50) ,@AccountType xml,@ActXml nvarchar(max)
+	
+			set @ActXml='<XML SysInfo="'+@sysinfo+'" AP="'+@AP+'" ></XML>'  
+			
+			select @amt=b.amount from [REN_ContractDocMapping] a WITH(nolock)   
+			join acc_docdetails b WITH(nolock) on a.DocID=b.DocID
+			where  [ContractID]=@QuotationID and ContractCCID=129
+
+			set @RemaingPaymentXML=replace(@RemaingPaymentXML,'##Balance##',convert(nvarchar(max),@amt))
+			
+			
+			set @XML=@RemaingPaymentXML
+			
+			SELECT  @AA=CONVERT(NVARCHAR(MAX),  X.query('DocumentXML'))   ,@AccountType= CONVERT(NVARCHAR(MAX),  X.query('AccountType'))
+			from @XML.nodes('/ReceiptXML/ROWS') as Data(X)  
+			
+			SELECT   @PickAcc =  X.value ('@DD', 'NVARCHAR(100)' )        
+			from @AccountType.nodes('/AccountType') as Data(X) 
+
+			if(@PickAcc='BANK')
+				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)  
+				where CostCenterID=95 and Name='ContractPDP' 
+			ELSE if(@PickAcc='CASH')
+				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)
+				where CostCenterID=95 and Name='ContractPayment'
+			ELSE
+				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)  
+				where CostCenterID=95 and Name='ContractJVReceipt' 
+			 
+			Set @DocXml = convert(nvarchar(max), @AA)  
+			
+			set @Prefix=''
+			EXEC [sp_GetDocPrefix] @DocXml,@date,@RcptCCID,@Prefix   output
+
+			EXEC	@return_value = [dbo].[spDOC_SetTempAccDocument]
+				@CostCenterID = @RcptCCID,
+				@DocID = 0,
+				@DocPrefix = @Prefix,
+				@DocNumber =1,
+				@DocDate = @date,
+				@DueDate = NULL,
+				@BillNo = @SNO,
+				@InvDocXML = @DocXml,
+				@NotesXML = N'',
+				@AttachmentsXML = N'',
+				@ActivityXML  = @ActXml, 
+				@IsImport = 0,
+				@LocationID = 0,
+				@DivisionID = 0,
+				@WID = 0,
+				@RoleID = @RoleID,
+				@RefCCID = 129,
+				@RefNodeid = @QuotationID ,
+				@CompanyGUID = @CompanyGUID,
+				@UserName = @UserName,
+				@UserID = @UserID,
+				@LangID = @LangID
+	  
+	  
+			INSERT INTO  [REN_ContractDocMapping]  
+		   ([ContractID],[Type]  ,[Sno]  ,DocID  ,CostcenterID  
+		   ,IsAccDoc,DocType  , ContractCCID)values
+		   (@QuotationID,101,0,@return_value,@RcptCCID,1,0 , 129)
+	  END
    
 COMMIT TRANSACTION       
      

@@ -3,15 +3,15 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spAcc_SetAssetManagement]
-	@AssetID [bigint],
+	@AssetID [int],
 	@AssetCode [nvarchar](50),
 	@AssetName [nvarchar](max),
-	@StatusID [bigint],
+	@StatusID [int],
 	@PurchaseValue [nvarchar](50),
-	@ParentAssetID [bigint],
+	@ParentAssetID [int],
 	@IsGroup [bit] = 0,
 	@CodePrefix [nvarchar](200) = null,
-	@CodeNumber [bigint] = 0,
+	@CodeNumber [int] = 0,
 	@Sno [nvarchar](50),
 	@DetailXML [nvarchar](max) = null,
 	@ChangeValueXML [nvarchar](max) = null,
@@ -25,15 +25,18 @@ CREATE PROCEDURE [dbo].[spAcc_SetAssetManagement]
 	@GUID [varchar](50),
 	@CreatedBy [nvarchar](50),
 	@UserID [int],
-	@LangID [int] = 1
+	@LangID [int] = 1,
+	@RoleID [int] = 0,
+	@WID [int] = 0
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION        
 BEGIN TRY        
 SET NOCOUNT ON;      
         
-    DECLARE @ID int,@cnt int,@Dt FLOAT, @lft bigint,@rgt bigint,@TempGuid nvarchar(50),@Selectedlft bigint,@Selectedrgt bigint,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsAssetCodeAutoGen bit  ,@IsIgnoreSpace bit  ,      
- @Depth int,@ParentID bigint,@SelectedIsGroup int , @XML XML,@ParentCode nvarchar(200),@UpdateSql nvarchar(max),@astID bigint,@DtXML xml , @DepXML XML  ,@AssetCCID bigint,@DeprStartValue float
+    DECLARE @ID int,@cnt int,@Dt FLOAT, @lft INT,@rgt INT,@TempGuid nvarchar(50),@Selectedlft INT,@Selectedrgt INT,@HasAccess bit,@IsDuplicateNameAllowed bit,@IsAssetCodeAutoGen bit  ,@IsIgnoreSpace bit  ,      
+ @Depth int,@ParentID INT,@SelectedIsGroup int , @XML XML,@ParentCode nvarchar(200),@UpdateSql nvarchar(max),@astID INT,@DtXML xml , @DepXML XML  ,@AssetCCID INT,@DeprStartValue float
+   DECLARE @HistoryStatus NVARCHAR(300)
        
   if(@ParentAssetID=0 and @AssetID=0)
 	select @ParentAssetID=AssetID from acc_assets with(nolock) where parentid=0 and isgroup=1
@@ -86,8 +89,47 @@ SET NOCOUNT ON;
   END      
          
   
+  if(@AssetID=0)
+		set @HistoryStatus='Add'
+	else
+		set @HistoryStatus='Update'
+
   SET @Dt=convert(float,getdate())--Setting Current Date        
 
+
+  --WorkFlow
+Declare @CStatusID int
+Declare @level int,@maxLevel int
+SELECT @CStatusID=ISNULL(StatusID,0) FROM ACC_Assets WITH(NOLOCK) where AssetID=@AssetID
+ if(@WID>0)	 
+	  BEGIN
+		set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+		where WorkFlowID=@WID and  UserID =@UserID)
+		if(@level is null )
+			set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
+			where WorkFlowID=@WID and  RoleID =@RoleID)
+
+		if(@level is null ) 
+			set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
+
+		if(@level is null )
+			set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
+			where RoleID =@RoleID))
+
+		select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
+		select @level,@maxLevel
+		if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
+		begin 
+		 	set @StatusID=1001 
+		end	
+		else if(@level is not null and  @maxLevel is not null and @AssetID>0 and @level<@maxLevel and @CStatusID in (1003))--rejected status time
+		begin	
+		 	set @StatusID=1001 
+		end			 
+		 
+	end
   
  IF @AssetID = 0--------START INSERT RECORD-----------        
   BEGIN--CREATE Asset--        
@@ -143,62 +185,14 @@ SET NOCOUNT ON;
       else if(@ParentID=0 and @ParentAssetID>0)
 		set @ParentID=@ParentAssetID
       
-     INSERT INTO ACC_Assets      
+      INSERT INTO ACC_Assets      
       (AssetCode      
       ,AssetName      
       ,StatusID      
       ,PurchaseValue      
       ,ParentAssetID      
-      ,Description      
       ,SerialNo      
-      ,DeprBookGroupID      
-      ,ClassID      
-      , LocationID      
-      , EmployeeID       
-      , PostingGroupID      
-      , EstimateLife      
-      , SalvageValueType       
-      , SalvageValueName       
-      , SalvageValue      
-     -- , IsComponent      
-      , PurchaseInvoiceNo      
-      , SupplierAccountID      
-     -- , AssetDepreciationJV   
-    --  , AssetDisposalJV    
-      , PurchaseDate      
-      , DeprStartValue      
-      , DeprStartDate      
-      , DeprEndDate
-      ,OriginalDeprStartDate
-      , WarrantyNo      
-      , WarrantyExpiryDate      
-      , IsMainCovered      
-      , MainVendorAccID       
-      , NextServiceDate      
-      , MaintStartDate      
-      , MaintExpiryDate      
-      , IsInsCovered      
-      , InsVendorAccID      
-      , InsPolicyNo      
-      , InsType      
-      , InsEffectiveDate       
-      , InsExpiryDate      
-      , InsPremium      
-      , PolicyCoverage      
-      --, InsNarration      
-      , Period
-      ,DepreciationMethod 
-      ,AveragingMethod
-      ,IsDeprSchedule
-      ,PreviousDepreciation
-      ,DeprBookID 
-      ,PONo,PODate,GRNNo,GRNDate
-      ,CapitalizationNo,CapitalizationDate,TotalQtyPurchase,UOM
-      ,IncludeSalvageInDepr
-      ,AcqnCostACCID,DeprExpenseACCID,AccumDeprACCID,AccumDeprDispACCID
-      ,AcqnCostDispACCID,GainsDispACCID,LossDispACCID,MaintExpenseACCID
       ,CodePrefix,CodeNumber
-      ,AssetNetValue
       ,IsGroup      
       ,Depth      
       ,ParentID      
@@ -207,63 +201,15 @@ SET NOCOUNT ON;
       ,CompanyGUID      
       ,GUID      
       ,CreatedBy      
-      ,CreatedDate)      
+      ,CreatedDate,WorkFlowID,WorkFlowLevel)      
       
      select @AssetCode      
       ,@AssetName      
       ,@StatusID      
       ,@PurchaseValue      
       ,@ParentAssetID      
-      ,x.value('@Description','nvarchar(500)')      
       ,@Sno
-      ,x.value('@deprBooks','nvarchar(50)')      
-      ,x.value('@Class','INT')      
-      ,x.value('@Location','INT')      
-      ,x.value('@Employee','INT')      
-      ,x.value('@PostingGroupID','INT')      
-      ,x.value('@EstimateLife','nvarchar(50)')      
-      ,x.value('@SalvageValueType','INT')      
-      ,x.value('@SalvageValueName','nvarchar(50)')      
-      ,x.value('@SalvageValue','nvarchar(50)')      
-     -- ,x.value('@Component','INT')      
-      ,x.value('@PurchaseInvoiceNo','nvarchar(50)')      
-      ,CASE x.value('@SupplierAccountID','BIGINT') WHEN 0 THEN 1 ELSE x.value('@SupplierAccountID','BIGINT') END 
-     -- ,x.value('@AssetDepreciationJV','INT')    
-     -- ,x.value('@AssetDisposalJV','INT')      
-      ,convert(float,x.value('@PurchaseDate','DateTime'))      
-      ,isnull(x.value('@DeprStartValue','float'),0)
-      ,convert(float,x.value('@DeprStartDate','DateTime'))      
-      ,convert(float,x.value('@DeprEndDate','DateTime'))      
-      ,convert(float,x.value('@OriginalDeprStartDate','DateTime'))
-      ,x.value('@WarrantyNo','nvarchar(50)')      
-      ,convert(float,x.value('@WarrantyExpiryDate','DateTime'))      
-      ,x.value('@IsMainCovered','INT')      
-      ,x.value('@MainVendorAccID','BIGINT')      
-      ,convert(float,x.value('@NextServiceDate','DateTime'))      
-      ,convert(float,x.value('@MaintStartDate','DateTime'))      
-      ,convert(float,x.value('@MaintExpiryDate','DateTime'))      
-      ,x.value('@IsInsCovered','INT')      
-      ,x.value('@InsVendorAccID','BIGINT')      
-     ,x.value('@InsPolicyNo','nvarchar(50)')      
-      ,x.value('@InsType','nvarchar(50)')      
-      ,convert(float,x.value('@InsEffectiveDate','DateTime'))      
-      ,convert(float,x.value('@InsExpiryDate','DateTime'))      
-      ,x.value('@InsPremium','nvarchar(50)')      
-      ,x.value('@PolicyCoverage','nvarchar(50)')      
-     -- ,x.value('@Narration','nvarchar(50)')      
-      ,x.value('@Period','INT')          
-      ,x.value('@DepreciationMethod','bigint')
-      ,x.value('@AveragingMethod','bigint')        
-      ,x.value('@IsDeprSchedule','int')          
-      ,x.value('@PreviousDepreciation','Float')  
-      ,isnull(x.value('@DeprBookID','bigint'),0)
-      ,x.value('@PONo','nvarchar(50)'),convert(float,x.value('@PODate','DateTime')),x.value('@GRNNo','nvarchar(50)'),convert(float,x.value('@GRNDate','DateTime'))
-      ,x.value('@CapitalizationNo','nvarchar(50)'),convert(float,x.value('@CapitalizationDate','DateTime')),x.value('@TotalQtyPurchase','float'),x.value('@UOM','bigint')
-      ,isnull(x.value('@IncludeSalvageInDepr','bit'),0)
-      ,x.value('@AcqnCostACCID','bigint'),x.value('@DeprExpenseACCID','bigint'),x.value('@AccumDeprACCID','bigint'),x.value('@AccumDeprDispACCID','bigint')
-      ,x.value('@AcqnCostDispACCID','bigint'),x.value('@GainsDispACCID','bigint'),x.value('@LossDispACCID','bigint'),x.value('@MaintExpenseACCID','bigint')
       ,@CodePrefix,@CodeNumber
-      ,isnull(x.value('@DeprStartValue','float'),0)
       , @IsGroup      
       ,@Depth      
       ,@ParentID      
@@ -272,11 +218,12 @@ SET NOCOUNT ON;
       ,@CompanyGUID      
       ,newid()      
       ,@CreatedBy      
-      ,@Dt
-   from @DtXML.nodes('/Row') as data(x)      
-           
-     SET @astID=SCOPE_IDENTITY()       
-    
+      ,@Dt,@WID,ISNULL(@level,0)
+		
+	  SET @astID=SCOPE_IDENTITY()      
+      SET @UpdateSql='update ACC_Assets SET '+@DetailXML+' [CreatedBy] ='''+ @CreatedBy +''' WHERE AssetID = '+convert(nvarchar,@astID)     
+	  exec(@UpdateSql)    
+		
  --Handling of Extended Table        
     INSERT INTO ACC_AssetsExtended  ([AssetID],[CreatedBy],[CreatedDate])        
     VALUES(@astID, @CreatedBy, @Dt)       
@@ -314,6 +261,12 @@ SET NOCOUNT ON;
 			@CreatedBy,@Dt,X.value('@ActDepAmt','FLOAT')
 			FROM @DepXML.nodes('/XML/Row') as Data(X)    
 		END  
+
+		if(@WID>0)
+		BEGIN	 
+			INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)     
+			VALUES(72,@astID,@StatusID,CONVERT(FLOAT,getdate()),'',@UserID,@CompanyGUID,newid(),@CreatedBy,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
+		END	
 	END --------END INSERT RECORD-----------        
 	ELSE--UPDATE--      
 	BEGIN--------START UPDATE RECORD----------      
@@ -329,63 +282,14 @@ SET NOCOUNT ON;
 			,StatusID=@StatusID      
 			, PurchaseValue=@PurchaseValue      
 			,ParentAssetID=@ParentAssetID      
-			,IsGroup=@IsGroup      
+			,IsGroup=@IsGroup  
+			,WorkFlowLevel=isnull(@level,0)
 		where AssetID=@AssetID      
 	  
 		if(@DetailXML is not null)      
 		begin      
-		   update ACC_Assets       
-		   set      
-			Description=x.value('@Description','nvarchar(max)')      
-		   ,SerialNo=@Sno      
-		   ,DeprBookGroupID=x.value('@deprBooks','nvarchar(50)')      
-		   ,ClassID=x.value('@Class','INT')      
-		   , LocationID=x.value('@Location','INT')      
-		   , EmployeeID=x.value('@Employee','INT')      
-		   , PostingGroupID=x.value('@PostingGroupID','INT')      
-		   , EstimateLife=x.value('@EstimateLife','nvarchar(50)')      
-		   , SalvageValueType=x.value('@SalvageValueType','INT')      
-		   , SalvageValueName=x.value('@SalvageValueName','nvarchar(50)')      
-		   , SalvageValue=x.value('@SalvageValue','nvarchar(50)') 
-		   , PurchaseInvoiceNo=x.value('@PurchaseInvoiceNo','nvarchar(50)')      
-		   , SupplierAccountID=x.value('@SupplierAccountID','INT')      
-		   , PurchaseDate=convert(float,x.value('@PurchaseDate','DateTime'))      
-		   , DeprStartValue=isnull(x.value('@DeprStartValue','float'),0)
-		   , DeprStartDate=convert(float,x.value('@DeprStartDate','DateTime'))          
-		   , DeprEndDate=convert(float,x.value('@DeprEndDate','DateTime')) 
-		   ,OriginalDeprStartDate=convert(float,x.value('@OriginalDeprStartDate','DateTime')) 
-		   , WarrantyNo= x.value('@WarrantyNo','nvarchar(50)')      
-		   , WarrantyExpiryDate=convert(float,x.value('@WarrantyExpiryDate','DateTime'))        
-		   , IsMainCovered=x.value('@IsMainCovered','INT')      
-		   , MainVendorAccID= x.value('@MainVendorAccID','INT')      
-		   , NextServiceDate=convert(float,x.value('@NextServiceDate','DateTime'))         
-		   , MaintStartDate=convert(float,x.value('@MaintStartDate','DateTime'))          
-		   , MaintExpiryDate=convert(float,x.value('@MaintExpiryDate','DateTime'))         
-		   , IsInsCovered=x.value('@IsInsCovered','INT')      
-		   , InsVendorAccID=x.value('@InsVendorAccID','INT')      
-		   , InsPolicyNo= x.value('@InsPolicyNo','nvarchar(50)')      
-		   , InsType=x.value('@InsType','nvarchar(50)')      
-		   , InsEffectiveDate=convert(float,x.value('@InsEffectiveDate','DateTime'))         
-		   , InsExpiryDate=convert(float,x.value('@InsExpiryDate','DateTime'))          
-		   , InsPremium= x.value('@InsPremium','nvarchar(50)')      
-		   , PolicyCoverage=x.value('@PolicyCoverage','nvarchar(50)') 
-		   , Period=x.value('@Period','INT')   
-		   , DepreciationMethod=x.value('@DepreciationMethod','BIGINT')      
-		   , AveragingMethod=x.value('@AveragingMethod','INT')           
-		   , IsDeprSchedule=x.value('@IsDeprSchedule','INT')             
-		   , PreviousDepreciation=x.value('@PreviousDepreciation','Float')
-		   ,DeprBookID=isnull(x.value('@DeprBookID','bigint'),0)
-		   ,PONo=x.value('@PONo','nvarchar(50)'),PODate=convert(float,x.value('@PODate','DateTime')),GRNNo=x.value('@GRNNo','nvarchar(50)'),GRNDate=convert(float,x.value('@GRNDate','DateTime'))
-		   ,CapitalizationNo=x.value('@CapitalizationNo','nvarchar(50)'),CapitalizationDate=convert(float,x.value('@CapitalizationDate','DateTime')),TotalQtyPurchase=x.value('@TotalQtyPurchase','float')
-		   ,UOM=x.value('@UOM','bigint')
-		   ,IncludeSalvageInDepr=isnull(x.value('@IncludeSalvageInDepr','bit'),0)
-		   ,AcqnCostACCID=x.value('@AcqnCostACCID','bigint'),DeprExpenseACCID=x.value('@DeprExpenseACCID','bigint')
-		   ,AccumDeprACCID=x.value('@AccumDeprACCID','bigint'),AccumDeprDispACCID=x.value('@AccumDeprDispACCID','bigint')
-		   ,AcqnCostDispACCID=x.value('@AcqnCostDispACCID','bigint'),GainsDispACCID=x.value('@GainsDispACCID','bigint')
-		   ,LossDispACCID=x.value('@LossDispACCID','bigint'),MaintExpenseACCID=x.value('@MaintExpenseACCID','bigint')
-		   ,CodePrefix=@CodePrefix,CodeNumber=@CodeNumber
-		   from @DtXML.nodes('/Row') as data(x)      
-		   where AssetID=@AssetID      
+			SET @UpdateSql='update ACC_Assets SET '+@DetailXML+' [ModifiedBy] ='''+ @CreatedBy +''',[ModifiedDate] =' + convert(nvarchar,@Dt) +'  WHERE AssetID = '+convert(nvarchar,@AssetID)     
+			exec(@UpdateSql)
 		end      
 		IF (@AssetDepreciationXML IS NOT NULL AND @AssetDepreciationXML <> '' AND NOT EXISTS(select ASSETID from ACC_AssetDepSchedule with(nolock) where ASSETID=@AssetID))        
 		BEGIN
@@ -443,8 +347,8 @@ SET NOCOUNT ON;
 	   AssetOldValue,ChangeValue,AssetNewValue,        
 	   LocationID,GUID,CreatedBy,CreatedDate)        
 	   SELECT @astID,X.value('@ChangeType','int'),X.value('@ChangeName','NVARCHAR(50)'),        
-	   X.value('@StatusID','bigint'),convert(float,X.value('@ChangeDate','datetime')),X.value('@AssetOldValue','Float'),        
-	   X.value('@ChangeValue','nvarchar(50)'),X.value('@AssetNewValue','Float'),X.value('@LocationID','bigint'),        
+	   X.value('@StatusID','INT'),convert(float,X.value('@ChangeDate','datetime')),X.value('@AssetOldValue','Float'),        
+	   X.value('@ChangeValue','nvarchar(50)'),X.value('@AssetNewValue','Float'),X.value('@LocationID','INT'),        
 	   newid(),@CreatedBy,@Dt        
 	   FROM @XML.nodes('/ChangeValueXML/Row') as Data(X)       
   END  */
@@ -465,24 +369,24 @@ SET NOCOUNT ON;
  --  --If Action is NEW then insert new Changes      
           
  --  INSERT INTO ACC_AssetsHistory(HistoryTypeID,AssetManagementID,[Date],Vender,VendorID,NextServiceDate,Remarks,Amount,DebitAccount,CreditAccount,PostJV,DocID,VoucherNo,GUID,CreatedBy,CreatedDate,CostCenterID,DocumentName,DocPrefix,DocNumber)        
- --  SELECT X.value('@HistoryType','bigint'),@astID,convert(float,X.value('@Date','datetime')) ,X.value('@Vendor','NVARCHAR(50)'),X.value('@VendorID','bigint'),     
+ --  SELECT X.value('@HistoryType','INT'),@astID,convert(float,X.value('@Date','datetime')) ,X.value('@Vendor','NVARCHAR(50)'),X.value('@VendorID','INT'),     
  --  convert(float,X.value('@NextStartDate','datetime')),X.value('@Remarks','NVARCHAR(500)') ,X.value('@Amount','Float'),        
- --  X.value('@DebitAccount','bigint'),X.value('@CreditAccount','bigint'),X.value('@PostJV','bigint'), X.value('@DocID','bigint'),   X.value('@VoucherNo','NVARCHAR(50)'),          
- --  newid(),@CreatedBy,@Dt, X.value('@CostCenterID','bigint'), X.value('@DocumentName','nvarchar(50)') , X.value('@DocPrefix','nvarchar(50)'), X.value('@DocNumber','nvarchar(50)')       
+ --  X.value('@DebitAccount','INT'),X.value('@CreditAccount','INT'),X.value('@PostJV','INT'), X.value('@DocID','INT'),   X.value('@VoucherNo','NVARCHAR(50)'),          
+ --  newid(),@CreatedBy,@Dt, X.value('@CostCenterID','INT'), X.value('@DocumentName','nvarchar(50)') , X.value('@DocPrefix','nvarchar(50)'), X.value('@DocNumber','nvarchar(50)')       
  --  FROM @XML.nodes('/XML/MaintenanceGrid/Rows') as Data(X)
    
         
  --  INSERT INTO ACC_AssetsHistory(HistoryTypeID,AssetManagementID,Vender,VendorID,PolicyType,PolicyNumber,StartDate,EndDate,Coverage,GUID,CreatedBy,CreatedDate)        
- --  SELECT X.value('@HistoryType','bigint'),@astID,X.value('@Vendor','NVARCHAR(50)'),X.value('@VendorID','bigint'),     
- --  X.value('@PolicyType','bigint'),X.value('@PolicyNumber','NVARCHAR(50)'),convert(float,X.value('@StartDate','datetime')),
+ --  SELECT X.value('@HistoryType','INT'),@astID,X.value('@Vendor','NVARCHAR(50)'),X.value('@VendorID','INT'),     
+ --  X.value('@PolicyType','INT'),X.value('@PolicyNumber','NVARCHAR(50)'),convert(float,X.value('@StartDate','datetime')),
  --  convert(float,X.value('@EndDate','datetime')),X.value('@Coverage','NVARCHAR(50)'),        
  --  newid(),@CreatedBy,@Dt        
  --  FROM @XML.nodes('/XML/InsuranceGrid/Rows') as Data(X)   
    
  --  INSERT INTO ACC_AssetsHistory(HistoryTypeID,AssetManagementID,[Date],Amount,CurrentValue,Remarks,PostJV,DebitAccount,CreditAccount,GainAccount,LossAccount,DocID,VoucherNo,GUID,CreatedBy,CreatedDate,CostCenterID,DocumentName,DocPrefix,DocNumber)        
- --  SELECT X.value('@HistoryType','bigint'),@astID,convert(float,X.value('@Date','datetime')),X.value('@Amount','Float'),X.value('@CurrentValue','Float'),   
- --  X.value('@Remarks','NVARCHAR(500)'),X.value('@PostJV','bigint'), X.value('@DebitAccount','bigint'),X.value('@CreditAccount','bigint'),
- --   X.value('@GainAccount','bigint'),X.value('@LossAccount','bigint'), X.value('@DocID','bigint'),   X.value('@VoucherNo','NVARCHAR(50)'),newid(),@CreatedBy,@Dt, X.value('@CostCenterID','bigint'), X.value('@DocumentName','nvarchar(50)') , X.value('@DocPrefix','nvarchar(50)'), X.value('@DocNumber','nvarchar(50)')        
+ --  SELECT X.value('@HistoryType','INT'),@astID,convert(float,X.value('@Date','datetime')),X.value('@Amount','Float'),X.value('@CurrentValue','Float'),   
+ --  X.value('@Remarks','NVARCHAR(500)'),X.value('@PostJV','INT'), X.value('@DebitAccount','INT'),X.value('@CreditAccount','INT'),
+ --   X.value('@GainAccount','INT'),X.value('@LossAccount','INT'), X.value('@DocID','INT'),   X.value('@VoucherNo','NVARCHAR(50)'),newid(),@CreatedBy,@Dt, X.value('@CostCenterID','INT'), X.value('@DocumentName','nvarchar(50)') , X.value('@DocPrefix','nvarchar(50)'), X.value('@DocNumber','nvarchar(50)')        
  --  FROM @XML.nodes('/XML/DisposeGrid/Rows') as Data(X)   
       
    
@@ -496,25 +400,27 @@ SET NOCOUNT ON;
    --If Action is NEW then insert new Notes  
    INSERT INTO COM_Notes(FeatureID,CostCenterID,FeaturePK,Note,     
    GUID,CreatedBy,CreatedDate)  
-   SELECT 72,72,@astID,Replace(X.value('@Note','NVARCHAR(MAX)'),'@~',''),  
+   SELECT 72,72,@astID,Replace(X.value('@Note','NVARCHAR(MAX)'),'@~','
+'),  
    newid(),@CreatedBy,@Dt  
    FROM @XML.nodes('/NotesXML/Row') as Data(X)  
    WHERE X.value('@Action','NVARCHAR(10)')='NEW'  
   
    --If Action is MODIFY then update Notes  
    UPDATE COM_Notes  
-   SET Note=Replace(X.value('@Note','NVARCHAR(MAX)'),'@~',''),  
+   SET Note=Replace(X.value('@Note','NVARCHAR(MAX)'),'@~','
+'),  
     GUID=newid(),  
     ModifiedBy=@CreatedBy,  
     ModifiedDate=@Dt  
    FROM COM_Notes C   
    INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X)    
-   ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID  
+   ON convert(INT,X.value('@NoteID','INT'))=C.NoteID  
    WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
   
    --If Action is DELETE then delete Notes  
    DELETE FROM COM_Notes  
-   WHERE NoteID IN(SELECT X.value('@NoteID','bigint')  
+   WHERE NoteID IN(SELECT X.value('@NoteID','INT')  
     FROM @XML.nodes('/NotesXML/Row') as Data(X)  
     WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
   
@@ -527,10 +433,10 @@ SET NOCOUNT ON;
   
    INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,
    FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,  
-   GUID,CreatedBy,CreatedDate)  
+   GUID,CreatedBy,CreatedDate,IsDefaultImage,ColName)  
    SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(50)'),  
    X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),72,72,@astID,  
-   X.value('@GUID','NVARCHAR(50)'),@CreatedBy,@Dt  
+   X.value('@GUID','NVARCHAR(50)'),@CreatedBy,@Dt,X.value('@IsDefaultImage','smallint') ,X.value('@ColName','nvarchar(50)') 
    FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)    
    WHERE X.value('@Action','NVARCHAR(10)')='NEW'  
   
@@ -547,25 +453,25 @@ SET NOCOUNT ON;
     ModifiedDate=@Dt  
    FROM COM_Files C   
    INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)    
-   ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID  
+   ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID  
    WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
   
    --If Action is DELETE then delete Attachments  
    DELETE FROM COM_Files  
-   WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')  
+   WHERE FileID IN(SELECT X.value('@AttachmentID','INT')  
     FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)  
     WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
   END
 
 
-	SELECT @AssetCCID=Convert(bigint,isnull(Value,0)) FROM COM_CostCenterPreferences  WITH(nolock) 
+	SELECT @AssetCCID=Convert(INT,isnull(Value,0)) FROM COM_CostCenterPreferences  WITH(nolock) 
 	WHERE COSTCENTERID=72 and  Name='AssetDimension'      
 	if(@AssetCCID>50000)
 	begin
-		declare @CCStatusID bigint
+		declare @CCStatusID INT
 		select top 1 @CCStatusID=statusid from com_status with(nolock) where costcenterid=@AssetCCID
 	
-		declare @NID bigint, @CCIDBom bigint
+		declare @NID INT, @CCIDBom INT
 		select @NID = CCNodeID, @CCIDBom=CCID  from ACC_Assets with(nolock) where AssetID=@astID
 		iF(@CCIDBom<>@AssetCCID)
 		BEGIN
@@ -584,7 +490,7 @@ SET NOCOUNT ON;
 			set @CCIDBom=0 
 		END
 		
-		DECLARE @RefSelectedNodeID BIGINT
+		DECLARE @RefSelectedNodeID INT
 		SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
 		WHERE CostCenterID=72 AND RefDimensionID=@AssetCCID AND NodeID=@ParentID 
 		SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,1)
@@ -652,6 +558,63 @@ SET NOCOUNT ON;
 		end 
 		
 	end
+
+
+	--INSERT INTO HISTROY   
+	EXEC [spCOM_SaveHistory]  
+		@CostCenterID =72,    
+		@NodeID =@astID,
+		@HistoryStatus =@HistoryStatus,
+		@UserName=@CreatedBy,
+		@DT=@DT
+		
+	--INSERT History COM_CCCCDataHistory
+		if exists(SELECT Value FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE CostCenterID=72 and Name='AuditTrial' and Value='True')
+		BEGIN
+			declare @CommonCols nvarchar(max),@HistoryCols nvarchar(max)='',@HistoryColsInsert nvarchar(max)='',@CC nvarchar(max),@HistoryID BIGINT
+			
+			SELECT @HistoryID=ISNULL(MAX(NodeHistoryID)+1,1) FROM COM_CCCCDataHistory WITH(NOLOCK)
+
+			SELECT @CommonCols=STUFF((
+			select ','+CH.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			JOIN (select a.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			where b.name='COM_CCCCDataHistory') AS CH ON CH.name=a.name
+			where b.name='COM_CCCCData' FOR XML PATH('')),1,1,'')
+			, @HistoryCols=STUFF((
+			select ','+a.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			LEFT JOIN (select a.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			where b.name='COM_CCCCData') AS CH ON CH.name=a.name
+			where b.name='COM_CCCCDataHistory' AND CH.name IS NULL AND a.name LIKE 'CCNID%' FOR XML PATH('')),1,1,'')
+			, @HistoryColsInsert=STUFF((
+			select ','+'1' from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			LEFT JOIN (select a.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			where b.name='COM_CCCCData') AS CH ON CH.name=a.name
+			where b.name='COM_CCCCDataHistory' AND CH.name IS NULL AND a.name LIKE 'CCNID%' GROUP BY a.name FOR XML PATH('')),1,1,'')
+			IF(@HistoryCols IS NULL)
+			BEGIN
+				set @CC=' INSERT INTO [COM_CCCCDataHistory](NodeHistoryID,'+@CommonCols+')
+				select  '+convert(nvarchar,@HistoryID)+','+@CommonCols
+						
+				set @CC=@CC+' FROM [COM_CCCCData] WITH(NOLOCK)
+				WHERE  NodeID='+convert(nvarchar,@astID) + ' AND CostCenterID=72'
+			END
+			ELSE
+			BEGIN
+				set @CC=' INSERT INTO [COM_CCCCDataHistory](NodeHistoryID,'+@CommonCols+','+ISNULL(@HistoryCols,'')+')
+				select  '+convert(nvarchar,@HistoryID)+','+@CommonCols+','+ISNULL(@HistoryColsInsert,'')
+						
+				set @CC=@CC+' FROM [COM_CCCCData] WITH(NOLOCK)
+				WHERE  NodeID='+convert(nvarchar,@astID) + ' AND CostCenterID=72'
+			END
+			PRINT @CC
+			exec sp_executesql @CC
+		END
   
 COMMIT TRANSACTION 
 --ROLLBACK TRANSACTION         

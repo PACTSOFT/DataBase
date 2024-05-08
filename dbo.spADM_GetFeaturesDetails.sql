@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetFeaturesDetails]
-	@CostCenterID [bigint],
+	@CostCenterID [int],
 	@Name [nvarchar](200),
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -24,13 +24,13 @@ SET NOCOUNT ON;
 	
 	if(@CostCenterID=99)
 	BEGIN
-		SELECT a.FeatureID CostCenterColID,Name ResourceData ,Name SyscolumnName,'TEXT' ColumnDataType, 0 ColumnCostCenterID, g.ColumnOrder, 'False' IsEditable                        
+		SELECT a.FeatureID CostCenterColID,Name ResourceData ,Name SyscolumnName,'TEXT' ColumnDataType, 0 ColumnCostCenterID, g.ColumnOrder, 'False' IsEditable,0 as IsMandatory                        
 		FROM ADM_Features a with(nolock)
 		join ADM_GridViewColumns g with(nolock) on a.FeatureID=g.CostCenterColID
 		join adm_gridview gr with(nolock) on gr.GridViewID=g.GridViewID and gr.costcenterid=99
 		WHERE  IsEnabled=1  and a.FeatureID>50000
 		union
-		select a.CostCenterColID,  UserColumnName ResourceData, SyscolumnName, ColumnDataType, 0 ColumnCostCenterID, g.ColumnOrder, A.IsEditable                        
+		select a.CostCenterColID,  UserColumnName ResourceData, SyscolumnName, ColumnDataType, 0 ColumnCostCenterID, g.ColumnOrder, A.IsEditable,a.IsMandatory                        
 		from adm_costcenterdef a with(nolock) 
 		join ADM_GridViewColumns g with(nolock) on a.CostCenterColID=g.CostCenterColID
 		join adm_gridview gr with(nolock) on gr.GridViewID=g.GridViewID and gr.costcenterid=99                    
@@ -41,115 +41,116 @@ SET NOCOUNT ON;
 	BEGIN
 		IF @CostCenterID=40 and @Name='Dimension Wise Price Chart'
 		BEGIN
-			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,l.ResourceData UserColumnName,ColumnDataType,0 ColumnCostCenterID
+			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,l.ResourceData UserColumnName,ColumnDataType,0 ColumnCostCenterID,C.IsMandatory
 			FROM ADM_CostCenterDef C with(nolock)
 			join COM_LanguageResources l with(nolock) on C.ResourceID=l.ResourceID and LanguageID= @LangID
 			WHERE CostCenterID=40 AND (SysColumnName LIKE 'PurchaseRate%' OR SysColumnName LIKE 'SellingRate%'
 			OR SysColumnName LIKE 'ReorderLevel%' OR SysColumnName LIKE 'ReorderQty%'  OR SysColumnName LIKE 'PriceType%')		
 			UNION
-			SELECT FeatureID , PrimaryKey ,Name,Name,'INT', FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , PrimaryKey ,Name,Name,'INT', FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID IN (2,3,11)-- OR FeatureID>50000
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,(FeatureID-50000)) ,Name,Name,'INT', FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,(FeatureID-50000)) ,Name,Name,'INT', FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID>50000 AND IsEnabled=1
 			UNION
-			SELECT -FeatureID , 'CC'+CONVERT(NVARCHAR,(FeatureID-50000)) ,Name+'_Column',Name+'_Column','INT', FeatureID FROM ADM_Features with(nolock) 
+			SELECT -FeatureID , 'CC'+CONVERT(NVARCHAR,(FeatureID-50000)) ,Name+'_Column',Name+'_Column','INT', FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID>50000 AND IsEnabled=1
 			UNION
-			SELECT -1,'ProfileName','ProfileName','ProfileName','String',0
+			SELECT -1,'ProfileName','ProfileName','ProfileName','String',0,0
 			UNION
-			SELECT -2,'WEF','WEF','WEF','datetime',0
+			SELECT -2,'WEF','WEF','WEF','datetime',0,0
 			UNION
-			SELECT -3,'TillDate','TillDate','TillDate','datetime',0
+			SELECT -3,'TillDate','TillDate','TillDate','datetime',0,0
 			UNION
-			SELECT -4,'ValueFor','ValueFor','ValueFor','String',0
+			SELECT -4,'ValueFor','ValueFor','ValueFor','String',0,0
 			ORDER BY CostCenterColID
 		END 
 		ELSE IF @CostCenterID=40
 		BEGIN
-			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,ColumnDataType,0 ColumnCostCenterID
+			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,ColumnDataType,0 ColumnCostCenterID,C.IsMandatory
 			FROM ADM_CostCenterDef C with(nolock)
 			join COM_LanguageResources l with(nolock) on C.ResourceID=l.ResourceID and LanguageID= @LangID
 			WHERE CostCenterID=40 AND (SysColumnName LIKE 'PurchaseRate%' OR SysColumnName LIKE 'SellingRate%'
 			OR SysColumnName LIKE 'ReorderLevel%' OR SysColumnName LIKE 'ReorderQty%'  OR SysColumnName LIKE 'PriceType%')		
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID IN (2,3,11,12)-- OR FeatureID>50000
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID>50000 AND IsEnabled=1
 			UNION
-			SELECT -1,'ProfileName','ProfileName',NULL,0
+			SELECT -1,'ProfileName','ProfileName',NULL,0,0
 			UNION
-			SELECT -2,'WEF','WEF','datetime',0
+			SELECT -2,'WEF','WEF','datetime',0,0
 			UNION
-			SELECT -3,'TillDate','TillDate','datetime',0
+			SELECT -3,'TillDate','TillDate','datetime',0,0
 			ORDER BY CostCenterColID
 		END
 		ELSE IF @CostCenterID=151 and @Name='Schemes & Discounts BasedOn Unique Dimension'
 		BEGIN 
-			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData, UserColumnName,ColumnDataType,0 ColumnCostCenterID
+			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData, UserColumnName,ColumnDataType,0 ColumnCostCenterID,C.IsMandatory
 			FROM ADM_CostCenterDef C with(nolock)
 			join COM_LanguageResources l with(nolock) on C.ResourceID=l.ResourceID and LanguageID= @LangID
 			WHERE CostCenterID=151 AND (SysColumnName LIKE 'From%' OR SysColumnName LIKE 'To%'
 			OR SysColumnName LIKE 'Percentage%' OR SysColumnName LIKE 'Quantity'  OR SysColumnName LIKE 'Value' OR SysColumnName LIKE 'IsQtyPercent')		
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID IN (2,3)-- OR FeatureID>50000
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID>50000 AND IsEnabled=1
 			UNION
-			SELECT -1,'ProfileName','ProfileName',NULL,NULL,0
+			SELECT -1,'ProfileName','ProfileName',NULL,NULL,0,0
 			UNION
-			SELECT -2,'RowID','RowID',NULL,NULL,0
+			SELECT -2,'RowID','RowID',NULL,NULL,0,0
 			UNION
-			SELECT -3,'FreeProduct','FreeProduct',NULL,NULL,3
+			SELECT -3,'FreeProduct','FreeProduct',NULL,NULL,3,0
 			UNION
-			SELECT -FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,'Free'+Name Name,NULL,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT -FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,'Free'+Name Name,NULL,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID>50000 AND IsEnabled=1
 			ORDER BY CostCenterColID
 		END  
 		ELSE IF @CostCenterID=151
 		BEGIN 
-			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData, UserColumnName,ColumnDataType,0 ColumnCostCenterID
+			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData, UserColumnName,ColumnDataType,0 ColumnCostCenterID,C.IsMandatory
 			FROM ADM_CostCenterDef C with(nolock)
 			join COM_LanguageResources l with(nolock) on C.ResourceID=l.ResourceID and LanguageID= @LangID
 			WHERE CostCenterID=151 AND (SysColumnName LIKE 'From%' OR SysColumnName LIKE 'To%'
-			OR SysColumnName LIKE 'Percentage%' OR SysColumnName LIKE 'Quantity'  OR SysColumnName LIKE 'Value' OR SysColumnName LIKE 'IsQtyPercent')		
+			OR SysColumnName LIKE 'Percentage%' OR SysColumnName LIKE 'Quantity'  OR SysColumnName LIKE 'Value' OR SysColumnName LIKE 'IsQtyPercent'
+			OR SysColumnName LIKE 'Status%')		
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID IN (2,3)-- OR FeatureID>50000
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID>50000 AND IsEnabled=1
 			UNION
-			SELECT -1,'ProfileName','ProfileName',NULL,NULL,0
+			SELECT -1,'ProfileName','ProfileName',NULL,NULL,0,0
 			UNION
-			SELECT -2,'RowID','RowID',NULL,NULL,0
+			SELECT -2,'RowID','RowID',NULL,NULL,0,0
 			UNION
-			SELECT -3,'FreeProduct','FreeProduct',NULL,NULL,3
+			SELECT -3,'FreeProduct','FreeProduct',NULL,NULL,3,0
 			ORDER BY CostCenterColID
 		END 
 		ELSE IF @CostCenterID=153
 		BEGIN 
-			SELECT FeatureID CostCenterColID, 'CC'+CONVERT(NVARCHAR,FeatureID) SysColumnName ,Name ResourceData,NULL ColumnDataType, FeatureID ColumnCostCenterID 
+			SELECT FeatureID CostCenterColID, 'CC'+CONVERT(NVARCHAR,FeatureID) SysColumnName ,Name ResourceData,NULL ColumnDataType, FeatureID ColumnCostCenterID,0 as IsMandatory 
 			FROM ADM_Features with(nolock) 
 			WHERE FeatureID IN (2,3)-- OR FeatureID>50000
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID>50000 AND IsEnabled=1
 			UNION
-			SELECT -10,'ProfileName','ProfileName','TEXT',0 
+			SELECT -10,'ProfileName','ProfileName','TEXT',0 ,0
 			UNION
-			SELECT -FeatureID CostCenterColID, 'BasedCC'+CONVERT(NVARCHAR,FeatureID) SysColumnName ,'Based on '+Name ResourceData,'BIT' ColumnDataType, 0 ColumnCostCenterID 
+			SELECT -FeatureID CostCenterColID, 'BasedCC'+CONVERT(NVARCHAR,FeatureID) SysColumnName ,'Based on '+Name ResourceData,'BIT' ColumnDataType, 0 ColumnCostCenterID,0 
 			FROM ADM_Features with(nolock) 
 			WHERE FeatureID IN (2,3)  OR FeatureID>50000 AND IsEnabled=1  
 			ORDER BY CostCenterColID
 		END 
 		ELSE IF @CostCenterID=101
 		BEGIN
-			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,ColumnDataType ,0 ColumnCostCenterID
+			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,ColumnDataType ,0 ColumnCostCenterID,C.IsMandatory
 			FROM ADM_CostCenterDef C with(nolock)
 			join dbo.COM_LanguageResources l with(nolock) on C.ResourceID=l.ResourceID and LanguageID= @LangID
 			WHERE CostCenterID=@CostCenterID  AND SysColumnName<>'' and
@@ -160,16 +161,16 @@ SET NOCOUNT ON;
 				  GROUP BY [CostCenterID],[SysColumnName]
 				  HAVING COUNT(*)>1 AND [CostCenterID]> 40000 AND [CostCenterID]< 50000)
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID IN (2,3,11)-- OR FeatureID>50000
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID>50000 AND IsEnabled=1	
 			ORDER BY CostCenterColID
 		END
 		ELSE IF @CostCenterID=45
 		BEGIN
-			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,ColumnDataType , ColumnCostCenterID
+			select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,ColumnDataType , ColumnCostCenterID,C.IsMandatory
 			FROM ADM_CostCenterDef C with(nolock)
 			join dbo.COM_LanguageResources l with(nolock) on C.ResourceID=l.ResourceID and LanguageID= 1
 			WHERE CostCenterID=45  AND SysColumnName<>'' and
@@ -180,22 +181,22 @@ SET NOCOUNT ON;
 			  GROUP BY [CostCenterID],[SysColumnName]
 			  HAVING COUNT(*)>1 AND [CostCenterID]> 40000 AND [CostCenterID]< 50000) 
 			UNION
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID IN (2,3,11)-- OR FeatureID>50000
 			UNION 
-			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID FROM ADM_Features with(nolock) 
+			SELECT FeatureID , 'CC'+CONVERT(NVARCHAR,FeatureID) ,Name,NULL, FeatureID,0 FROM ADM_Features with(nolock) 
 			WHERE FeatureID>50000 AND IsEnabled=1	
 			ORDER BY CostCenterColID
 		END
 	END
 	ELSE IF @CostCenterID=114 
 	BEGIN 
-		select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,l.ResourceData UserColumnName,ColumnDataType,ColumnCostCenterID
+		select CostCenterColID,SysColumnName,CASE WHEN C.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,l.ResourceData UserColumnName,ColumnDataType,ColumnCostCenterID,C.IsMandatory
 		FROM ADM_CostCenterDef C with(nolock)
 		join COM_LanguageResources l with(nolock) on C.ResourceID=l.ResourceID and LanguageID= @LangID
 		WHERE CostCenterID=@CostCenterID AND C.IsColumnInUse=1	
 		UNION
-		SELECT 7,'CreatedBy','UserName','UserName','LISTBOX',0
+		SELECT 7,'CreatedBy','UserName','UserName','LISTBOX',0,0
 	END
 	ELSE if (@CostCenterID=2 and @Name='Account Dimension wise Cr/Dr Limits')
 	BEGIN 
@@ -220,7 +221,7 @@ SET NOCOUNT ON;
 		CASE WHEN SysColumnName='CCNID1' THEN 'Division' WHEN SysColumnName='CCNID2' THEN 'Location'
 		WHEN SysColumnName='CCNID'+convert(nvarchar,(@DimWise-50000)) THEN (select Name from adm_features with(nolock) where featureid=ColumnCostCenterID) ELSE  l.ResourceData END ResourceData,
 		IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock)
  		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID=@LangID
 		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
@@ -230,27 +231,27 @@ SET NOCOUNT ON;
 	END 
 	ELSE if (@CostCenterID=2 and @Name='Account Report Template')
 	BEGIN  
-		declare @rptid bigint ,@tempsql nvarchar(500)
-		select @rptid=CONVERT(bigint,value) from ADM_GlobalPreferences with(nolock) where Name='Report Template Dimension'
+		declare @rptid INT ,@tempsql nvarchar(500)
+		select @rptid=CONVERT(INT,value) from ADM_GlobalPreferences with(nolock) where Name='Report Template Dimension'
 	
 		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a  with(nolock)
  		join dbo.COM_LanguageResources l  with(nolock) on a.ResourceID=l.ResourceID and LanguageID= 1
 		LEFT JOIN ADM_DocumentDef DD  with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
 		WHERE a.CostcenterID=2 AND (SysColumnName like 'AccountCode' 
 		or SysColumnName like 'AccountName')   
 		union  
-		select -100,2,'Account',null,'ACC_Accounts','Template',@rptid,1,'TemplateNodeID','Template',1,0,'String',null,null,null,null,null,null,0,''
+		select -100,2,'Account',null,'ACC_Accounts','Template',@rptid,1,'TemplateNodeID','Template',1,0,'String',null,null,null,null,null,null,0,'',0
 		union 
-		select -101,2,'Account',null,'ACC_Accounts','Positive',@rptid,1,'DrNodeID','Positive',1,0,'String',null,null,null,null,null,null,0,''
+		select -101,2,'Account',null,'ACC_Accounts','Positive',@rptid,1,'DrNodeID','Positive',1,0,'String',null,null,null,null,null,null,0,'',0
 		union 
-		select -102,2,'Account',null,'ACC_Accounts','Negative',@rptid,1,'CrNodeID','Negative',1,0,'String',null,null,null,null,null,null,0,''
+		select -102,2,'Account',null,'ACC_Accounts','Negative',@rptid,1,'CrNodeID','Negative',1,0,'String',null,null,null,null,null,null,0,'',0
 		union all
-		select -103,2,'Account',null,'ACC_Accounts','W.E.F',0,1,'RTDate','W.E.F',1,0,'DATE',null,null,null,null,null,null,0,''
+		select -103,2,'Account',null,'ACC_Accounts','W.E.F',0,1,'RTDate','W.E.F',1,0,'DATE',null,null,null,null,null,null,0,'',0
 		union all 
-		select -104,2,'Account',null,'ACC_Accounts','Group',0,1,'RTGroup','Group',1,0,'String',null,null,null,null,null,null,0,''
+		select -104,2,'Account',null,'ACC_Accounts','Group',0,1,'RTGroup','Group',1,0,'String',null,null,null,null,null,null,0,'',0
 		
 		if(@rptid>0)
 		begin
@@ -262,48 +263,89 @@ SET NOCOUNT ON;
 	BEGIN 
 		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock)
 		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
 		WHERE a.CostcenterID=65 AND a.IsColumnInUse=1 and NOT (a.ColumnCostCenterID=83 AND a.SysColumnName='FeaturePK')
 		order by UserColumnName
 	END
+	ELSE if (@CostCenterID=2 and @Name='Account Address')
+	BEGIN 
+		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
+		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
+		FROM ADM_COSTCENTERDEF a with(nolock)
+		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
+		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
+		WHERE a.CostcenterID=110 AND a.IsColumnInUse=1 
+		UNION
+		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
+		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
+		FROM ADM_COSTCENTERDEF a with(nolock)
+		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
+		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
+		WHERE a.CostcenterID=2 AND a.SysColumnName IN ('AccountCode','AccountName')
+		order by UserColumnName
+	END
 	ELSE if (@CostCenterID=3 and @Name='Products Wise Bins')
 	BEGIN
 		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock)
 		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
-		WHERE a.CostcenterID=3 AND syscolumnname in ('ProductCode','ProductName','BinDimension','DimesionWiseBin','Capacity','IsDefault') 
+		WHERE a.CostcenterID=3 AND syscolumnname in ('ProductCode','ProductName','BinDimension','DimesionWiseBin','Capacity','IsDefault','StatusID') 
+	END
+	ELSE if (@CostCenterID=3 and @Name='Products With Substitutes')
+	BEGIN
+		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
+		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
+		FROM ADM_COSTCENTERDEF a with(nolock)
+		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
+		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
+		WHERE a.CostcenterID=3 AND syscolumnname in ('ProductCode','ProductName') 
+		UNION ALL	
+		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
+		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
+		FROM ADM_COSTCENTERDEF a with(nolock)
+		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
+		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
+		WHERE a.CostcenterID=23 AND syscolumnname in ('SubstituteGroupName')		
+		UNION ALL  
+		select -255,3,'Product',null,'INV_Product','SubstituteProduct',3,3,'SubstituteProduct','Substitute Product',1,0,'String',null,null,null,null,null,null,0,'',0,0		
+		UNION ALL  
+		select -1,3,'Product',null,'INV_Product','SNO',0,0,'SNO','SNO',1,0,'String',null,null,null,null,null,null,0,'',0,0
 	END
 	ELSE if (@CostCenterID=3 and @Name='Products With Multiple UOM Barcode')
 	BEGIN
 	 
-		DECLARE @BarcodeDimension BIGINT
+		DECLARE @BarcodeDimension INT
 		SELECT @BarcodeDimension=ISNULL(Value,0) FROM COM_CostcenterPreferences WITH(NOLOCK) WHERE CostcenterID=3 AND Name='BarcodeDimension'
 	 
 		SELECT a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock)
 		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
 		WHERE a.CostcenterID=3 AND syscolumnname in ('ProductCode','ProductName') 
 		UNION
-		SELECT -19,3, 'Product','', 'INV_ProductBarcode','Base_Name',0,0,'Base_Name','Base_Name',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+		SELECT -19,3, 'Product','', 'INV_ProductBarcode','Base_Name',0,0,'Base_Name','Base_Name',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 		UNION
-		SELECT -20,3, 'Product','', 'INV_ProductBarcode','Base_Conversion',0,0,'Base_Conversion','Base_Conversion',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+		SELECT -20,3, 'Product','', 'INV_ProductBarcode','Base_Conversion',0,0,'Base_Conversion','Base_Conversion',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 		UNION
-		SELECT -21,3, 'Product','', 'INV_ProductBarcode','Conversion_UnitName',0,0,'Conversion_UnitName','Conversion_UnitName',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+		SELECT -21,3, 'Product','', 'INV_ProductBarcode','Conversion_UnitName',0,0,'Conversion_UnitName','Conversion_UnitName',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 		UNION
-		SELECT -22,3, 'Product','', 'INV_ProductBarcode','Conversion_UnitValue',0,0,'Conversion_UnitValue','Conversion_UnitValue',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+		SELECT -22,3, 'Product','', 'INV_ProductBarcode','Conversion_UnitValue',0,0,'Conversion_UnitValue','Conversion_UnitValue',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 		UNION
-		SELECT -29,3, 'Product','', 'INV_ProductBarcode','UOM_Barcode',@BarcodeDimension,0,'UOM_Barcode','UOM_Barcode',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+		SELECT -29,3, 'Product','', 'INV_ProductBarcode','UOM_Barcode',@BarcodeDimension,0,'UOM_Barcode','UOM_Barcode',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 		UNION
-		SELECT -30,3, 'Product','', 'INV_ProductBarcode','Base_Barcode',@BarcodeDimension,0,'Base_Barcode','Base_Barcode',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+		SELECT -30,3, 'Product','', 'INV_ProductBarcode','Base_Barcode',@BarcodeDimension,0,'Base_Barcode','Base_Barcode',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 	
 	END
 	ELSE if (@CostCenterID=92 and @Name='Property Particulars')
@@ -315,12 +357,12 @@ SET NOCOUNT ON;
 		SELECT a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,
 		CASE WHEN SysColumnName='ParticularID' THEN @documenttype ELSE ColumnCostCenterID END ColumnCostCenterID,ColumnCCListViewTypeID, 
 		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		NULL DebitAccount,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA
+		NULL DebitAccount,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock)
 		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 		WHERE a.CostcenterID=93 and a.SysTableName='REN_Particulars'
 		UNION
-		SELECT -1,93, 'Units',NULL, 'REN_Particulars','PropertyID',92,0,'PropertyID','Property',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL
+		SELECT -1,93, 'Units',NULL, 'REN_Particulars','PropertyID',92,0,'PropertyID','Property',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,0
 	END
 	ELSE if (@CostCenterID=93 and @Name='Unit Particulars')
 	BEGIN
@@ -331,22 +373,75 @@ SET NOCOUNT ON;
 		SELECT a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,
 		CASE WHEN SysColumnName='ParticularID' THEN @documenttype ELSE ColumnCostCenterID END ColumnCostCenterID,ColumnCCListViewTypeID, 
 		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		NULL DebitAccount,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA
+		NULL DebitAccount,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock)
 		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 		WHERE a.CostcenterID=93 and a.SysTableName='REN_Particulars'
 		UNION
-		SELECT -1,93, 'Units',NULL, 'REN_Particulars','UnitID',93,0,'UnitID','Unit',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL
+		SELECT -1,93, 'Units',NULL, 'REN_Particulars','UnitID',93,0,'UnitID','Unit',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,0
+		
+		UNION
+		SELECT -2,93, 'Units',NULL, 'REN_Particulars','Post to Debit',93,0,'PostDebit','Post to Debit',1,0,'Combobox',NULL,NULL,NULL,NULL,NULL,NULL,0,'Combobox',NULL,0		
+		UNION
+		SELECT -3,93, 'Units',NULL, 'REN_Particulars','Bank',2,2,'BankAccountID','Bank',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,0		
+		UNION
+		SELECT -4,93, 'Units',NULL, 'REN_Particulars','Display',93,0,'Display','Display',1,0,'Combobox',NULL,NULL,NULL,NULL,NULL,NULL,0,'Combobox',NULL,0		
+		UNION
+		SELECT -5,93, 'Units',NULL, 'REN_Particulars','Percentage Type',93,0,'PercType','Percentage Type',1,0,'Combobox',NULL,NULL,NULL,NULL,NULL,NULL,0,'Combobox',NULL,0
+	END	
+	ELSE if (@CostCenterID=92 and @Name='Particulars Import')
+	BEGIN
+		select @documenttype=value from ADM_GlobalPreferences WITH(NOLOCK)
+		where Name='DepositLinkDimension'
+		SELECT * FROM (
+		
+		SELECT a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,
+		CASE WHEN SysColumnName='ParticularID' THEN @documenttype ELSE ColumnCostCenterID END ColumnCostCenterID,ColumnCCListViewTypeID, 
+		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		NULL DebitAccount,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
+		FROM ADM_COSTCENTERDEF a with(nolock)
+		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
+		WHERE a.CostcenterID=93 and a.SysTableName='REN_Particulars'
+		UNION
+		SELECT -1,93, 'Units',NULL, 'REN_Particulars','PropertyID',92,0,'PropertyID','Property',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,0
+		UNION
+		SELECT a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,
+		CASE WHEN SysColumnName='ParticularID' THEN @documenttype ELSE ColumnCostCenterID END ColumnCostCenterID,ColumnCCListViewTypeID, 
+		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		NULL DebitAccount,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
+		FROM ADM_COSTCENTERDEF a with(nolock)
+		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
+		WHERE a.CostcenterID=93 and a.SysTableName='REN_Particulars'
+		UNION
+		SELECT -1,93, 'Units',NULL, 'REN_Particulars','UnitID',93,0,'UnitID','Unit',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,0
+		
+		UNION
+		SELECT -2,93, 'Units',NULL, 'REN_Particulars','Post to Debit',93,0,'PostDebit','Post to Debit',1,0,'Combobox',NULL,NULL,NULL,NULL,NULL,NULL,0,'Combobox',NULL,0		
+		UNION
+		SELECT -3,93, 'Units',NULL, 'REN_Particulars','Bank',2,2,'BankAccountID','Bank',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,0		
+		UNION
+		SELECT -4,93, 'Units',NULL, 'REN_Particulars','Display',93,0,'Display','Display',1,0,'Combobox',NULL,NULL,NULL,NULL,NULL,NULL,0,'Combobox',NULL,0		
+		UNION
+		SELECT -5,93, 'Units',NULL, 'REN_Particulars','Percentage Type',93,0,'PercType','Percentage Type',1,0,'Combobox',NULL,NULL,NULL,NULL,NULL,NULL,0,'Combobox',NULL,0
+		UNION
+		SELECT -151,93, 'Units',NULL, 'REN_Particulars','Condition',92,0,'Condition','Condition',1,0,'String',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
+		UNION
+		SELECT -152,93, 'Units',NULL, 'REN_Particulars','Action',92,0,'Action','Action',1,0,'String',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
+		UNION
+		SELECT -153,93, 'Units',NULL, 'REN_Particulars','Filter',92,0,'Filter','Filter',1,0,'String',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0		
+		) AS T GROUP BY CostCenterColID,CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,SysColumnName,ColumnCostCenterID
+		,ColumnCCListViewTypeID,IsMandatory,ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		DebitAccount,CreditAccount,Formula,PostingType,RoundOff,IsCalculate , IsTransfer, UserColumnType,LINKDATA,IsMandatory
 	END
 	ELSE if (@CostCenterID=11)
 	BEGIN
 		SELECT -1 CostCenterColID,11 CostcenterID, 'UOM' CostCenterName,'' UserDefaultValue,'COM_UOM' SysTableName,'BaseName' UserColumnName,0 ColumnCostCenterID
 		,0 ColumnCCListViewTypeID,'BaseName' SysColumnName,'BaseName' ResourceData,1 IsColumninuse,0 IsColumnUserDefined,'TEXT' ColumnDataType,NULL DebitAccount
-		,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate,0 IsTransfer,NULL UserColumnType,NULL LINKDATA
+		,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate,0 IsTransfer,NULL UserColumnType,NULL LINKDATA,0 IsMandatory
 		UNION
-		SELECT -2,11, 'UOM','', 'COM_UOM','UnitName',0,0,'UnitName','UnitName',1,0,'TEXT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+		SELECT -2,11, 'UOM','', 'COM_UOM','UnitName',0,0,'UnitName','UnitName',1,0,'TEXT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 		UNION
-		SELECT -3,11, 'UOM','', 'COM_UOM','Conversion',0,0,'Conversion','Conversion',1,0,'FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+		SELECT -3,11, 'UOM','', 'COM_UOM','Conversion',0,0,'Conversion','Conversion',1,0,'FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 		
 		SELECT UOMID,BaseID,BaseName,UnitID,UnitName,Conversion FROM COM_UOM WITH(NOLOCK) ORDER BY UOMID
 	END
@@ -354,7 +449,7 @@ SET NOCOUNT ON;
 	BEGIN
 		SELECT a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue,a.UserProbableValues, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		NULL DebitAccount,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate ,isnull(IsTransfer,0) IsTransfer,UserColumnType,LINKDATA
+		NULL DebitAccount,NULL CreditAccount,NULL Formula,NULL PostingType,NULL RoundOff,NULL IsCalculate ,isnull(IsTransfer,0) IsTransfer,UserColumnType,LINKDATA,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock)
 		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 		WHERE a.CostcenterID=@CostCenterID AND SysColumnName NOT IN ( 'Email2ConfirmPassword','Email1ConfirmPassword','HistoryStatus','Image')
@@ -371,11 +466,11 @@ SET NOCOUNT ON;
 	END
 	ELSE if (@CostCenterID=400 and @Name='Document Edit')
 	BEGIN
-		SELECT DISTINCT CASE WHEN a.SysColumnName='VoucherNo' THEN -1003 WHEN a.SysColumnName='CommonNarration' THEN 1002 WHEN a.SysColumnName='LineNarration' THEN 1001 ELSE  REPLACE(a.SysColumnName,'dcAlpha','') END CostCenterColID,400 CostcenterID,a.SysColumnName,CASE WHEN a.SysColumnName='VoucherNo' THEN a.SysColumnName+'*' ELSE 'New '+a.SysColumnName END ResourceData
+		SELECT DISTINCT CASE WHEN a.SysColumnName='VoucherNo' THEN -1003 WHEN a.SysColumnName='CommonNarration' THEN 1002 WHEN a.SysColumnName='LineNarration' THEN 1001 ELSE  REPLACE(a.SysColumnName,'dcAlpha','') END CostCenterColID,400 CostcenterID,a.SysColumnName,CASE WHEN a.SysColumnName='VoucherNo' THEN a.SysColumnName+'*' ELSE 'New '+a.SysColumnName END ResourceData,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock) 
 		WHERE a.CostcenterID between 40000 and 50000  AND (a.SysColumnName LIKE 'dcAlpha%' OR a.SysColumnName IN ('VoucherNo','CommonNarration','LineNarration'))
 		UNION
-		SELECT DISTINCT -CASE WHEN a.SysColumnName='CommonNarration' THEN 1002 WHEN a.SysColumnName='LineNarration' THEN 1001 ELSE  REPLACE(a.SysColumnName,'dcAlpha','') END CostCenterColID,400 CostcenterID,a.SysColumnName,'Old '+a.SysColumnName ResourceData
+		SELECT DISTINCT -CASE WHEN a.SysColumnName='CommonNarration' THEN 1002 WHEN a.SysColumnName='LineNarration' THEN 1001 ELSE  REPLACE(a.SysColumnName,'dcAlpha','') END CostCenterColID,400 CostcenterID,a.SysColumnName,'Old '+a.SysColumnName ResourceData,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock) 
 		WHERE a.CostcenterID between 40000 and 50000 AND (a.SysColumnName LIKE 'dcAlpha%' OR a.SysColumnName IN ('CommonNarration','LineNarration'))
 		ORDER BY CostCenterColID
@@ -384,7 +479,7 @@ SET NOCOUNT ON;
 	BEGIN
 		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock)
 		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
@@ -396,12 +491,44 @@ SET NOCOUNT ON;
 	BEGIN 
 		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
 		FROM ADM_COSTCENTERDEF a with(nolock)
 		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
 		WHERE a.CostcenterID=@CostCenterID and IsColumninuse=1
 		ORDER BY UserColumnName
+	END
+	ELSE if (@CostCenterID=115)
+	BEGIN
+		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue,a.UserProbableValues, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
+		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsUnique,a.IsMandatory
+		FROM ADM_COSTCENTERDEF a with(nolock)
+		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
+		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
+		WHERE a.CostcenterID=86 AND 
+		(((a.IsColumnUserDefined=1 OR a.IsCostCenterUserDefined=1)  AND   (a.SysColumnName NOT LIKE '%dcCalcNum%')
+		AND (a.SysColumnName NOT LIKE '%dcExchRT%') AND (a.SysColumnName NOT LIKE '%dcCurrID%')
+		AND a.IsColumnInUse=1 AND a.ISCOLUMNDELETED=0) OR a.IsColumnUserDefined=0)      
+		and a.costcentercolid not in (SELECT MAX([CostCenterColID])
+		FROM [ADM_CostCenterDef] with(nolock) where Columncostcenterid is not null and Columncostcenterid =2
+		GROUP BY [CostCenterID],[SysColumnName]
+		HAVING COUNT(*)>1 AND [CostCenterID]> 40000 AND [CostCenterID]< 50000)
+		union 
+		Select -Featureid AS CostCenterColID, FeatureID as CostCenterID, '' CostCenterName,
+		'' UserDefaultValue,'' UserProbableValues, '' SysTableName, 'Assigned_'+Name  UserColumnName,
+		FeatureID as ColumnCostCenterID,0 ColumnCCListViewTypeID, 'Assigned_'+Name as SysColumnName, 
+		'Assigned_'+Name as ResourceData, isenabled IsColumninuse, isenabled IsColumnUserDefined, '' ColumnDataType,
+		'' DebitAccount,'' CreditAccount, '' Formula, '' PostingType, '' RoundOff,'' IsCalculate, 0 IsTransfer,'','',0,0
+		from adm_features with(nolock) where featureid >50000 and isenabled=1
+		union
+		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue,'', SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
+		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory,0
+		FROM ADM_COSTCENTERDEF a with(nolock)
+		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
+		LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
+		WHERE a.CostcenterID=115 AND a.IsColumnInUse=1
 	END
 	ELSE  
 	BEGIN
@@ -411,7 +538,7 @@ SET NOCOUNT ON;
 			SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
 			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA
 			,DD.DrRefColID,DD.DrRefID,DD.CrRefColID,DD.CrRefID
-			,a.ParentCostCenterSysName,a.ParentCostCenterColSysName,a.ParentCCDefaultColID
+			,a.ParentCostCenterSysName,a.ParentCostCenterColSysName,a.ParentCCDefaultColID,a.IsMandatory
 			FROM ADM_COSTCENTERDEF a with(nolock)
 			join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 			LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
@@ -429,13 +556,13 @@ SET NOCOUNT ON;
 			FeatureID as ColumnCostCenterID,0 ColumnCCListViewTypeID, 'Assigned_'+Name as SysColumnName, 
 			'Assigned_'+Name as ResourceData, isenabled IsColumninuse, isenabled IsColumnUserDefined, '' ColumnDataType,
 			'' DebitAccount,'' CreditAccount, '' Formula, '' PostingType, '' RoundOff,'' IsCalculate, 0 IsTransfer,'','',0,0,0,0
-			,null,null,0
+			,null,null,0,0
 			from adm_features with(nolock) where featureid >50000 and isenabled=1  
 			UNION
 			SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, 'Product_'+UserColumnName,3 ColumnCostCenterID,ColumnCCListViewTypeID, 
 			SysColumnName ,'Product_'+l.ResourceData ResourceData,IsColumninuse,IsColumnUserDefined,'ProductString' ColumnDataType,
 			'' DebitAccount,'' CreditAccount, '' Formula, '' PostingType, '' RoundOff,'' IsCalculate, 0 IsTransfer,'','',0,0,0,0
-			,a.ParentCostCenterSysName,a.ParentCostCenterColSysName,a.ParentCCDefaultColID
+			,a.ParentCostCenterSysName,a.ParentCostCenterColSysName,a.ParentCCDefaultColID,a.IsMandatory
 			FROM ADM_COSTCENTERDEF a with(nolock)
 			join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID  
 			where costcenterid=3 and iscolumninuse=1
@@ -448,7 +575,7 @@ SET NOCOUNT ON;
 			SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName,'Batch_'+ UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 			SysColumnName ,'Batch_'+l.ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
 			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,'',0,0,0,0
-			,a.ParentCostCenterSysName,a.ParentCostCenterColSysName,a.ParentCCDefaultColID
+			,a.ParentCostCenterSysName,a.ParentCostCenterColSysName,a.ParentCCDefaultColID,a.IsMandatory
 			FROM ADM_COSTCENTERDEF a with(nolock)
 			join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= 1
 			LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
@@ -477,10 +604,10 @@ SET NOCOUNT ON;
 			a.IsColumnUserDefined,
 			'CostCenterString' ColumnDataType,
 			'' DebitAccount,'' CreditAccount, '' Formula, '' PostingType, '' RoundOff,'' IsCalculate, 0 IsTransfer,'','',0,0,0,0
-			,a.ParentCostCenterSysName,a.ParentCostCenterColSysName,a.ParentCCDefaultColID
+			,a.ParentCostCenterSysName,a.ParentCostCenterColSysName,a.ParentCCDefaultColID,a.IsMandatory
 			FROM ADM_COSTCENTERDEF a with(nolock)
 			join COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and l.LanguageID= 1  
-			where (a.costcenterid between 50001 and 50050) and a.iscolumninuse=1
+			where a.costcenterid >=50001 and a.iscolumninuse=1
 			and (a.columncostcenterid=0 or a.columncostcenterid is null) and a.systablename <>'INV_DocDetails'
 			and (lower(a.usercolumntype)='string' or  lower(a.usercolumntype) ='text' or
 			lower(a.usercolumntype) like '%textarea%' or lower(a.syscolumnname)='aliasname')
@@ -492,57 +619,120 @@ SET NOCOUNT ON;
 		END
 		ELSE IF (@CostCenterID=76 and @Name='Bill Of Materials With Multiple Stage')
 		BEGIN
-			DECLARE @StageDimID BIGINT,@MachineDimID BIGINT
+			DECLARE @StageDimID INT,@MachineDimID INT
 			
 			select @StageDimID=Value from COM_CostCenterPreferences with(nolock) where CostCenterID=@CostCenterID and Name='StageDimension'
 			select @MachineDimID=Value from COM_CostCenterPreferences with(nolock) where CostCenterID=@CostCenterID and Name='MachineDimension'
 
 			SELECT a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 			SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA
+			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory
 			FROM ADM_COSTCENTERDEF a with(nolock)
 			join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 			LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID
 			WHERE a.CostcenterID=@CostCenterID AND (((a.IsColumnUserDefined=1 OR a.IsCostCenterUserDefined=1) 
 			AND a.IsColumnInUse=1 AND a.ISCOLUMNDELETED=0) OR a.IsColumnUserDefined=0) AND SysTableName NOT IN ('PRD_BOMProducts','PRD_Expenses','PRD_BOMResources')       
 			UNION
-			SELECT -1,76, 'BOM','', 'PRD_BOMProducts','Stage_Product',3,108,'ProductID','Stage_Product',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+			SELECT -1,76, 'BOM','', 'PRD_BOMProducts','Stage_Product',3,108,'ProductID','Stage_Product','1','0','LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 			UNION
-			SELECT -2,76, 'BOM','', 'PRD_BOMProducts','Qty',0,0,'Quantity','Qty',1,0,'FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+			SELECT -2,76, 'BOM','', 'PRD_BOMProducts','Qty',0,0,'Quantity','Qty','1','0','FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 			UNION
-			SELECT -3,76, 'BOM','', 'PRD_BOMProducts','UOM',11,1,'UOMID','UOM',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+			SELECT -3,76, 'BOM','', 'PRD_BOMProducts','UOM',11,1,'UOMID','UOM','1','0','LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 			UNION
-			SELECT -4,76, 'BOM','', 'PRD_BOMProducts','UnitPrice',0,0,'UnitPrice','UnitPrice',1,0,'FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+			SELECT -4,76, 'BOM','', 'PRD_BOMProducts','UnitPrice',0,0,'UnitPrice','UnitPrice','1','0','FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 			UNION
-			SELECT -5,76, 'BOM','', 'PRD_BOMProducts','Value',0,0,'Value','Value',1,0,'FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL	
+			SELECT -5,76, 'BOM','', 'PRD_BOMProducts','Value',0,0,'Value','Value','1','0','FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL	,0
 			UNION
-			SELECT -6,76, 'BOM','', 'PRD_BOMProducts','Wastage',0,0,'Wastage','Wastage',1,0,'FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL	
+			SELECT -6,76, 'BOM','', 'PRD_BOMProducts','Wastage',0,0,'Wastage','Wastage','1','0','FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0	
 			UNION
-			SELECT -7,76, 'BOM','', 'PRD_BOMProducts','IncInStageCost',0,0,'IncInStageCost','IncInStageCost',1,0,'ComboBox',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL			
+			SELECT -7,76, 'BOM','', 'PRD_BOMProducts','IncInStageCost',0,0,'IncInStageCost','IncInStageCost','1','0','ComboBox',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0			
 			UNION
-			SELECT -8,76, 'BOM','', 'PRD_BOMProducts','IncInFinalCost',0,0,'IncInFinalCost','IncInFinalCost',1,0,'ComboBox',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL	
+			SELECT -8,76, 'BOM','', 'PRD_BOMProducts','IncInFinalCost',0,0,'IncInFinalCost','IncInFinalCost','1','0','ComboBox',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0	
 			UNION
-			SELECT -9,76, 'BOM','', 'PRD_BOMProducts','ProductUse',0,0,'ProductUse','ProductType',1,0,'ComboBox',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL		
+			SELECT -9,76, 'BOM','', 'PRD_BOMProducts','ProductUse',0,0,'ProductUse','ProductType','1','0','ComboBox',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0		
 			UNION
-			SELECT -10,76, 'BOM','', 'PRD_BOMStages','Stages',@StageDimID,1,'StageNodeID','Stages',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL	
+			SELECT -10,76, 'BOM','', 'PRD_BOMStages','Stages',@StageDimID,1,'StageNodeID','Stages','1','0','LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL	,0
 			UNION
-			SELECT -11,76, 'BOM','', 'PRD_BOMStages','StageOrder',0,0,'lft','StageOrder',1,0,'INT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+			SELECT -11,76, 'BOM','', 'PRD_BOMStages','StageOrder',0,0,'lft','StageOrder','1','0','INT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 			UNION
-			SELECT -12,76, 'BOM','', 'PRD_Expenses','Name',0,0,'Name','Name',1,0,'TEXT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+			SELECT -12,76, 'BOM','', 'PRD_Expenses','Name',0,0,'Name','Name','1','0','TEXT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 			UNION
-			SELECT -13,76, 'BOM','', 'PRD_Expenses','CreditAccount',2,1,'CreditAccountID','CreditAccount',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+			SELECT -13,76, 'BOM','', 'PRD_Expenses','CreditAccount',2,1,'CreditAccountID','CreditAccount','1','0','LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 			UNION
-			SELECT -14,76, 'BOM','', 'PRD_Expenses','DebitAccount',2,1,'DebitAccountID','DebitAccount',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+			SELECT -14,76, 'BOM','', 'PRD_Expenses','DebitAccount',2,1,'DebitAccountID','DebitAccount','1','0','LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 			UNION
-			SELECT -15,76, 'BOM','', 'PRD_BOMResources','Machine',@MachineDimID,1,'ResourceID','Machine',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL
+			SELECT -15,76, 'BOM','', 'PRD_BOMResources','Machine',@MachineDimID,1,'ResourceID','Machine','1','0','LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0
 			UNION
-			SELECT -16,76, 'BOM','', 'PRD_BOMResources','Hrs',0,0,'Hours','Hrs',1,0,'FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL	
+			SELECT -16,76, 'BOM','', 'PRD_BOMResources','Hrs',0,0,'Hours','Hrs','1','0','FLOAT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0			
+			UNION
+			SELECT -17,76, 'BOM','', 'PRD_BOMResources','Options',0,0,'Options','Options','1','0','INT',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0 FROM
+			COM_CostCenterPreferences WITH(NOLOCK) WHERE CostCenterID=76 AND Name='EnableMachineoptions'	AND Value='True'			
+			UNION
+			SELECT -18,76, 'BOM','', 'PRD_BOMResources','MachineDim1',CCP.Value,0,'MachineDim1',F.Name,'1','0','LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0 FROM
+			COM_CostCenterPreferences CCP WITH(NOLOCK) JOIN ADM_Features F WITH(NOLOCK) ON F.FeatureID=CCP.Value WHERE CCP.CostCenterID=76 AND CCP.Name='MachineDim1' 
+			AND CCP.Value>0
+			UNION
+			SELECT -19,76, 'BOM','', 'PRD_BOMResources','MachineDim2',CCP.Value,0,'MachineDim2',F.Name,'1','0','LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,0 FROM
+			COM_CostCenterPreferences CCP WITH(NOLOCK) JOIN ADM_Features F WITH(NOLOCK) ON F.FeatureID=CCP.Value WHERE CCP.CostCenterID=76 AND CCP.Name='MachineDim2' 
+			AND CCP.Value>0
+		END
+		ELSE IF @CostCenterID=95
+		BEGIN 
+			SELECT DISTINCT  a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue,a.UserProbableValues, CASE WHEN SysTableName='REN_ContractPayTerms' THEN 'REN_ContractParticulars' ELSE SysTableName END SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
+			SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsUnique, isnull(Sectionid,0) Sectionid,a.IsMandatory
+			FROM ADM_COSTCENTERDEF a with(nolock)
+			JOIN dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
+			LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
+			WHERE a.CostcenterID=@CostCenterID AND 
+			(((a.IsColumnUserDefined=1 OR a.IsCostCenterUserDefined=1) AND a.IsColumnInUse=1 AND a.ISCOLUMNDELETED=0) OR a.IsColumnUserDefined=0)      
+			AND a.CostCenterColID NOT IN (SELECT CDPT.CostCenterColID FROM ADM_COSTCENTERDEF CDPR WITH(NOLOCK)
+			JOIN ADM_COSTCENTERDEF CDPT WITH(NOLOCK) ON CDPR.SYSCOLUMNNAME=CDPT.SYSCOLUMNNAME
+			WHERE CDPR.COSTCENTERID=@CostCenterID AND CDPT.COSTCENTERID=@CostCenterID 
+			AND CDPR.systablename='REN_ContractParticulars' AND CDPT.systablename ='REN_ContractPayTerms' AND CDPT.SysColumnName NOT LIKE 'CCNID%')
+			UNION
+			SELECT -26046,CP.CostCenterID,'Contract','','','REN_ContractParticulars',F.Name,CP.Value,0,'LocID',LR.ResourceData,1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,NULL,0,0
+			FROM COM_CostCenterPreferences CP WITH(NOLOCK)
+			JOIN ADM_Features F WITH(NOLOCK) ON F.FeatureID=CP.Value
+			JOIN COM_LanguageResources LR WITH(NOLOCK) ON LR.ResourceID=F.ResourceID AND LR.LanguageID=@LangID
+			WHERE CostCenterID=@CostCenterID AND CP.Name='DimensionWiseContract'
+			UNION
+			SELECT -1,95,'Contract','','','REN_Contract','ParentContractNo',95,0,'ParentContractNo','ParentContractNo',1,0,'LISTBOX',NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,NULL,0,0
+						
+		END		
+		ELSE IF (@Name='Job Output')
+		BEGIN
+			SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue,a.UserProbableValues, SysTableName, UserColumnName,@CostCenterID ColumnCostCenterID,ColumnCCListViewTypeID, 
+			SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsUnique,a.IsMandatory
+			FROM ADM_COSTCENTERDEF a with(nolock)
+			join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID=@LangID
+			LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
+			WHERE a.CostcenterID=@CostCenterID AND SysColumnName IN ('Code','Name')
+			UNION
+			SELECT -151,@CostCenterID, 'Job',NULL,NULL,'PRD_JobOuputProducts','BOM',76,76,'BOMID','BOM',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,NULL,0 
+			UNION				
+			SELECT -152,@CostCenterID, 'Job',NULL,NULL,'PRD_JobOuputProducts','Stage',Value,Value,'StageID','Stage',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,NULL,0 
+			FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE CostCenterID=76 AND Name='StageDimension'
+			UNION
+			SELECT -153,@CostCenterID, 'Job',NULL,NULL,'PRD_JobOuputProducts','Product',3,3,'ProductID','Product',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,NULL ,0
+			UNION
+			SELECT -154,@CostCenterID, 'Job',NULL,NULL,'PRD_JobOuputProducts','Size',0,0,'Qty','Size',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,'FLOAT',NULL,NULL ,0
+			UNION
+			SELECT -155,@CostCenterID, 'Job',NULL,NULL,'PRD_JobOuputProducts','Unit',0,0,'IsBom','Unit',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,'BIT',NULL,NULL,0  
+			UNION
+			SELECT -156,@CostCenterID, 'Job',NULL,NULL,'PRD_JobOuputProducts','UOM',11,1,'UOMID','UOM',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,'LISTBOX',NULL,NULL,0
+			UNION
+			SELECT -157,@CostCenterID, 'Job',NULL,NULL,'PRD_JobOuputProducts','Remarks',0,0,'Remarks','Remarks',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,'String',NULL,NULL,0  
+			UNION
+			SELECT -158,@CostCenterID, 'Job',NULL,NULL,'PRD_JobOuputProducts','Status',113,0,'StatusID','Status',1,0,NULL,NULL,NULL,NULL,NULL,NULL,NULL,0,'COMBOBOX',NULL,NULL ,0 
+			order by CostCenterColID DESC
 		END
 		ELSE
 		BEGIN 
 			SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue,a.UserProbableValues, SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 			SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsUnique
+			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsUnique,a.IsMandatory
 			FROM ADM_COSTCENTERDEF a with(nolock)
 			join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID
 			LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
@@ -559,17 +749,16 @@ SET NOCOUNT ON;
 			'' UserDefaultValue,'' UserProbableValues, '' SysTableName, 'Assigned_'+Name  UserColumnName,
 			FeatureID as ColumnCostCenterID,0 ColumnCCListViewTypeID, 'Assigned_'+Name as SysColumnName, 
 			'Assigned_'+Name as ResourceData, isenabled IsColumninuse, isenabled IsColumnUserDefined, '' ColumnDataType,
-			'' DebitAccount,'' CreditAccount, '' Formula, '' PostingType, '' RoundOff,'' IsCalculate, 0 IsTransfer,'','',0
+			'' DebitAccount,'' CreditAccount, '' Formula, '' PostingType, '' RoundOff,'' IsCalculate, 0 IsTransfer,'','',0,0
 			from adm_features with(nolock) where featureid >50000 and isenabled=1
 			union
 			SELECT -7 AS CostCenterColID,7 as CostCenterID,'Users' as CostCenterName,
 			'' UserDefaultValue,'' UserProbableValues, '' SysTableName, 'Assigned_Users'  UserColumnName,
 			7 as ColumnCostCenterID,0 ColumnCCListViewTypeID, 'Assigned_Users' as SysColumnName, 
 			'Assigned_Users' as ResourceData, '1' IsColumninuse, '1' IsColumnUserDefined, '' ColumnDataType,
-		    '' DebitAccount,'' CreditAccount, '' Formula, '' PostingType, '' RoundOff,'' IsCalculate, 0 IsTransfer,'','',0
+		    '' DebitAccount,'' CreditAccount, '' Formula, '' PostingType, '' RoundOff,'' IsCalculate, 0 IsTransfer,'','',0,0
 			FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='Dimension List' AND (@CostCenterID IN (2,3) OR @CostCenterID>50000)
-			AND (Value=CONVERT(NVARCHAR,@CostCenterID) OR Value LIKE CONVERT(NVARCHAR,@CostCenterID)+',%' OR Value LIKE '%,'+CONVERT(NVARCHAR,@CostCenterID)+',%' OR Value LIKE '%,'+CONVERT(NVARCHAR,@CostCenterID) )
-				
+			AND (Value=CONVERT(NVARCHAR,@CostCenterID) OR Value LIKE CONVERT(NVARCHAR,@CostCenterID)+',%' OR Value LIKE '%,'+CONVERT(NVARCHAR,@CostCenterID)+',%' OR Value LIKE '%,'+CONVERT(NVARCHAR,@CostCenterID) )						
 		END
 		
 		SELECT CostCenterID,S.StatusID,R.ResourceData,[Status] as ActualStatus    
@@ -590,7 +779,7 @@ SET NOCOUNT ON;
 
 			select a.UOMID,a.UnitName,a.ProductID,p.ProductCode,p.ProductName from COM_UOM a WITH(NOLOCK)
 			left join inv_product p WITH(NOLOCK) on a.ProductID=p.ProductID
-			
+			order by a.isproductwise,a.UOMID,a.baseid,a.unitid
 
 		end
 		else IF(@CostCenterID=2)
@@ -633,7 +822,16 @@ SET NOCOUNT ON;
 		FROM ADM_CostCenterDef AS C WITH(NOLOCK) 
 		INNER JOIN ADM_Features AS F WITH(NOLOCK) ON C.CostCenterID = F.FeatureID
 		WHERE (C.SysColumnName = N'Code' OR C.SysColumnName = N'Name') AND (C.CostCenterID > 50000) AND (F.IsEnabled = 1)
-	 
+		 IF (@Name='Job Output')
+		 BEGIN			
+			SELECT U.UOMID,U.UnitName UnitName, P.ProductCode, P.ProductName FROM Com_UOM U WITH(nolock) 
+			LEFT JOIN INV_PRODUCT P WITH (NOLOCK) ON U.PRODUCTID=P.PRODUCTID
+			
+			SELECT CostCenterID,S.StatusID,R.ResourceData,[Status] as ActualStatus    
+			FROM COM_Status S WITH(NOLOCK)    
+			LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON S.ResourceID=R.ResourceID AND R.LanguageID=1    
+			where CostCenterID=158
+		 END
 	 	select DefinitionXML,BarcodeXml from ADM_DocBarcodeLayouts WITH(NOLOCK) 
 		where CostCenterID=@CostCenterID and  len(Bodyxml)<10
 
@@ -660,7 +858,7 @@ SET NOCOUNT ON;
 		if(@CostCenterID=83)
 			SELECT   a.CostCenterColID,a.CostCenterID, CostCenterName,UserDefaultValue, SysTableName,'Contact_'+UserColumnName UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
 			'Contact_'+SysColumnName SysColumnName,'Contact_'+l.ResourceData ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
-			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType
+			DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,a.IsMandatory
 			FROM ADM_COSTCENTERDEF a with(nolock)
 			join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= 1
 			LEFT JOIN ADM_DocumentDef DD with(nolock) ON DD.CostCenterColID=a.CostCenterColID 
@@ -678,14 +876,8 @@ SET NOCOUNT ON;
 			where  [CostCenterID]=@CostCenterID and IsEnabled=1 and (b.UserID =@UserID or b.roleid=r.RoleID or g.roleid=r.roleid)
 	END
 	if(@CostCenterID=95)
-	begin
 		select NodeID,Name from com_lookup with(nolock) where lookuptype=48
-		SELECT ACCOUNTID,ACCOUNTTYPEID FROM ACC_ACCOUNTS with(nolock) WHERE ACCOUNTTYPEID IN ( 2 ,3)
-		SELECT ACCOUNTID,ACCOUNTTYPEID FROM ACC_ACCOUNTS with(nolock) WHERE ACCOUNTTYPEID = 1   
-		select * from com_costcenterpreferences with(nolock) where costcenterid=95 and (name ='PostDocStatus' or name='PDPAccounts' or Name='PDPAccounts')
-		
-		Select PrefValue from COM_DocumentPreferences with(nolock) where CostCenterID=40011 and PrefName='DonotupdateAccounts'    
-	end
+	
 COMMIT TRANSACTION 
 SET NOCOUNT OFF;   
 RETURN 1
@@ -706,4 +898,5 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
 GO

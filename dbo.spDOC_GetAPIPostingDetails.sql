@@ -189,6 +189,32 @@ BEGIN
 		SELECT * FROM [COM_APIFieldsMapping] WITH(NOLOCK) 
 		WHERE CostCenterID=@CostCenterID AND MapID=@MapID
 		
+		declare @table table(ID INT IDENTITY(1,1) PRIMARY KEY,Result NVARCHAR(100))  
+	
+		SELECT @SQL=Result FROM [COM_APIFieldsMapping] WITH(NOLOCK) 
+		WHERE CostCenterID=@CostCenterID AND MapID=@MapID
+
+		insert into @table   
+		exec SPSplitString @SQL,',' 
+
+		SELECT @I=1,@CNT=COUNT(*) FROM @table
+
+		WHILE @I<=@CNT
+		BEGIN
+			SELECT @SQL=Result FROM @table WHERE ID=@I
+			
+			insert into @table  
+			exec SPSplitString @SQL,'~' 
+			
+			SET @I=@I+1
+		END
+
+		DELETE  FROM @table WHERE ID<=@CNT
+
+		SELECT T1.Result Source,CD.SysColumnName FROM @table T1
+		JOIN @table T2 ON T1.ID+1=T2.ID
+		JOIN ADM_CostCenterDef CD WITH(NOLOCK) ON CONVERT(NVARCHAR(MAX),CD.CostCenterColID)=T2.Result
+		WHERE T1.ID%2<>@CNT%2 AND CD.SysColumnName LIKE 'dcAlpha%' 
 	END
 END
 		

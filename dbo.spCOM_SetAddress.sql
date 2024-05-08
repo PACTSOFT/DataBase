@@ -4,9 +4,10 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetAddress]
 	@CostCenterID [int],
-	@NodeID [bigint],
+	@NodeID [int],
 	@AddressXML [nvarchar](max),
-	@UserName [nvarchar](50)
+	@UserName [nvarchar](50),
+	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 DECLARE @XML XML, @Dt FLOAT
@@ -16,7 +17,7 @@ DECLARE @XML XML, @Dt FLOAT
 	BEGIN  
 		SET @Dt=CONVERT(FLOAT,GETDATE())
 		SET @XML=@AddressXML  
-		DECLARE @ContactQueryXML XML,@ExtraFields nvarchar(max),@UpdateSql NVARCHAR(MAX), @CCFields nvarchar(max),@PrimaryContactID int 
+		DECLARE @ContactQueryXML XML,@ExtraFields nvarchar(max),@UpdateSql NVARCHAR(MAX), @CCFields nvarchar(max)
 		SET @ContactQueryXML=@AddressXML
 		DECLARE @CONTACTSTABLE TABLE(ID INT IDENTITY(1,1),ACTIONNAME NVARCHAR(300),CONTACTTYPE INT,CONTACTID INT,STATICIFLEDS NVARCHAR(MAX),ALPHAFIELDS NVARCHAR(MAX),
 			CCFIELDS NVARCHAR(MAX),IsDefault bit)	
@@ -37,8 +38,9 @@ DECLARE @XML XML, @Dt FLOAT
 		
 		WHILE @I<=@COUNT
 		BEGIN
-			SELECT @ACTION=ACTIONNAME,@TEMPCONTACTTYPE=CONTACTTYPE,@CONTACTID=CONTACTID,@AddressXML=STATICIFLEDS ,@ExtraFields=ALPHAFIELDS,
-			@CCFields=CCFIELDS,@IsDefault=IsDefault FROM @CONTACTSTABLE WHERE ID=@I
+			SELECT @ACTION=ACTIONNAME,@TEMPCONTACTTYPE=CONTACTTYPE,@CONTACTID=CONTACTID,@AddressXML=STATICIFLEDS 
+			,@ExtraFields=ALPHAFIELDS,@CCFields=CCFIELDS,@IsDefault=IsDefault 
+			FROM @CONTACTSTABLE WHERE ID=@I
 			--SELECT @TEMPCONTACTTYPE,@ACTION,@CONTACTID,@AddressXML,@ExtraFields,@CCFields
 			IF @TEMPCONTACTTYPE=1
 			BEGIN
@@ -58,13 +60,13 @@ DECLARE @XML XML, @Dt FLOAT
 			BEGIN
 				INSERT INTO COM_Address(AddressTypeID,FeatureID,FeaturePK,IsDefault,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate])
 				VALUES (@TEMPCONTACTTYPE,@CostCenterID,@NodeID,@IsDefault,NEWID(),NEWID(),@UserName,@Dt)
-				SET @PrimaryContactID=SCOPE_IDENTITY()
+				SET @CONTACTID=SCOPE_IDENTITY()
 				
 			    IF (@AddressXML IS NOT NULL AND @AddressXML <> '')  
 				BEGIN    
 					set @UpdateSql='update [COM_Address]  
 					SET '+@AddressXML+',[ModifiedBy] ='''+ @UserName  
-					+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE AddressID='+convert(nvarchar,@PrimaryContactID)     
+					+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE AddressID='+convert(nvarchar,@CONTACTID)     
 					--SELECT @UpdateSql 
 					exec(@UpdateSql) 
 					--PRINT @UpdateSql
@@ -73,7 +75,7 @@ DECLARE @XML XML, @Dt FLOAT
 				IF (@ExtraFields IS NOT NULL AND @ExtraFields <> '')  
 				BEGIN 
 					set @UpdateSql='update COM_Address
-					SET '+@ExtraFields+' WHERE AddressID ='+convert(nvarchar,@PrimaryContactID)	
+					SET '+@ExtraFields+' WHERE AddressID ='+convert(nvarchar,@CONTACTID)	
 					exec(@UpdateSql)
 					--PRINT @UpdateSql
 				END
@@ -82,7 +84,7 @@ DECLARE @XML XML, @Dt FLOAT
 				BEGIN 
 					set @UpdateSql='UPDATE COM_Address
 					SET '+@CCFields+' 
-					WHERE AddressID='+convert(nvarchar,@PrimaryContactID)+''
+					WHERE AddressID='+convert(nvarchar,@CONTACTID)+''
 					exec(@UpdateSql)
 				END
 			END
@@ -119,6 +121,13 @@ DECLARE @XML XML, @Dt FLOAT
 			BEGIN 
 				DELETE FROM COM_Address WHERE AddressID=@CONTACTID 
 			END	
+			
+			--Duplicate Check
+			exec [spCOM_CheckUniqueCostCenter] @CostCenterID=110,
+			@NodeID =@CONTACTID,
+			@LangID=@LangID,
+			@RefCostCenterID=@CostCenterID
+	
 			SET @I=@I+1	
 		END
 		 

@@ -3,12 +3,14 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_GetAccBalance]
-	@AccountID [bigint] = 0,
-	@DocID [bigint] = 0,
+	@AccountID [int] = 0,
+	@DocID [int] = 0,
 	@isinventory [bit],
 	@SysDate [datetime],
 	@DocDate [datetime],
-	@UserID [bigint],
+	@LocationID [int],
+	@DivisonID [int],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -18,48 +20,63 @@ SET NOCOUNT ON
 
 		--Declaration Section
 		 DECLARE @DebitAmount FLOAT,@CreditLimt FLOAT,@BalDocDate FLOAT,@BalSysDate FLOAT,@includepdc nvarchar(50),@includeunposted nvarchar(50)
-		DECLARE @sql nvarchar(max),@where nvarchar(max)
+		DECLARE @sql nvarchar(max),@where nvarchar(max),@join nvarchar(max)
 			set @where=''
+			set @join=''
 			
-			select @includepdc=value from adm_globalpreferences
+		if exists (select Value from ADM_GlobalPreferences WITH(NOLOCK) where Name='EnableLocationWise' and Value='True') 
+		begin   
+			if  exists (select Value from ADM_GlobalPreferences WITH(NOLOCK) where Name='Location Balance' and Value='True')      
+				SET @join=' and CDC.dcCCNID2='+CONVERT(NVARCHAR,@LocationID)
+
+			if exists (select Value from ADM_GlobalPreferences WITH(NOLOCK) where Name='EnableDivisionWise' and Value='True') 
+			begin
+				if  exists (select Value from ADM_GlobalPreferences WITH(NOLOCK) where Name='Divison Balance' and Value='True')  
+					SET @join= @join+' and CDC.dcCCNID1='+CONVERT(NVARCHAR,@DivisonID)
+			end
+
+			if @join<>''
+				SET @join=' join com_docccdata CDC with(nolock) on ACC.AccDocDetailsID=CDC.AccDocDetailsID'+@join
+		end   
+			select @includepdc=value from adm_globalpreferences WITH(NOLOCK)
 			where name='IncludePDCs'
 			
-			select @includeunposted=value from adm_globalpreferences
+			select @includeunposted=value from adm_globalpreferences WITH(NOLOCK)
 			where name='IncludeUnPostedDocs'
 			
 			if(@includepdc='true')
 			begin
 				if(@includeunposted<>'true')
-					set @where=@where+' and ((DocumentType not in(14,19) and StatusID=369) or (DocumentType in(14,19) and StatusID=370))'
+					set @where=@where+' and ((ACC.DocumentType not in(14,19) and ACC.StatusID=369) or (ACC.DocumentType in(14,19) and ACC.StatusID=370))'
 				else
-					set @where=@where+' and (DocumentType not in(14,19) or (DocumentType in(14,19) and StatusID=370))'
+					set @where=@where+' and (ACC.DocumentType not in(14,19) or (ACC.DocumentType in(14,19) and ACC.StatusID=370))'
 				
 			end	
 			else
-				set @where=@where+' and DocumentType not in(14,19)'
+				set @where=@where+' and ACC.DocumentType not in(14,19)'
 			
 			if(@DocID>0)
 			BEGIN
 				if(@isinventory=1)
 				BEGIN
-					set @where=@where+' and invdocdetailsid not in(select invdocdetailsid from inv_docdetails WITH(NOLOCK) where DocID <>'+CONVERT(nvarchar,@DocID)+')'
+					set @where=@where+' and ACC.invdocdetailsid not in(select invdocdetailsid from inv_docdetails WITH(NOLOCK) where DocID <>'+CONVERT(nvarchar,@DocID)+')'
 				END
 				ElSE
-					set @where=@where+' and DocID <>'+CONVERT(nvarchar,@DocID)
+					set @where=@where+' and ACC.DocID <>'+CONVERT(nvarchar,@DocID)
 			END
 				
 			if(@includeunposted<>'true' and @includepdc<>'true')
-				set @where=@where+' and StatusID=369'
+				set @where=@where+' and ACC.StatusID=369'
 			 	--Debit Amount as on Document Date		
-			set @sql='SELECT @DebitAmount=SUM(ISNULL(AMOUNT,0)) FROM ACC_DocDetails WITH(NOLOCK) where DebitAccount='+convert(nvarchar,@AccountID)
-			+' and DocDate<='+convert(nvarchar,convert(float,@DocDate))+@where
+			set @sql='SELECT @DebitAmount=SUM(ISNULL(ACC.AMOUNT,0)) FROM ACC_DocDetails ACC WITH(NOLOCK) '+@JOIN+' where ACC.DebitAccount='+convert(nvarchar,@AccountID)
+			+' and ACC.DocDate<='+convert(nvarchar,convert(float,@DocDate))+@where
 			
 			exec sp_executesql @sql,N'@DebitAmount float output',@DebitAmount output
 			
 			
 			--Credit Amount as on Document Date			 
-			set @sql='SELECT @CreditLimt=SUM(ISNULL(AMOUNT,0)) FROM ACC_DocDetails WITH(NOLOCK) where CreditAccount='+convert(nvarchar,@AccountID)
-			+' and DocDate<='+convert(nvarchar,convert(float,@DocDate))+@where
+			set @sql='SELECT @CreditLimt=SUM(ISNULL(ACC.AMOUNT,0)) FROM ACC_DocDetails ACC WITH(NOLOCK)' +@JOIN+' where ACC.CreditAccount='+convert(nvarchar,@AccountID)
+			+' and ACC.DocDate<='+convert(nvarchar,convert(float,@DocDate))+@where
 			
 			exec sp_executesql @sql,N'@CreditLimt float output',@CreditLimt output
 			
@@ -69,15 +86,15 @@ SET NOCOUNT ON
 
 
 			--Debit Amount as on System Date		
-			set @sql='SELECT @DebitAmount=SUM(ISNULL(AMOUNT,0)) FROM ACC_DocDetails WITH(NOLOCK) where DebitAccount='+convert(nvarchar,@AccountID)
-			+' and DocDate<='+convert(nvarchar,convert(float,@SysDate))+@where
+			set @sql='SELECT @DebitAmount=SUM(ISNULL(ACC.AMOUNT,0)) FROM ACC_DocDetails ACC WITH(NOLOCK) ' +@JOIN+'  where ACC.DebitAccount='+convert(nvarchar,@AccountID)
+			+' and ACC.DocDate<='+convert(nvarchar,convert(float,@SysDate))+@where
 			
 			exec sp_executesql @sql,N'@DebitAmount float output',@DebitAmount output
 			
 			
 			--Credit Amount as on System Date			 
-			set @sql='SELECT @CreditLimt=SUM(ISNULL(AMOUNT,0)) FROM ACC_DocDetails WITH(NOLOCK) where CreditAccount='+convert(nvarchar,@AccountID)
-			+' and DocDate<='+convert(nvarchar,convert(float,@SysDate))+@where
+			set @sql='SELECT @CreditLimt=SUM(ISNULL(ACC.AMOUNT,0)) FROM ACC_DocDetails ACC WITH(NOLOCK) ' +@JOIN+'  where ACC.CreditAccount='+convert(nvarchar,@AccountID)
+			+' and ACC.DocDate<='+convert(nvarchar,convert(float,@SysDate))+@where
 			
 			exec sp_executesql @sql,N'@CreditLimt float output',@CreditLimt output
 		
@@ -108,16 +125,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
-
-
-
-
-
-
-
-
-
-
-
+END CATCH
 GO

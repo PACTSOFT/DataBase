@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spRPT_AvgRate]
 	@IsOpening [bit],
-	@ProductID [bigint],
+	@ProductID [int],
 	@TagSQL [nvarchar](max) = NULL,
 	@WHERE [nvarchar](max),
 	@FromDate [datetime],
@@ -151,12 +151,12 @@ SET NOCOUNT ON;
 	IF @TagSQL like '%DCCCNID%'
 	begin
 		set @TagSQL=' INNER JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=D.InvDocDetailsID'+@TagSQL
-		set @Order=@SortTransactionsBy+',ST DESC,VoucherType DESC,VoucherNo'
+		set @Order=@SortTransactionsBy+',ST DESC,VoucherType DESC,VoucherNo,Qty DESC'
 	end
 	ELSE
-		set @Order=@SortTransactionsBy+',ST DESC,VoucherNo,VoucherType DESC'
+		set @Order=@SortTransactionsBy+',ST DESC,VoucherNo,VoucherType DESC,Qty DESC'
 		
-	SET @SQL='DECLARE @FromDate FLOAT,@ToDate FLOAT,@ProductID BIGINT
+	SET @SQL='DECLARE @FromDate FLOAT,@ToDate FLOAT,@ProductID INT
 	SET @FromDate='+CONVERT(NVARCHAR,CONVERT(FLOAT,@FromDate))+'
 	SET @ToDate='+CONVERT(NVARCHAR,CONVERT(FLOAT,@ToDate))+'
 	SET @ProductID='+CONVERT(NVARCHAR,@ProductID)+' '
@@ -180,20 +180,25 @@ SET NOCOUNT ON;
 			SET @SQL=@SQL+' UNION ALL '
 		end
 		SET @SQL=@SQL+'
-		SELECT '+@TransactionsByOp+',D.VoucherNo,UOMConvertedQty Qty'+@RecRateColumn+',VoucherType,DocumentType,case when DocumentType=3 then 1 else 2 end OP,case when DocumentType=5 then 1 else 2 end ST
+		SELECT '+@TransactionsByOp+',D.VoucherNo,D.UOMConvertedQty Qty'+@RecRateColumn+',D.VoucherType,D.DocumentType,case when D.DocumentType=3 then 1 else 2 end OP,case when D.DocumentType=5 then 1 else 2 end ST
 		FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
-		WHERE D.ProductID=@ProductID AND IsQtyIgnored=0 AND UOMConvertedQty!=0 AND D.VoucherType=1'+@DateFilterOp1+@UnAppSQL+@CurrWHERE+@WHERE
+		WHERE D.ProductID=@ProductID AND D.IsQtyIgnored=0 AND D.UOMConvertedQty!=0 AND D.VoucherType=1'+@DateFilterOp1+@UnAppSQL+@CurrWHERE+@WHERE
 		--IF @Valuation=3
 		--BEGIN		
 			SET @SQL=@SQL+' UNION ALL
-			SELECT '+@TransactionsByOp+',D.VoucherNo,UOMConvertedQty,NULL RecRate'
+			SELECT '+@TransactionsByOp+',D.VoucherNo,D.UOMConvertedQty,0 RecRate'
 			if @Valuation=7
-				SET @SQL=@SQL+','+@ValColumn+' RecValue'
+				SET @SQL=@SQL+',D.'+@ValColumn+' RecValue'
+			else if @Valuation=8
+					SET @SQL=@SQL+',CASE WHEN P.ProductTypeID=5 THEN ISNULL((SELECT TOP 1 BD.'+@ValColumn+'/BD.Quantity FROM INV_DocDetails BD WITH(NOLOCK) WHERE BD.InvDocDetailsID=D.RefInvDocDetailsID AND BD.BatchID=D.BatchID),0)*D.Quantity ELSE D.'+@ValColumn+' END RecValue'
 			else
-				SET @SQL=@SQL+',NULL RecValue'
-			SET @SQL=@SQL+',-1 VoucherType,DocumentType,2 OP,case when DocumentType=5 then 1 else 0 end ST
-			FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
-			WHERE D.ProductID=@ProductID AND IsQtyIgnored=0 AND D.VoucherType=-1'+@DateFilterOp2+@UnAppSQL+@CurrWHERE+@WHERE
+				SET @SQL=@SQL+',0 RecValue'
+			SET @SQL=@SQL+',-1 VoucherType,D.DocumentType,2 OP,case when D.DocumentType=5 then 1 else 0 end ST
+			FROM INV_DocDetails D WITH(NOLOCK) '
+			if @Valuation=8
+					SET @SQL=@SQL+'INNER JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID '
+			SET @SQL=@SQL+@TagSQL+'
+			WHERE D.ProductID=@ProductID AND D.IsQtyIgnored=0 AND D.VoucherType=-1'+@DateFilterOp2+@UnAppSQL+@CurrWHERE+@WHERE
 		--END
 		--ELSE
 		--BEGIN
@@ -215,18 +220,23 @@ SET NOCOUNT ON;
 		end
 
 		SET @SQL=@SQL+'
-		SELECT '+@TransactionsByOp+',D.VoucherNo,UOMConvertedQty Qty'+@RecRateColumn+',VoucherType,DocumentType,case when DocumentType=3 then 1 else 2 end OP,case when DocumentType=5 then 1 else 2 end ST
+		SELECT '+@TransactionsByOp+',D.VoucherNo,D.UOMConvertedQty Qty'+@RecRateColumn+',D.VoucherType,D.DocumentType,case when D.DocumentType=3 then 1 else 2 end OP,case when D.DocumentType=5 then 1 else 2 end ST
 		FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
-		WHERE D.ProductID=@ProductID AND IsQtyIgnored=0 AND UOMConvertedQty!=0 AND D.VoucherType=1'+@DateFilterCol+@UnAppSQL+@CurrWHERE+@WHERE
+		WHERE D.ProductID=@ProductID AND D.IsQtyIgnored=0 AND D.UOMConvertedQty!=0 AND D.VoucherType=1'+@DateFilterCol+@UnAppSQL+@CurrWHERE+@WHERE
 		SET @SQL=@SQL+' UNION ALL
-		SELECT '+@TransactionsByOp+',D.VoucherNo,UOMConvertedQty,NULL RecRate'
+		SELECT '+@TransactionsByOp+',D.VoucherNo,D.UOMConvertedQty,0 RecRate'
 		if @Valuation=7
-			SET @SQL=@SQL+','+@ValColumn+' RecValue'
+			SET @SQL=@SQL+',D.'+@ValColumn+' RecValue'
+		else if @Valuation=8
+					SET @SQL=@SQL+',CASE WHEN P.ProductTypeID=5 THEN ISNULL((SELECT TOP 1 BD.'+@ValColumn+'/BD.Quantity FROM INV_DocDetails BD WITH(NOLOCK) WHERE BD.InvDocDetailsID=D.RefInvDocDetailsID AND BD.BatchID=D.BatchID),0)*D.Quantity ELSE D.'+@ValColumn+' END RecValue'
 		else
-			SET @SQL=@SQL+',NULL RecValue'
-		SET @SQL=@SQL+',-1 VoucherType,DocumentType,2 OP,case when DocumentType=5 then 1 else 0 end ST
-		FROM INV_DocDetails D WITH(NOLOCK) '+@TagSQL+'
-		WHERE D.ProductID=@ProductID AND IsQtyIgnored=0 AND D.VoucherType=-1'+@DateFilterCol+@UnAppSQL+@CurrWHERE+@WHERE
+			SET @SQL=@SQL+',0 RecValue'
+		SET @SQL=@SQL+',-1 VoucherType,D.DocumentType,2 OP,case when D.DocumentType=5 then 1 else 0 end ST
+		FROM INV_DocDetails D WITH(NOLOCK) '
+		if @Valuation=8
+			SET @SQL=@SQL+'INNER JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID '
+		SET @SQL=@SQL+@TagSQL+'
+		WHERE D.ProductID=@ProductID AND D.IsQtyIgnored=0 AND D.VoucherType=-1'+@DateFilterCol+@UnAppSQL+@CurrWHERE+@WHERE
 
 
 	END
@@ -330,7 +340,24 @@ SET NOCOUNT ON;
                 if(@Date>=@IFromDate)
 					set @dblSelectedIssueQty=@dblSelectedIssueQty+@RecQty
             end
-
+			
+			if @IsMnWise=1
+			begin
+				set @OpBalanceQty=@dblQty-@dblIssueQty
+				set @dblAvgRate=@dblPrevAvgRate
+				if(@PrMn is not null)
+				begin				
+					if @dblQty>0
+						set @dblAvgRate=(@dblMnOpValue+@dblValue)/@dblQty
+				end
+				set @OpBalanceValue=@OpBalanceQty*@dblAvgRate
+				update #TblAvgMn
+				set  BalQty=@OpBalanceQty,AvgRate=@dblAvgRate
+					,BalValue=case when @OpBalanceQty!=0 then @OpBalanceValue else 0 end
+					,IsDone=1
+				where @Date between FromDate and ToDate
+			end
+			
 			FETCH NEXT FROM @SPInvoice Into @Date,@VoucherType,@RecQty,@RecValue,@ID,@DocumentType
 			SET @nStatusOuter = @@FETCH_STATUS
 		END
@@ -367,6 +394,11 @@ SET NOCOUNT ON;
 		DECLARE @lstRecTbl AS TABLE(ID INT IDENTITY(1,1) PRIMARY KEY,Qty FLOAT,Rate FLOAT,DocumentType INT)
 		WHILE(@nStatusOuter <> -1)
 		BEGIN
+			if(@RecQty<0)
+			begin
+				set @RecQty=-@RecQty
+				set @VoucherType=-@VoucherType
+			end	
 			if @VoucherType=1
 			begin
 				--if(@OpBalanceValue<0)
@@ -402,7 +434,7 @@ SET NOCOUNT ON;
 					BEGIN
 						if @dblAvgRate IS NULL
 							set @dblAvgRate=0
-						if (@Valuation=7)
+						if (@Valuation=7 or @Valuation=8)
 							set @dblAvgRate=@dblUOMRate
                         else
 							set @dblUOMRate=@dblAvgRate
@@ -469,7 +501,7 @@ SET NOCOUNT ON;
 					if(@Date>=@IFromDate)
 						set @COGS=@COGS+@dblAvgRate*@RecQty
 				end
-				else if (@Valuation=7)--Invoice Rate
+				else if (@Valuation=7 OR @Valuation=8)--Invoice Rate
 				begin
 					set @OpBalanceValue=@OpBalanceValue-@RecValue
 					if(@OpBalanceValue<0)

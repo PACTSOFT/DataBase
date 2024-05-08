@@ -18,40 +18,96 @@ AS
 BEGIN TRANSACTION      
 BEGIN TRY      
 SET NOCOUNT ON;     
+
 	--Declaration Section    
-	DECLARE @temp nvarchar(100),@GUID  NVARCHAR(50),@Name nvarchar(100),@level int,@maxLevel INT,@tempLevel int,
-	@WID INT,@oldStatusID int,@STATUSID INT,@SQL nvarchar(max),@CStatusID INT, @Assigned INT=0
+	 DECLARE @temp nvarchar(100),@GUID  NVARCHAR(50),@Name nvarchar(100),@level int,@maxLevel INT,@tempLevel int,
+	 @WID INT,@oldStatusID int,@STATUSID INT,@SQL nvarchar(max),@CStatusID INT, @Assigned INT=0
+     DECLARE @sqlSelect nvarchar(max)
+	 DECLARE @TabName varchar(1000)
 
 	--SP Required Parameters Check    
 	IF @COSTCENTERID<0 OR @NODEID<0
 	BEGIN    
 		RAISERROR('-100',16,1)    
-	END  
-	
- 
+	END   
+
+	 select @TabName = TableName from ADM_Features  WITH(NOLOCK) where FeatureID=@CostCenterID
+			 
 
 	  if(@CostCenterID=2)
 		BEGIN
-			select  @WID=WFID,@tempLevel=WFLevel,@GUID=[guid],@oldStatusID=Statusid 
-	    	FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=@NODEID and WFID>0
-			print '@tempLevel'
-			print @tempLevel
+			select  @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=Statusid 
+	    	FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=@NODEID and WorkFlowID>0		
 		END
-   ELSE if(@CostCenterID=3)
-		BEGIN
-			select  @WID=WFID,@tempLevel=WFLevel,@GUID=[guid],@oldStatusID=Statusid 
-	    	FROM INV_Product WITH(NOLOCK) WHERE ProductID=@NODEID and WFID>0
-		END
-
-	ELSE if(@CostCenterID>=50001 and @CostCenterID<=50008)
-		BEGIN
-		 	declare @sqlSelect nvarchar(max)
-			declare @TableName1 varchar(1000)
-			select @TableName1 = TableName from ADM_Features  WITH(NOLOCK) where FeatureID=@CostCenterID
+     ELSE if(@CostCenterID=3)
+			BEGIN
+				SELECT  @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=Statusid 
+	    		FROM INV_Product WITH(NOLOCK) WHERE ProductID=@NODEID and WorkFlowID>0
+			END
 			 
+     ELSE if(@CostCenterID IN(93,94))
+			BEGIN	
+	            set @sqlSelect=' SELECT @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=ISNULL(Status,0) 
+				FROM  '+@TabName+' WITH(NOLOCK) where   WorkFlowID>0 and NodeId='+ convert(nvarchar,@NodeID) +' '
+				print (@sqlSelect)
+				EXEC sp_executesql @sqlSelect,N'@WID int output,@tempLevel int output,@GUID NVARCHAR(50) output,@oldStatusID int output', @WID output,@tempLevel output,@GUID output ,@oldStatusID output
 
-			set @sqlSelect=' SELECT @WID=WFID,@tempLevel=WFLevel,@GUID=[guid],@oldStatusID=Statusid 
-		FROM  '+@TableName1+' WITH(NOLOCK) where  NodeId='+ convert(nvarchar,@NodeID) +' '
+			END 
+	ELSE if(@CostCenterID=94)
+		BEGIN		
+		       set @sqlSelect=' SELECT @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=ISNULL(Statusid,0) 
+				FROM  '+@TabName+' WITH(NOLOCK) where   WorkFlowID>0 and TenantID='+ convert(nvarchar,@NodeID) +' '
+				print (@sqlSelect)
+				EXEC sp_executesql @sqlSelect,N'@WID int output,@tempLevel int output,@GUID NVARCHAR(50) output,@oldStatusID int output', @WID output,@tempLevel output,@GUID output ,@oldStatusID output
+		END
+		ELSE if(@CostCenterID=86)
+		BEGIN	 
+		    set @sqlSelect=' SELECT @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=ISNULL(Statusid,0) 
+			FROM  '+@TabName+' WITH(NOLOCK) where   WorkFlowID>0 and LeadID='+ convert(nvarchar,@NodeID) +' '
+			print (@sqlSelect)
+			 
+			EXEC sp_executesql @sqlSelect,N'@WID int output,@tempLevel int output,@GUID NVARCHAR(50) output,@oldStatusID int output', @WID output,@tempLevel output,@GUID output ,@oldStatusID output
+		END
+		ELSE if(@CostCenterID=72)
+		BEGIN	 
+		    set @sqlSelect=' SELECT @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=ISNULL(Statusid,0) 
+			FROM  '+@TabName+' WITH(NOLOCK) where   WorkFlowID>0 and AssetID='+ convert(nvarchar,@NodeID) +' '
+			print (@sqlSelect)
+			 
+			EXEC sp_executesql @sqlSelect,N'@WID int output,@tempLevel int output,@GUID NVARCHAR(50) output,@oldStatusID int output', @WID output,@tempLevel output,@GUID output ,@oldStatusID output
+		END
+		ELSE if(@CostCenterID=83)
+		BEGIN	 
+		    set @sqlSelect=' SELECT @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=ISNULL(Statusid,0) 
+			FROM  '+@TabName+' WITH(NOLOCK) where   WorkFlowID>0 and CustomerID='+ convert(nvarchar,@NodeID) +' '
+			print (@sqlSelect)
+			 
+			EXEC sp_executesql @sqlSelect,N'@WID int output,@tempLevel int output,@GUID NVARCHAR(50) output,@oldStatusID int output', @WID output,@tempLevel output,@GUID output ,@oldStatusID output
+		END
+	   ELSE if(@CostCenterID=76)
+		BEGIN	 
+		    set @sqlSelect=' SELECT @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=ISNULL(Statusid,0) 
+			FROM  '+@TabName+' WITH(NOLOCK) where   WorkFlowID>0 and BOMID='+ convert(nvarchar,@NodeID) +' '
+			print (@sqlSelect)
+			 
+			EXEC sp_executesql @sqlSelect,N'@WID int output,@tempLevel int output,@GUID NVARCHAR(50) output,@oldStatusID int output', @WID output,@tempLevel output,@GUID output ,@oldStatusID output
+		END
+		ELSE if(@CostCenterID=89)
+		BEGIN	 
+		       set @sqlSelect=' SELECT @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=ISNULL(Statusid,0) 
+				FROM  '+@TabName+' WITH(NOLOCK) where   WorkFlowID>0 and OpportunityID='+ convert(nvarchar,@NodeID) +' '
+				print (@sqlSelect)
+				EXEC sp_executesql @sqlSelect,N'@WID int output,@tempLevel int output,@GUID NVARCHAR(50) output,@oldStatusID int output', @WID output,@tempLevel output,@GUID output ,@oldStatusID output
+		END
+
+
+ 
+	ELSE if(@CostCenterID>=50000)
+		BEGIN
+		
+
+			set @sqlSelect=' SELECT @WID=WorkFlowID,@tempLevel=WorkFlowLevel,@GUID=[guid],@oldStatusID=Statusid 
+		FROM  '+@TabName+' WITH(NOLOCK) where  NodeId='+ convert(nvarchar,@NodeID) +' '
 			print (@sqlSelect)
 				EXEC sp_executesql @sqlSelect,N'@WID int output,@tempLevel int output,@GUID NVARCHAR(50) output,@oldStatusID int output', @WID output,@tempLevel output,@GUID output ,@oldStatusID output
 
@@ -89,8 +145,6 @@ SET NOCOUNT ON;
 			
 		
 	select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK) where WorkFlowID=@WID
-	
-
 
 	if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
 	begin	
@@ -117,8 +171,7 @@ SET NOCOUNT ON;
 					set @CStatusID=33
 			END
 
-		ELSE if(@CostCenterID>=50001 and @CostCenterID <=50008)
-		--ELSE if((@CostCenterID>=50001 and @CostCenterID<=50054) or  @CostCenterID=50170)
+		ELSE if(@CostCenterID>=50001)	 
 			BEGIN
 
 				select @StatusID=1002
@@ -127,30 +180,51 @@ SET NOCOUNT ON;
 				if @CStatusID is null
 					set @CStatusID=43
 			END
+		ELSE if(@CostCenterID in(86))
+		
+			BEGIN
+				select @StatusID=1002
+				select @CStatusID=NodeID from com_lookup with(nolock) where lookuptype=56 and IsDefault=1
+		 
+					if @CStatusID is null
+					set @CStatusID=56
+			end
+			ELSE if(@CostCenterID in(89))
+		
+			BEGIN
+				select @StatusID=1002
+				select @CStatusID=StatusID from COM_Status with(nolock) where CostCenterID=89 and [Status]='Active'
+					if @CStatusID is null
+					set @CStatusID=333
+			end
+			ELSE if(@CostCenterID in(72))		
+			BEGIN
+				select @StatusID=1002
+				select @CStatusID=StatusID from COM_Status with(nolock) where CostCenterID=72 and [Status]='Active'
+					if @CStatusID is null
+					set @CStatusID=1
+			end
+			ELSE if(@CostCenterID in(76))		
+			BEGIN
+				select @StatusID=1002
+				select @CStatusID=StatusID from COM_Status with(nolock) where CostCenterID=76 and [Status]='Active'
+					if @CStatusID is null
+					set @CStatusID=51
+			end
+			ELSE if(@CostCenterID in(83))		
+			BEGIN
+				select @StatusID=1002
+				select @CStatusID=StatusID from COM_Status with(nolock) where CostCenterID=83 and [Status]='Active'
+					if @CStatusID is null
+					set @CStatusID=393
+			end
 		else
 			select @StatusID=StatusID from COM_Status with(nolock) where CostCenterID=@CostCenterID and [Status]='Active'
-			--select * from COM_Status where CostCenterID=50001
+			 
 	end
 	else
 		set @StatusID=1003
-
-		print '@oldStatusID'
-		print @oldStatusID
-		
-		print '@StatusID'
-		print @StatusID
-
-		print '@@CStatusID'
-		print @CStatusID
-		
-
-		print '@@tempLevel'
-		print @tempLevel
-		
-		print '@@Level'
-		print @Level
-
-		
+			 		
 	if @oldStatusID!=@StatusID OR @Level!=@tempLevel
 	begin 
 		if(@WID>0)
@@ -179,31 +253,43 @@ SET NOCOUNT ON;
 			else
 				EXEC spCOM_SetNotifEvent -2000,@CostCenterID,@NodeID,'CompanyGUID',@UserName,@UserID,@RoleID
 		END
-	    
-		 if(@CostCenterID=3 or @CostCenterID=2 )
+	
+		 if @CostCenterID IN(92,94,2,3,86,89)
 		begin
-		
-			select @SQL='update '+TableName+' set StatusID='+convert(nvarchar,CASE  WHEN @CostCenterID=@CostCenterID THEN ISNULL(@CStatusID,@StatusID)  ELSE @StatusID END)+',WFLevel='+convert(nvarchar,@level)+' 
+		 		 
+		    select @SQL='update '+TableName+' set StatusID='+convert(nvarchar,CASE  WHEN @CostCenterID=@CostCenterID THEN ISNULL(@CStatusID,@StatusID)  ELSE @StatusID END)+',WorkFlowLevel='+convert(nvarchar,@level)+' 
 			where '+PrimaryKey+'='+convert(nvarchar,@NodeID)
 			from ADM_Features with(nolock) where FeatureID=@CostCenterID
+			print (@SQL)	
+		    exec(@SQL)
 		end
-		else  if(@CostCenterID>=50001 and @CostCenterID<=50008)
+		
+		 if @CostCenterID IN(72,83,76)
 		begin
-		PRINT '@CStatusID'
-		PRINT @CStatusID
-			select @SQL='update '+TableName+' set StatusID='+convert(nvarchar,CASE  WHEN @CostCenterID=@CostCenterID THEN ISNULL(@CStatusID,@StatusID)  ELSE @StatusID END)+',WFLevel='+convert(nvarchar,@level)+' 
+		 		 
+		    select @SQL='update '+TableName+' set StatusID='+convert(nvarchar,CASE  WHEN @CostCenterID=@CostCenterID THEN ISNULL(@CStatusID,@StatusID)  ELSE @StatusID END)+',WorkFlowLevel='+convert(nvarchar,@level)+' 
+			where '+PrimaryKey+'='+convert(nvarchar,@NodeID)
+			from ADM_Features with(nolock) where FeatureID=@CostCenterID
+			print (@SQL)	
+		    exec(@SQL)
+		end
+		else  if @CostCenterID IN(93)--units
+		BEGIN
+			select @SQL='update '+TableName+' set Status='+convert(nvarchar,CASE  WHEN @CostCenterID=@CostCenterID THEN ISNULL(@CStatusID,@StatusID)  ELSE @StatusID END)+',WorkFlowLevel='+convert(nvarchar,@level)+' 
+			where '+PrimaryKey+'='+convert(nvarchar,@NodeID)
+			from ADM_Features with(nolock) where FeatureID=@CostCenterID
+			print @SQL
+		    exec(@SQL)
+		END	
+		
+		else  if(@CostCenterID>=50000)
+		begin	
+			select @SQL='update '+TableName+' set StatusID='+convert(nvarchar,CASE  WHEN @CostCenterID=@CostCenterID THEN ISNULL(@CStatusID,@StatusID)  ELSE @StatusID END)+',WorkFlowLevel='+convert(nvarchar,@level)+' 
 			where '+PrimaryKey+'='+convert(nvarchar,@NodeID)
 			from ADM_Features with(nolock) where FeatureID=@CostCenterID
 		end
 		print @SQL
-		exec(@SQL)
-			PRINT '@CStatusID'
-		PRINT @CStatusID
-		
-			PRINT '@@CostCenterID'
-		PRINT @CostCenterID
-	 
-	 
+		exec(@SQL) 	 
 		
 		IF @oldStatusID!=@StatusID AND EXISTS (SELECT * FROM COM_DocBridge WITH(NOLOCK) WHERE CostCenterID=50001 AND NodeID=@NodeID)
 		BEGIN
@@ -223,11 +309,17 @@ SET NOCOUNT ON;
 COMMIT TRANSACTION  
 SET NOCOUNT OFF;    
 --else if ((@CostCenterID>=50001 and @CostCenterID<=50054) or  @CostCenterID=50170)
-IF(@CStatusID IS NOT NULL  AND @CostCenterID IN(2,3) OR  (@CostCenterID>=50001 and @CostCenterID<=50008))
+IF(@CStatusID IS NOT NULL  AND @CostCenterID IN(2,3,93,92,94,76,83) OR  (@CostCenterID>=50001))
 BEGIN
 	select @temp=isnull(ResourceData,'') from COM_Status S WITH(NOLOCK)
 	 join COM_LanguageResources R WITH(NOLOCK) on R.ResourceID=S.ResourceID and R.LanguageID=@LangID
 	 where S.StatusID=@CStatusID
+END
+else IF(@CStatusID IS NOT NULL  AND @CostCenterID IN(89))
+BEGIN	
+	select @temp=isnull(ResourceData,'') from COM_Lookup S WITH(NOLOCK)
+	 join COM_LanguageResources R WITH(NOLOCK) on R.ResourceID=S.ResourceID and R.LanguageID=@LangID
+	 where S.NodeID=@CStatusID
 END
 ELSE
 BEGIN

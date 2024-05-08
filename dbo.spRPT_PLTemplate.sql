@@ -29,7 +29,7 @@ AS
 BEGIN TRY  
 SET NOCOUNT ON;  
 	declare @SQL NVARCHAR(MAX),@FSQL NVARCHAR(MAX),@FTEMPSQL NVARCHAR(MAX),@AmtColumn NVARCHAR(10),@CurrWHERE1 NVARCHAR(30)
-	declare @strM1 nvarchar(50),@strM2 nvarchar(100),@strM3 nvarchar(100),@strM4 nvarchar(100),@strFY1 nvarchar(100)
+	declare @strM1 nvarchar(max),@strM2 nvarchar(100),@strM3 nvarchar(100),@strM4 nvarchar(100),@strFY1 nvarchar(100)
 	declare @strWEF1 nvarchar(50),@strWEF2 nvarchar(100),@strWEF3 nvarchar(100),@strWEF4 nvarchar(100)
 	declare @str1 nvarchar(max),@str2 nvarchar(max)
 	declare @strUnAppSQL nvarchar(max),@strPDCWhere nvarchar(max),@strOpeningPDCWhere nvarchar(max)
@@ -147,8 +147,44 @@ end
 		set @strM3=',TagID'
         set @strM4=',TagID'
 	end
+
+	declare @CADimension int,@CAJoin nvarchar(max),@CAWhere nvarchar(max),@RTJoin nvarchar(max),@CNT INT
+	set @CADimension=0
+	--if @Show = 0
+		select @CADimension=Value from ADM_GlobalPreferences with(nolock) where Name='ControlAccDimension' and ISNUMERIC(Value)=1
+	set @CAJoin=''
+	set @CAWhere=''
+	set @RTJoin=' INNER JOIN (select AccountID from ACC_ReportTemplate with(nolock) where TemplateNodeID='+convert(nvarchar,@TemplateID)+' group by AccountID) RT ON GT1.AccountID=RT.AccountID'
+	if @CADimension>0
+	begin
+		set @SQL=' select @CNT=count(*) from ACC_ReportTemplate R with(nolock)  JOIN COM_CCCCDATA ACA WITH(NOLOCK) ON ACA.CostCenterID=2 and ACA.NodeID=R.AccountID
+		where TemplateNodeID='+convert(nvarchar,@TemplateID)+' and ACA.CCNID' + convert(nvarchar,(@CADimension-50000))+'!=1'
+		EXEC sp_executesql @SQL,N'@CNT INT OUTPUT',@CNT OUTPUT 
+		if @CNT=0
+			set @CADimension=0
+		else
+		begin
+			set @strM1=@strM1+',isnull(CADID,1) CADID,ACA.CCNID' + convert(nvarchar,(@CADimension-50000))+' CAD,A.AccountTypeID,RT.IsRT'
+			set @strM2+=',DCC.dcCCNID' + convert(nvarchar,(@CADimension-50000))+' CADID'
+			--set @strM3+=',case when CA.AccountTypeID=6 or CA.AccountTypeID=7 then CADID else 1 end CADID'
+			set @strM3+=',CADID'
+			set @strM4+=',CADID'
+			set @CAJoin=' JOIN COM_CCCCDATA ACA WITH(NOLOCK) ON ACA.CostCenterID=2 and ACA.NodeID=A.AccountID'
+			set @RTJoin=' JOIN (select AccountID,max(IsRT) IsRT from (select AccountID,1 IsRT from ACC_ReportTemplate with(nolock)
+where TemplateNodeID=12
+union all
+(select AccountID,0 IsRT from ACC_Accounts with(nolock) where IsGroup=0 and (AccountTypeID=6 or AccountTypeID=7))
+) RT group by AccountID
+) RT ON GT1.AccountID=RT.AccountID'
+			set @CAWhere=' and (CADID>1 or RT.IsRT=1) and (CADID is not null or ACA.CCNID' + convert(nvarchar,(@CADimension-50000))+'>1)'--' and (CADID>1 or (A.AccountTypeID!=6 and A.AccountTypeID!=7))'
+			--set @CAWhere=' and (CADID=3 or RT.IsRT=1) '--' and (CADID>1 or (A.AccountTypeID!=6 and A.AccountTypeID!=7))'
+			-- and AccountID=2092
+		end
+	end
+
 	
-	if len(@DimensionFilter)>0 OR @Show>50000
+	
+	if len(@DimensionFilter)>0 OR @Show>50000 or @CADimension>0
 	begin
 		set @str1=' INNER JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.AccDocDetailsID=ACC.AccDocDetailsID '
         set @str2=' INNER JOIN COM_DocCCData DCC WITH(NOLOCK) ON DCC.InvDocDetailsID=ACC.InvDocDetailsID '
@@ -201,11 +237,11 @@ FROM ('
 		set @SQL=@SQL+'
 --Opening Dr
 SELECT DebitAccount AccountID'+@strM2+',ACC.'+@AmtColumn+' OP_Dr,0 OP_Cr,0 TR_Dr,0 TR_Cr
-FROM ACC_DocDetails ACC WITH(NOLOCK)'+@str1+'
+FROM ACC_DocDetails ACC WITH(NOLOCK)'+@str1+@strFY1+'
 WHERE (DocDate<@From OR ACC.DocumentType=16) AND ACC.StatusID<>371 '+@strOpeningPDCWhere+@CurrWHERE1+@DimensionFilter+'
 UNION ALL--Opening Cr
 SELECT CreditAccount AccountID'+@strM2+',0 OP_Dr,ACC.'+@AmtColumn+' OP_Cr,0 TR_Dr, 0 TR_Cr
-FROM ACC_DocDetails ACC WITH(NOLOCK)'+@str1+'
+FROM ACC_DocDetails ACC WITH(NOLOCK)'+@str1+@strFY1+'
 WHERE (DocDate<@From OR ACC.DocumentType=16) AND ACC.StatusID<>371 '+@strOpeningPDCWhere+@CurrWHERE1+@DimensionFilter
 		set @SQL=@SQL+'
 UNION ALL--Transaction Dr'
@@ -228,11 +264,11 @@ WHERE (DocDate BETWEEN @From AND @To)'+@strPDCWhere+@CurrWHERE1+@DimensionFilter
 		set @SQL=@SQL+'
 UNION ALL--Opening Dr
 SELECT DebitAccount AccountID'+@strM2+@strWEF2+',ACC.'+@AmtColumn+' OP_Dr,0 OP_Cr,0 TR_Dr,0 TR_Cr
-FROM ACC_DocDetails ACC WITH(NOLOCK)'+@str2+'
+FROM ACC_DocDetails ACC WITH(NOLOCK)'+@str2+@strFY1+'
 WHERE (DocDate<@From OR ACC.DocumentType=16) AND ACC.StatusID<>371 '+@strOpeningPDCWhere+@CurrWHERE1+@DimensionFilter+'
 UNION ALL--Opening Cr
 SELECT CreditAccount AccountID'+@strM2+@strWEF2+',0 OP_Dr,ACC.'+@AmtColumn+' OP_Cr,0 TR_Dr, 0 TR_Cr
-FROM ACC_DocDetails ACC WITH(NOLOCK)'+@str2+'
+FROM ACC_DocDetails ACC WITH(NOLOCK)'+@str2+@strFY1+'
 WHERE (DocDate<@From OR ACC.DocumentType=16) AND ACC.StatusID<>371 '+@strOpeningPDCWhere+@CurrWHERE1+@DimensionFilter
 
 		end
@@ -251,32 +287,17 @@ WHERE (DocDate BETWEEN @From AND @To)'+@strPDCWhere+@CurrWHERE1+@DimensionFilter
 	set @SQL=@SQL+') AS T1 GROUP BY AccountID'+@strM4+@strWEF4+'
 ) AS ACC'
 
-if(@ZeroBalanceAccounts=1)
+if(@ZeroBalanceAccounts=1 OR @CADimension>0)
 	set @SQL=@SQL+' RIGHT JOIN'
 else
 	set @SQL=@SQL+' INNER JOIN'
 
-set @SQL=@SQL+' ACC_Accounts A WITH(NOLOCK) ON A.AccountID=ACC.AccountID
+set @SQL=@SQL+' ACC_Accounts A WITH(NOLOCK) ON A.AccountID=ACC.AccountID'+@CAJoin+'
 ,ACC_Accounts GT1 with(nolock)
-INNER JOIN (select AccountID from ACC_ReportTemplate with(nolock) where TemplateNodeID='+convert(nvarchar,@TemplateID)+' group by AccountID) RT ON GT1.AccountID=RT.AccountID
+'+@RTJoin+'
 WHERE A.AccountID>1 and A.lft BETWEEN GT1.lft AND GT1.rgt'
 
-
-
-
-	set @SQL=@SQL+' AND A.AccountID>1'+@AccountsLocationWise
-	/*if (!ViewModel.HideCostCenterTree)
-    {
-                string[] arrSeq = strSeqNos.Split(',');
-                if (!arrSeq.Contains("1") && !arrSeq.Contains("0"))
-                    sb.Append(" AND A.AccountID IN (" + strSeqNos + ")");
-                else
-                    sb.Append(" AND A.AccountTypeID IN (" + strFilter1 + "," + strFilter2 + ")");
-            }
-            else
-            {
-                sb.Append(" AND A.AccountTypeID IN (" + strFilter1 + "," + strFilter2 + ")");
-            }*/
+	set @SQL=@SQL+' AND A.AccountID>1'+@AccountsLocationWise+@CAWhere
 
 	set @SQL=@SQL+' Order By lft'
 	if(@IsWEF=1)
@@ -286,11 +307,12 @@ WHERE A.AccountID>1 and A.lft BETWEEN GT1.lft AND GT1.rgt'
 	set @FSQL='DECLARE @From FLOAT,@To FLOAT
 set @From='+convert(nvarchar,convert(float,@FromDate))+'
 set @To='+convert(nvarchar,convert(float,@ToDate))+@SQL
-	--print(@FSQL)
+	print(@FSQL)
+	print(substring(@FSQL,4001,4000))
 	exec(@FSQL)	
 --print(substring(@FSQL,1,4000))
 --if(len(@FSQL)>4000)
---	print(substring(@FSQL,4001,len(@FSQL)-4000))
+
 -- select len(@SQL)
 
 	SET @FTEMPSQL=@SQL
@@ -341,18 +363,27 @@ set @To='+convert(nvarchar,convert(float,dateadd(dd,-1,@FromDate)))+@SQL
 		
 	--To Get Year Start
 	select @YearStartMonth YearStart
-	
-	if @Show<50000
-	begin
-		set @strM1=''
-		set @strM2=''
-		set @strM3=''
-		set @strM4=''
-	end
-	
+
 	--To Get Opening Balance
 	if @IsOpeningNodeWise=1
 	begin
+		if @Show<50000
+		begin
+			set @strM1=''
+			set @strM2=''
+			set @strM3=''
+			set @strM4=''
+		end
+
+		if @CAJoin!=''
+		begin
+			set @strM1=@strM1+',CADID,ACA.CCNID' + convert(nvarchar,(@CADimension-50000))+' CAD,A.AccountTypeID,RT.IsRT'
+			set @strM2+=',DCC.dcCCNID' + convert(nvarchar,(@CADimension-50000))+' CADID'
+			--set @strM3+=',case when CA.AccountTypeID=6 or CA.AccountTypeID=7 then CADID else 1 end CADID'
+			set @strM3+=',CADID'
+			set @strM4+=',CADID'			
+		end
+	
 		set @SQL='DECLARE @From FLOAT,@To FLOAT
 	set @From='+convert(nvarchar,convert(float,@FromDate))+'
 	SELECT A.AccountCode Code,A.AccountName Name,ACC.Balance,A.AccountID'+@strM1+',A.IsGroup,A.lft,A.rgt
@@ -384,17 +415,17 @@ set @To='+convert(nvarchar,convert(float,dateadd(dd,-1,@FromDate)))+@SQL
 
 		set @SQL=@SQL+') AS T1 GROUP BY AccountID'+@strM4+'
 	) AS ACC'
-	
-	if(@ZeroBalanceAccounts=1)
+
+	if(@ZeroBalanceAccounts=1 OR @CADimension>0)
 	set @SQL=@SQL+' RIGHT JOIN'
 	else
 	set @SQL=@SQL+' INNER JOIN'
 	
-	set @SQL=@SQL+' ACC_Accounts A WITH(NOLOCK) ON A.AccountID=ACC.AccountID
+	set @SQL=@SQL+' ACC_Accounts A WITH(NOLOCK) ON A.AccountID=ACC.AccountID'+@CAJoin+'
 	,ACC_Accounts GT1 with(nolock)
-	INNER JOIN (select AccountID from ACC_ReportTemplate with(nolock) where TemplateNodeID='+convert(nvarchar,@TemplateID)+' group by AccountID) RT ON GT1.AccountID=RT.AccountID
+	'+@RTJoin+'
 	WHERE A.AccountID>1 and A.lft BETWEEN GT1.lft AND GT1.rgt'
-		set @SQL=@SQL+' AND A.AccountID>1'+@AccountsLocationWise
+		set @SQL=@SQL+' AND A.AccountID>1'+@AccountsLocationWise+@CAWhere
 		--set @SQL=@SQL+' Order By lft'
 		--PRINT(@SQL)
 		EXEC(@SQL)

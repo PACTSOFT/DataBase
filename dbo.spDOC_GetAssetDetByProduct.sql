@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetAssetDetByProduct]
-	@ProductID [bigint],
-	@CostCenterID [bigint],
-	@UserID [bigint],
+	@ProductID [int],
+	@CostCenterID [int],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -19,7 +19,7 @@ SET NOCOUNT ON
 		END
 		
 		 select DepreciationMethod,AveragingMethod,Period,PurchaseValue,SalvageValue,convert(datetime,DeprStartDate) DeprStartDate
-		 ,EstimateLife,includeSalvageindepr,IsDeprSchedule,SalvageValueType
+		 ,EstimateLife,includeSalvageindepr,IsDeprSchedule,SalvageValueType,DeprBookID
 		  from ACC_Assets a WITH(NOLOCK)
 		 join INV_Product b WITH(NOLOCK)  on a.AssetID=b.AssetGroupID 
 		 where ProductID=@ProductID 
@@ -51,5 +51,5 @@ BEGIN CATCH
 
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH 
+END CATCH
 GO

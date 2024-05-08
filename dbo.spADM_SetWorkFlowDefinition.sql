@@ -26,11 +26,14 @@ BEGIN TRANSACTION
 		DECLARE @CreatedDate FLOAT, @XML XML
 		SET @CreatedDate=CONVERT(FLOAT,getdate())
 
+	
+
+
 		SET @XML=@WorkFlowXML
 
-		--DECLARE @tab table(id int identity(1,1),WorkFlowID BIGINT)
+		--DECLARE @tab table(id int identity(1,1),WorkFlowID INT)
 		--insert into @tab
-		--SELECT distinct X.value('@WorkFlowID','BIGINT')
+		--SELECT distinct X.value('@WorkFlowID','INT')
 		--from @XML.nodes('XML/Row') as Data(X)
 
 		--if exists (select userid from (select [WorkFlowID],userid from [COM_WorkFlow] with(nolock)
@@ -43,21 +46,24 @@ BEGIN TRANSACTION
 		--END
 		
 		delete from COM_WorkFlowDef where CostCenterID=@CostCenterId   
+	 
 
 		INSERT INTO COM_WorkFlowDef (CostCenterID,[Action],Expression,WorkFlowID,LevelID,IsEnabled,IsExpressionLineWise
-		,IsLineWise,OnReject,UserWise,FieldWidth,CompanyGUID,[GUID],CreatedBy,CreatedDate)
+		,IsLineWise,OnReject,UserWise,FieldWidth,CompanyGUID,[GUID],CreatedBy,CreatedDate,WEFDate,TillDate)
 		SELECT @CostCenterId
 		,X.value('@Action','nvarchar(100)')
 		,X.value('@Expression','nvarchar(max)')
-		,X.value('@WorkFlowID','BIGINT')
-		,X.value('@LevelID','BIGINT')
+		,X.value('@WorkFlowID','INT')
+		,X.value('@LevelID','INT')
 		,X.value('@IsEnabled','BIT')
 		,X.value('@IsExpLW','BIT')
 		,@IsLineWise,@OnReject,@UserWise,@FieldWidth
 		,@CompanyGUID
 		,NewId()
 		,@CreatedBy
-		,convert(float,getdate())
+		,convert(float,getdate())		 
+	    ,convert(float,X.value('@WEFDate','DateTime'))
+	    ,convert(float,X.value('@TillDate','DateTime'))
 		 from @XML.nodes('XML/Row') as Data(X)
 		 
 		

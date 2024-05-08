@@ -5,7 +5,9 @@ GO
 CREATE PROCEDURE [dbo].[spREN_PostIncomeforCaseUnits]
 	@Date [datetime],
 	@DocumentXML [nvarchar](max),
-	@RoleID [bigint] = 0,
+	@RoleID [int] = 0,
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
@@ -17,8 +19,10 @@ BEGIN TRY
 select 1
 SET NOCOUNT ON;   
   
-	DECLARE @return_value Bigint,@Prefix nvarchar(200),@XML xml,@AA nvarchar(max),@Vno nvarchar(200),@CostCenterID BIGINT,@ContractID BIGINT,@CCID int
-	declare @ICNT int,@CNT int,@DocID bigint
+	DECLARE @return_value INT,@Prefix nvarchar(200),@XML xml,@AA nvarchar(max),@Vno nvarchar(200),@CostCenterID INT,@ContractID INT,@CCID int
+	declare @ICNT int,@CNT int,@DocID INT,@ActXml nvarchar(max)         
+	
+	set @ActXml='<XML SysInfo="'+@sysinfo+'" AP="'+@AP+'" ></XML>'
 	
 	set @CostCenterID=0
 	select @CostCenterID=Value from com_costcenterpreferences
@@ -30,9 +34,9 @@ SET NOCOUNT ON;
 	
 	set @XML=@DocumentXML
 	
-	declare @tblList TABLE (ID int identity(1,1),TRANSXML NVARCHAR(MAX),cntrctid bigint,ccid int)
+	declare @tblList TABLE (ID int identity(1,1),TRANSXML NVARCHAR(MAX),cntrctid INT,ccid int)
 	INSERT INTO @tblList        
-	SELECT  CONVERT(NVARCHAR(MAX),  X.query('DocumentXML') ) , X.value ('@ContractID', 'BIGINT' ) , X.value ('@CostcenterID', 'BIGINT' ) 
+	SELECT  CONVERT(NVARCHAR(MAX),  X.query('DocumentXML') ) , X.value ('@ContractID', 'INT' ) , X.value ('@CostcenterID', 'INT' ) 
 	from @XML.nodes('/RENTRCT/ROWS') as Data(X)        
 
 	SELECT @CNT = COUNT(ID) FROM @tblList      
@@ -60,7 +64,7 @@ SET NOCOUNT ON;
 		   @InvDocXML = @AA,      
 		   @NotesXML = N'',      
 		   @AttachmentsXML = N'',      
-		   @ActivityXML  = N'',     
+		   @ActivityXML  = @ActXml,     
 		   @IsImport = 0,      
 		   @LocationID = 0,      
 		   @DivisionID = 0,      

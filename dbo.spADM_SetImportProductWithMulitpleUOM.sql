@@ -27,7 +27,7 @@ SET NOCOUNT ON
 		--Declaration Section
 		DECLARE	@return_value int,@failCount int
 		DECLARE @NodeID bigint, @Table NVARCHAR(50),@SQL NVARCHAR(max),@ParentGroupName NVARCHAR(200),@PK NVARCHAR(50)
-		DECLARE @AccountCode nvarchar(max),@GUID nvarchar(max),@AccountName nvarchar(max),@AliasName nvarchar(max)
+		DECLARE @AccountCode nvarchar(max),@GUID nvarchar(max),@AccountName nvarchar(max),@AliasName nvarchar(max),@CodePrefix nvarchar(max),@CodeNumber nvarchar(max)
         DECLARE @StatusID int,@ExtraFields NVARCHAR(max),@ExtraUserDefinedFields NVARCHAR(max),@CostCenterFields NVARCHAR(max),@PrimaryContactQuery nvarchar(max)
         DECLARE @LinkFields NVARCHAR(MAX), @LinkOption NVARCHAR(MAX), @Substitutes NVARCHAR(MAX),@ProductWiseUOM NVARCHAR(MAX)
 		DECLARE @SelectedNode bigint, @IsGroup bit,@multiBarcodes NVARCHAR(MAX)
@@ -55,7 +55,7 @@ SET NOCOUNT ON
 		ELSE IF(@COSTCENTERID=3)
 			SET @PK='ProductID'
 		ELSE IF(@COSTCENTERID=12)
-			SET @PK='CurrencyID'	
+			SET @PK='CurrencyID'
 		ELSE IF(@COSTCENTERID=71)
 			SET @PK='ResourceID'
 		ELSE IF(@COSTCENTERID=51)
@@ -68,6 +68,8 @@ SET NOCOUNT ON
            [AccountCode] nvarchar(500)
            ,[AccountName] nvarchar(max)
            ,[AliasName] nvarchar(max)
+           ,[CodePrefix] nvarchar(max)
+           ,[CodeNumber] nvarchar(max)
            ,[StatusID] int
 		   ,SelectedNode bigint
 		   ,ParentGroupName NVARCHAR(200)
@@ -92,6 +94,8 @@ SET NOCOUNT ON
            ([AccountCode]
            ,[AccountName]
            ,[AliasName]
+           ,[CodePrefix]
+           ,[CodeNumber]
            ,[StatusID]
 			,SelectedNode
 			,ParentGroupName
@@ -110,6 +114,8 @@ SET NOCOUNT ON
 			X.value('@AccountCode','nvarchar(500)')
            ,X.value('@AccountName','nvarchar(max)')
            ,isnull(X.value('@AliasName','nvarchar(max)'),'')
+           ,isnull(X.value('@CodePrefix','nvarchar(max)'),'')
+           ,isnull(X.value('@CodeNumber','nvarchar(max)'),'')
            ,X.value('@StatusID','int')           
            ,isnull(X.value('@SelectedNode','bigint'),0)
            ,isnull(X.value('@GroupName','nvarchar(200)'),'')
@@ -142,6 +148,8 @@ SET NOCOUNT ON
 				 	select @AccountCode    = AccountCode 
 					,@AccountName    =  AccountName  
 					,@AliasName    = AliasName 
+					,@CodePrefix    = CodePrefix 
+					,@CodeNumber    = CodeNumber 
 					,@StatusID    = StatusID 
 					,@SelectedNode    = SelectedNode
 					,@ParentGroupName=ParentGroupName
@@ -163,30 +171,6 @@ SET NOCOUNT ON
 					@Substitutes=Substitutes,
 					@VehicleID=VehicleID,@Make=Make ,@Model =Model ,@Year =Year ,@Variant =Variant ,@Segment=Segment
 					from  @temptbl where ID=@I
-		 
-			if(@IsProductVehicle is not null and @IsProductVehicle=1)
-			begin
- 				if @VehicleID is not null and @VehicleID>0 and  @IsCode is not null and @IsCode=0 and exists(select ProductID from INV_Product with(nolock) where ProductName=@AccountName)
-				begin
-					set @NodeID=(select top 1 ProductID from INV_Product with(nolock) where ProductName=@AccountName)
-				--Mapping Vehicle to Product
-				if not exists (select ProductID from SVC_ProductVehicle WITH(NOLOCK) where ProductID=@NodeID and VehicleID=@VehicleID)
-					begin
-						insert into SVC_ProductVehicle(ProductID,VehicleID,CompanyGUID,GUID,CreatedBy,CreatedDate)
-							values(@NodeID,@VehicleID,@CompanyGUID,newid(),@UserName,convert(float,getdate()))
-					end 
-				end
-				else if @VehicleID is not null and @VehicleID>0 and  @IsCode is not null and @IsCode=1 and exists(select ProductID from INV_Product with(nolock) where ProductCode=@AccountCode)
-				begin
-					set @NodeID=(select top 1 ProductID from INV_Product with(nolock) where ProductCode=@AccountCode)
-				--Mapping Vehicle to Product
-				if not exists (select ProductID from SVC_ProductVehicle WITH(NOLOCK) where ProductID=@NodeID and VehicleID=@VehicleID)
-					begin
-						insert into SVC_ProductVehicle(ProductID,VehicleID,CompanyGUID,GUID,CreatedBy,CreatedDate)
-							values(@NodeID,@VehicleID,@CompanyGUID,newid(),@UserName,convert(float,getdate()))
-					end
-				end
-			end
 
 		if(@IsOnlyName=1 or @StatusID is null)
 		begin
@@ -403,7 +387,7 @@ SET NOCOUNT ON
 						if(@COSTCENTERID=2)
 							SET @SQL=@SQL+'AccountCode,AccountName,AccountTypeID,IsBillwise,CreditDays,CreditLimit,DebitDays, DebitLimit, PurchaseAccount,SalesAccount,AliasName'
 						else if(@COSTCENTERID=3)
-							SET @SQL=@SQL+'ProductCode,ProductName,ProductTypeID,ValuationID,AliasName'
+							SET @SQL=@SQL+'ProductCode,ProductName,ProductTypeID,ValuationID,AliasName,CodePrefix,CodeNumber'
 						else if(@COSTCENTERID=71)
 							SET @SQL=@SQL+'ResourceCode,ResourceName,ResourceTypeID'
 						else if(@COSTCENTERID=51)
@@ -427,7 +411,7 @@ SET NOCOUNT ON
 						if(@COSTCENTERID=2)
 							SET @SQL=@SQL+''+convert(NVARCHAR,@TypeID)+','+convert(NVARCHAR,@IsBillwise)+',' +CONVERT(VARCHAR,@CreditDays)+','+CONVERT(VARCHAR,@CreditLimit)+','+CONVERT(VARCHAR,@DebitDays)+','+CONVERT(VARCHAR,@DebitLimit)+','+CONVERT(VARCHAR,@PurchaseAccount)+','+CONVERT(VARCHAR,@SalesAccount)+',N'''+@AliasName+''','
 						else if(@COSTCENTERID=3)
-							SET @SQL=@SQL+''+convert(NVARCHAR,@TypeID)+','+convert(NVARCHAR,@ValuationID)+','''+@AliasName+''','
+							SET @SQL=@SQL+''+convert(NVARCHAR,@TypeID)+','+convert(NVARCHAR,@ValuationID)+','''+@AliasName+''','''+@CodePrefix+''','''+@CodeNumber+''','
 						else if(@COSTCENTERID=71)
 							SET @SQL=@SQL+'1, '
 						else if(@COSTCENTERID=51)
@@ -683,7 +667,5 @@ BEGIN CATCH
 	ROLLBACK TRANSACTION
 	SET NOCOUNT OFF  
 	RETURN -999   
-END CATCH 
-
- 
+END CATCH
 GO

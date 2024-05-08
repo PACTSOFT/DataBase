@@ -7,16 +7,18 @@ CREATE PROCEDURE [dbo].[spDOC_SetStatus]
 	@REMARKS [nvarchar](max),
 	@DATE [datetime],
 	@ISINVENTORY [bit],
-	@DOCID [bigint],
-	@COSTCENTERID [bigint],
-	@WId [bigint],
+	@DOCID [int],
+	@COSTCENTERID [int],
+	@WId [int],
 	@InvDocidS [nvarchar](max),
 	@isFromDOc [bit],
+	@sysinfo [nvarchar](max) = '',
+	@AP [varchar](10) = '',
 	@DocGUID [nvarchar](50),
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [bigint],
-	@ROLEID [bigint],
+	@UserID [int],
+	@ROLEID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -24,9 +26,10 @@ BEGIN TRANSACTION
 BEGIN TRY      
 SET NOCOUNT ON;     
 	--Declaration Section    
-	DECLARE @Dt FLOAT,@temp nvarchar(100),@VoucherNo nvarchar(200),@XML xml,@tempwid bigint,@I int,@cnt int,@GUID  NVARCHAR(50),@DocumentType INT
-	Declare @Level int,@maxLevel INT,@IsLineWisePDC bit,@PDCDocument int,@tempstat bigint,@tempLevel int,@INVID BIGINT,@oldStatus int
-
+	DECLARE @Dt FLOAT,@temp nvarchar(100),@VoucherNo nvarchar(200),@XML xml,@tempwid INT,@I int,@cnt int,@GUID  NVARCHAR(50),@DocumentType INT,@isCrossDim BIT
+	Declare @Level int,@maxLevel INT,@IsLineWisePDC bit,@PDCDocument int,@tempstat INT,@tempLevel int,@INVID INT,@oldStatus int, @tempCode nvarchar(max)
+	declare @tab table(ident int identity(1,1),id INT,Remark NVARCHAR(MAX),wid int)
+	
 	--SP Required Parameters Check    
 	IF @STATUSID<0 OR @COSTCENTERID<0 OR @DOCID<0
 	BEGIN    
@@ -40,7 +43,8 @@ SET NOCOUNT ON;
 	BEGIN
 		 if(@ISINVENTORY=1)
 		 begin						
-			select @INVID=InvDocdetailsid,@WID=WorkflowID,@tempLevel=WorkFlowLevel,@oldStatus=Statusid,@DocumentType=DocumentType FROM  [INV_DocDetails] a WITH(NOLOCK)
+			select @INVID=InvDocdetailsid,@WID=WorkflowID,@tempLevel=WorkFlowLevel,@oldStatus=Statusid,@DocumentType=DocumentType 
+			FROM  [INV_DocDetails] a WITH(NOLOCK)
 			WHERE a.CostCenterID=@CostCenterID AND DOCID=@DOCID and WorkflowID>0
 		end
 		else
@@ -53,7 +57,8 @@ SET NOCOUNT ON;
 	BEGIN
 	   if(@ISINVENTORY=1)
 	   begin						
-			select @INVID=InvDocdetailsid,@tempLevel=WorkFlowLevel,@oldStatus=Statusid,@DocumentType=DocumentType FROM  [INV_DocDetails] a WITH(NOLOCK)
+			select @INVID=InvDocdetailsid,@tempLevel=WorkFlowLevel,@oldStatus=Statusid,@DocumentType=DocumentType 
+			FROM  [INV_DocDetails] a WITH(NOLOCK)
 			WHERE a.CostCenterID=@CostCenterID AND DOCID=@DOCID and WorkflowID>0
 		end
 		else
@@ -78,7 +83,6 @@ SET NOCOUNT ON;
 	--Check Whether the User Level is Payroll Employee Report Manager Level or Not
 		SET @level=dbo.fnExt_GetRptMgrUserLevel(@INVID,@WID,@tempLevel,@UserName,@RoleID)
 	END
-	
 	if(@level is null) 
 		SELECT @level=LevelID FROM [COM_WorkFlow]   WITH(NOLOCK)   
 		where WorkFlowID=@WID and UserID =@UserID and LevelID>@tempLevel
@@ -105,6 +109,8 @@ SET NOCOUNT ON;
 	BEGIN
 		if not(@tempwid=0 and @isFromDOc=1 and @InvDocidS='')
 		BEGIN	
+			if @level is null
+				set @level=@tempLevel
 			select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK) where WorkFlowID=@WID
 			if(@level=1)
 				set @STATUSID=371
@@ -112,9 +118,9 @@ SET NOCOUNT ON;
 				set @STATUSID=441				
 		END
 	END
-	
-	if(@ISINVENTORY=0 and @STATUSID=369 
-	and exists(select CostCenterID from ADM_DocumentTypes WITH(NOLOCK) where CostCenterID=@COSTCENTERID and DocumentType in(14,19)))
+	if(@ISINVENTORY=1 and @STATUSID=369 and @DocumentType=31)
+		set @STATUSID=443
+	if(@ISINVENTORY=0 and @STATUSID=369 and @DocumentType in(14,19))
 		set @STATUSID=370
     if(@ISINVENTORY=0 and @STATUSID=369 
 	and exists(select PrefValue from com_documentpreferences WITH(NOLOCK) where CostCenterID=@COSTCENTERID and  PrefName='DonotupdateAccounts' and PrefValue='true'))
@@ -153,10 +159,9 @@ SET NOCOUNT ON;
     BEGIN
 		if(@InvDocidS<>'')
 		BEGIN
-			set @XML=@InvDocidS
-			declare @tab table(ident int identity(1,1),id bigint,Remark NVARCHAR(MAX),wid int)
+			set @XML=@InvDocidS			
 			insert into @tab
-			select X.value('@ID','BIGINT'),X.value('@Remarks','NVARCHAR(MAX)') ,isnull(X.value('@WID','BIGINT'),0)        			
+			select X.value('@ID','INT'),X.value('@Remarks','NVARCHAR(MAX)') ,isnull(X.value('@WID','INT'),0)        			
 			FROM @XML.nodes('/XML/Row') as Data(X)    
 			
 			select @I=0,@cnt=COUNT(*) from @tab
@@ -211,15 +216,15 @@ SET NOCOUNT ON;
 				END
 				
 				
-				UPDATE INV_DocDetails    
-				SET StatusID=@STATUSID,WorkFlowLevel=@level,WorkFlowStatus=@STATUSID
-				from @tab a
-				WHERE InvDocDetailsID=@INVID
+				UPDATE a    
+				SET a.StatusID=@STATUSID,a.WorkFlowLevel=@level,a.WorkFlowStatus=@STATUSID
+				from INV_DocDetails a with(nolock)
+				WHERE a.InvDocDetailsID=@INVID
 							
-				UPDATE ACC_DocDetails    
-				SET StatusID=@STATUSID,WorkFlowLevel=@level,WorkFlowStatus=@STATUSID
-				from @tab a
-				WHERE InvDocDetailsID=@INVID
+				UPDATE a    
+				SET a.StatusID=@STATUSID,a.WorkFlowLevel=@level,a.WorkFlowStatus=@STATUSID
+				from ACC_DocDetails a with(nolock)
+				WHERE a.InvDocDetailsID=@INVID
 								
 				 
 				INSERT INTO COM_Approvals    (CCID    ,CCNODEID    ,StatusID    ,Date,Remarks 
@@ -232,9 +237,10 @@ SET NOCOUNT ON;
 				
 			EXEC spCOM_SetNotifEvent @STATUSID,@COSTCENTERID,@DOCID,@CompanyGUID,@UserName,@UserID,-1
 			
-			UPDATE COM_DOCID    
-			SET GUID=@GUID
-			WHERE ID=@DOCID
+			UPDATE a    
+			SET a.GUID=@GUID
+			from COM_DOCID a with(nolock)
+			WHERE a.ID=@DOCID
 			
 			select @VoucherNo=VoucherNo FROM  [INV_DocDetails] a WITH(NOLOCK)
 			WHERE a.CostCenterID=@CostCenterID AND DOCID=@DOCID
@@ -247,44 +253,50 @@ SET NOCOUNT ON;
 			and @oldStatus<>369 and @STATUSID=369)
 			   set @StatusID=441
 			   
-			UPDATE INV_DocDetails    
-			SET StatusID=@STATUSID,WorkFlowLevel=@level,WorkFlowStatus=@STATUSID
-			WHERE CostCenterID=@CostCenterID AND DOCID=@DOCID
+			UPDATE a    
+			SET a.StatusID=@STATUSID,a.WorkFlowLevel=@level,a.WorkFlowStatus=@STATUSID
+			from INV_DocDetails a with(nolock)
+			WHERE a.CostCenterID=@CostCenterID AND a.DOCID=@DOCID
 			
-			UPDATE COM_DOCID    
-			SET GUID=@GUID
-			WHERE ID=@DOCID
+			UPDATE a    
+			SET a.GUID=@GUID
+			from COM_DOCID a with(nolock)
+			WHERE a.ID=@DOCID
 			
-			UPDATE ACC_DocDetails    
-			SET StatusID=@STATUSID,WorkFlowLevel=@level,WorkFlowStatus=@STATUSID
-			WHERE InvDocDetailsID IS NOT NULL AND InvDocDetailsID IN(SELECT InvDocDetailsID FROM INV_DocDetails WITH(NOLOCK)
+			UPDATE a    
+			SET a.StatusID=@STATUSID,a.WorkFlowLevel=@level,a.WorkFlowStatus=@STATUSID
+			from ACC_DocDetails a with(nolock)
+			WHERE a.InvDocDetailsID IS NOT NULL AND a.InvDocDetailsID IN(SELECT InvDocDetailsID FROM INV_DocDetails WITH(NOLOCK)
 			WHERE CostCenterID=@CostCenterID AND DOCID=@DOCID)
 						
 			set @VoucherNo=(select top 1 VoucherNo FROM  [INV_DocDetails] a WITH(NOLOCK)
 			WHERE a.CostCenterID=@CostCenterID AND DOCID=@DOCID)
 			
-			update COM_Billwise
-			set StatusID=@STATUSID
-			where DocNo=@VoucherNo
+			update a
+			set a.StatusID=@STATUSID
+			from COM_Billwise a with(nolock)
+			where a.DocNo=@VoucherNo
 			
 			if @STATUSID=369 and (exists(select PrefValue from COM_DocumentPreferences with(nolock) where
 			CostCenterID=@CostCenterID and PrefName='DocDateasPostedDate' and PrefValue='true')
 			or exists(select Value from ADM_GlobalPreferences with(nolock) where
 			Name='DocDateasPostedDate' and Value='true'))
 			BEGIN
-					update inv_docdetails
-					set docdate=convert(float,@DATE)
-					where costcenterid=@CostCenterID and DocID=@DocID
+					update a
+					set a.docdate=convert(float,@DATE)
+					from INV_DocDetails a with(nolock)
+					where a.costcenterid=@CostCenterID and a.DocID=@DocID
 					
-					update acc_docdetails
-					set docdate=convert(float,@DATE)
+					update a
+					set a.docdate=convert(float,@DATE)
 					from ACC_DocDetails a WITH(NOLOCK) 
 					join INV_DocDetails b WITH(NOLOCK)  on a.InvDocDetailsID=b.InvDocDetailsID
 					where b.CostCenterID=@CostCenterID and b.DocID=@DocID
 					
-					update COM_Billwise 
-					set docdate=convert(float,@DATE)
-					where DocNo=@VoucherNo
+					update a 
+					set a.docdate=convert(float,@DATE)
+					from COM_Billwise a with(nolock)
+					where a.DocNo=@VoucherNo
 			END
 		END
 		
@@ -297,54 +309,90 @@ SET NOCOUNT ON;
     ELSE
     BEGIN
 		
-		
+		set @isCrossDim=0
 		set @IsLineWisePDC=0
-		select @IsLineWisePDC=isnull(PrefValue,0) from COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@COSTCENTERID and PrefName='LineWisePDC'   	
-		select @PDCDocument=isnull(PrefValue,0) from COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@COSTCENTERID and PrefName='PDCDocument'   
-		if(@IsLineWisePDC=1 and @PDCDocument>1)
+		select @IsLineWisePDC=isnull(PrefValue,0) from COM_DocumentPreferences WITH(NOLOCK) 
+		where CostCenterID=@COSTCENTERID and PrefName='LineWisePDC'   
+		
+		select @isCrossDim=isnull(PrefValue,0) from COM_DocumentPreferences WITH(NOLOCK) 
+		where CostCenterID=@COSTCENTERID and PrefName='UseasCrossDimension'   
+		
+		select @PDCDocument=isnull(PrefValue,0) from COM_DocumentPreferences WITH(NOLOCK) 
+		where CostCenterID=@COSTCENTERID and PrefName='PDCDocument'   
+		
+		if(@isCrossDim=1)
 		BEGIN
-			UPDATE ACC_DocDetails    
-			SET StatusID=@STATUSID,WorkFlowLevel=@level,WorkFlowStatus=@STATUSID
-			Where CostCenterID=@PDCDocument and  RefCCID=400 and RefNodeid in(
+			set @PDCDocument=0
+			select @PDCDocument=isnull(PrefValue,0) from COM_DocumentPreferences WITH(NOLOCK) 
+			where CostCenterID=@COSTCENTERID and  PrefName='CrossDimDocument' and isnumeric(PrefValue)=1
+		END
+		
+		if((@IsLineWisePDC=1 or @isCrossDim=1) and @PDCDocument>1)
+		BEGIN
+			if exists(select * from ACC_DocDetails a WITH(NOLOCK) 
+			Where (a.WorkflowID is null or a.WorkflowID=0)   and  a.CostCenterID=@PDCDocument and  a.RefCCID=400 and a.RefNodeid in(
 			select AccDocDetailsID  FROM ACC_DocDetails WITH(NOLOCK)
-			WHERE CostCenterID=@CostCenterID AND DOCID=@DOCID)
+			WHERE CostCenterID=@CostCenterID AND DOCID=@DOCID))
+			BEGIN
+				UPDATE a    
+				SET a.StatusID=@STATUSID,a.WorkFlowLevel=@level,a.WorkFlowStatus=@STATUSID
+				from ACC_DocDetails a WITH(NOLOCK) 
+				Where a.CostCenterID=@PDCDocument and  a.RefCCID=400 and a.RefNodeid in(
+				select AccDocDetailsID  FROM ACC_DocDetails WITH(NOLOCK)
+				WHERE CostCenterID=@CostCenterID AND DOCID=@DOCID)
+				
+				
+				update c
+				set c.StatusID=@STATUSID
+				FROM  ACC_DocDetails a WITH(NOLOCK)
+				join ACC_DocDetails b WITH(NOLOCK) on a.AccDocDetailsID=b.RefNodeid
+				join COM_Billwise c WITH(NOLOCK) on b.VoucherNo=c.DocNo
+				WHERE a.CostCenterID=@CostCenterID AND a.DOCID=@DOCID and b.RefCCID=400
+				and b.CostCenterID=@PDCDocument			
+			END
 			
-			
-			update c
-			set StatusID=@STATUSID
-			FROM  ACC_DocDetails a WITH(NOLOCK)
-			join ACC_DocDetails b WITH(NOLOCK) on a.AccDocDetailsID=b.RefNodeid
-			join COM_Billwise c on b.VoucherNo=c.DocNo
-			WHERE a.CostCenterID=@CostCenterID AND a.DOCID=@DOCID and b.RefCCID=400
-			and b.CostCenterID=@PDCDocument			
-			
-			if(@STATUSID=370)
+			if(@isCrossDim=1 and @STATUSID=369)
+				set @STATUSID=448
+			ELSE if(@IsLineWisePDC=1 and @STATUSID=370)
 				set @STATUSID=447			
 			
-			UPDATE ACC_DocDetails    
-			SET StatusID=@STATUSID,WorkFlowLevel=@level,WorkFlowStatus=@STATUSID
-			WHERE CostCenterID=@CostCenterID AND DOCID=@DOCID
+			UPDATE a    
+			SET a.StatusID=@STATUSID,a.WorkFlowLevel=@level,a.WorkFlowStatus=@STATUSID
+			from ACC_DocDetails a WITH(NOLOCK) 
+			WHERE a.CostCenterID=@CostCenterID AND a.DOCID=@DOCID
 			
-			UPDATE COM_DOCID    
-			SET GUID=@GUID
-			WHERE ID=@DOCID
+			UPDATE a    
+			SET a.GUID=@GUID
+			from COM_DOCID a with(nolock)
+			WHERE a.ID=@DOCID
 		END
 		ELSE
 		BEGIN
-			UPDATE ACC_DocDetails    
-			SET StatusID=@STATUSID,WorkFlowLevel=@level,WorkFlowStatus=@STATUSID
-			WHERE CostCenterID=@CostCenterID AND DOCID=@DOCID
+			if @STATUSID=372 and exists(select * from sys.columns where name ='HoldStatus' and object_id=object_id('ACC_DocDetails'))
+			BEGIN
+				set @tempCode=' if exists(select * from ACC_DocDetails a WITH(NOLOCK) 
+				where HoldStatus=1 and a.CostCenterID='+convert(nvarchar(max),@CostCenterID)+' AND a.DOCID='+convert(nvarchar(max),@DOCID)+')
+					set @STATUSID=370 '
+				EXEC sp_executesql @tempCode,N'@STATUSID INT OUTPUT',@STATUSID output
+			END
 			
-			UPDATE COM_DOCID    
-			SET GUID=@GUID
-			WHERE ID=@DOCID
+			UPDATE a    
+			SET a.StatusID=@STATUSID,a.WorkFlowLevel=@level,a.WorkFlowStatus=@STATUSID
+			from ACC_DocDetails a WITH(NOLOCK) 
+			WHERE a.CostCenterID=@CostCenterID AND a.DOCID=@DOCID
+			
+			UPDATE a    
+			SET a.GUID=@GUID
+			from COM_DOCID a with(nolock)
+			WHERE a.ID=@DOCID
 			
 			set @VoucherNo=(select top 1 VoucherNo FROM  ACC_DocDetails a WITH(NOLOCK)
 			WHERE a.CostCenterID=@CostCenterID AND DOCID=@DOCID)
 			
-			update COM_Billwise
-			set StatusID=@STATUSID
-			where DocNo=@VoucherNo
+			update a
+			set a.StatusID=@STATUSID
+			from COM_Billwise a with(nolock)
+			where a.DocNo=@VoucherNo
 		END
 		
 		if @STATUSID=369 and (exists(select PrefValue from COM_DocumentPreferences WITH(NOLOCK) where
@@ -352,20 +400,41 @@ SET NOCOUNT ON;
 			or exists(select Value from ADM_GlobalPreferences WITH(NOLOCK) where
 			Name='DocDateasPostedDate' and Value='true'))
 			BEGIN
-					update ACC_DocDetails
-					set docdate=convert(float,@DATE)
-					where costcenterid=@CostCenterID and DocID=@DocID
+					update a
+					set a.docdate=convert(float,@DATE)
+					from ACC_DocDetails a WITH(NOLOCK) 
+					where a.costcenterid=@CostCenterID and a.DocID=@DocID
 					
-					update COM_Billwise 
-					set docdate=convert(float,@DATE)
-					where DocNo=@VoucherNo
+					update a 
+					set a.docdate=convert(float,@DATE)
+					from COM_Billwise a with(nolock)
+					where a.DocNo=@VoucherNo
 			END
 		
 		
-		if (select count(PrefValue) from COM_DocumentPreferences where CostCenterID=@CostCenterID and PrefName in('AutoChequeonPost','AutoChequeNo') and PrefValue='true')=2
+		if (@StatusID=369 and @documenttype in(17,18,22) and exists(select value from com_costcenterpreferences WITH(NOLOCK)
+		WHere costcenterid=92 and name ='EnableManagProp' and value='true'))
+		BEGIN
+			insert into @tab		
+			select AccDocDetailsID,'',0 from ACC_DocDetails a WITH(NOLOCK)
+			WHERE a.CostCenterID=@CostCenterID AND DOCID=@DOCID
+			
+			select @I=0,@cnt=COUNT(*) from @tab			
+			while(@I<@cnt)
+			BEGIN
+				set @I=@I+1
+				
+				select @INVID=id from @tab where ident=@I
+				set @tempCode='spRen_CommisionPosting'
+				
+				exec @tempCode @INVID,@CostCenterID,@DocID,@UserID,@LangID				
+			END	
+		END	
+		
+		if (select count(PrefValue) from COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and PrefName in('AutoChequeonPost','AutoChequeNo') and PrefValue='true')=2
 		and @StatusID in(369,370)					
 		BEGIN
-			declare @EndNo bigint,@ChequeBookNo nvarchar(max),@CurrentChequeNumber nvarchar(max),@Chequeno nvarchar(max),@accid bigint
+			declare @EndNo INT,@ChequeBookNo nvarchar(max),@CurrentChequeNumber nvarchar(max),@Chequeno nvarchar(max),@accid INT
 			set @ChequeBookNo=''
 			select @ChequeBookNo=ChequeBookNo,@accid=case when BankAccountID is not null and BankAccountID>0 then BankAccountID else creditaccount end
 			,@Chequeno=ChequeNumber
@@ -377,19 +446,22 @@ SET NOCOUNT ON;
 			BEGIN
 				set @Chequeno=@CurrentChequeNumber
 				
-				UPDATE ACC_DocDetails    
-				SET ChequeNumber=@Chequeno
-				WHERE CostCenterID=@CostCenterID AND DOCID=@DOCID
+				UPDATE a    
+				SET a.ChequeNumber=@Chequeno
+				from ACC_DocDetails a WITH(NOLOCK) 
+				WHERE a.CostCenterID=@CostCenterID AND a.DOCID=@DOCID
 				
-				Update Acc_ChequeBooks Set CurrentNo=REPLACE(@Chequeno,CONVERT(BIGINT,@Chequeno),'')+CONVERT(NVARCHAR,(@Chequeno+1)) 
-				where BankAccountID=@accid and BookNo=@ChequeBookNo 
+				Update a
+				Set a.CurrentNo=REPLACE(@Chequeno,CONVERT(INT,@Chequeno),'')+CONVERT(NVARCHAR,(@Chequeno+1)) 
+				from Acc_ChequeBooks a WITH(NOLOCK) 
+				where a.BankAccountID=@accid and a.BookNo=@ChequeBookNo 
 			END
 			
 		END
     END
     
-    declare @tempCode nvarchar(max)
-    if(@WID is not null and @WID>0 and @StatusID=441)
+    
+    if(@WID is not null and @WID>0 and @StatusID IN (441,369))
 	begin
 		
 		select @tempCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=12
@@ -413,13 +485,17 @@ SET NOCOUNT ON;
 				@ReviseReason ='',
 				@LangID =@LangID,
 				@UserName=@UserName,
-				@ModDate=@dt
+				@ModDate=@dt,
+				@CCID=@CostCenterID,
+				@sysinfo=@sysinfo,
+				@AP=@AP
+				
 	END
 	
 	if (exists(SELECT PrefValue from COM_DocumentPreferences with(nolock) where costcenterid=@COSTCENTERID and  PrefName='OnPosted' and PrefValue='true') and @StatusID=369)
 	BEGIN
 			
-			declare @Dimesion int,@PrefValue nvarchar(max),@CCStatusID int,@ProductName nvarchar(max),@DimesionNodeID bigint
+			declare @Dimesion int,@PrefValue nvarchar(max),@CCStatusID int,@ProductName nvarchar(max),@DimesionNodeID INT
 			select @PrefValue=''	
 			select @PrefValue=PrefValue from COM_DocumentPreferences with(nolock) where costcenterid=@COSTCENTERID and  PrefName='DocumentLinkDimension'    
 
@@ -427,17 +503,23 @@ SET NOCOUNT ON;
 			begin
 				set @Dimesion=0
 				begin try
-					select @Dimesion=convert(bigint,@PrefValue)
+					select @Dimesion=convert(INT,@PrefValue)
 				end try
 				begin catch
 					set @Dimesion=0
 				end catch
 			END
 		
-		
-				declare @Codetemp table (prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200),IsManualCode bit)
+			set @DimesionNodeID=null					
+			select @PrefValue=tablename from ADM_Features with(nolock) where FeatureID=@Dimesion
+			set @PrefValue='select @NodeID=NodeID from '+@PrefValue+' with(nolock) where Name='''+@VoucherNo+''''				
+			EXEC sp_executesql @PrefValue,N'@NodeID INT OUTPUT',@DimesionNodeID output				
+			
+		 if(@DimesionNodeID is null or (@DimesionNodeID<=0 and @DimesionNodeID>-10000))
+		 BEGIN
+				declare @Codetemp table (prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200),IsManualCode bit)
 		 
-				set @CCStatusID = (select  statusid from com_status where costcenterid=@Dimesion and status = 'Active')
+				set @CCStatusID = (select  statusid from com_status WITH(NOLOCK) where costcenterid=@Dimesion and status = 'Active')
 				
 				SET @PrefValue=''    
 				SELECT @PrefValue=PrefValue from COM_DocumentPreferences with(nolock) where costcenterid=@COSTCENTERID and  PrefName='AutoCode'    
@@ -472,31 +554,33 @@ SET NOCOUNT ON;
 				set @DimesionNodeID=0						
 				select @PrefValue=tablename from ADM_Features with(nolock) where FeatureID=@Dimesion
 				set @PrefValue='select @NodeID=NodeID from '+@PrefValue+' with(nolock) where Name='''+@VoucherNo+''''				
-				EXEC sp_executesql @PrefValue,N'@NodeID bigint OUTPUT',@DimesionNodeID output				
-		 
+				EXEC sp_executesql @PrefValue,N'@NodeID INT OUTPUT',@DimesionNodeID output				
+		 END
 		
 		if(@DimesionNodeID>0 or @DimesionNodeID<-10000)
 		BEGIN
-			set @CCStatusID = (select  statusid from com_status where costcenterid=@Dimesion and status = 'Active')
+			set @CCStatusID = (select  statusid from com_status WITH(NOLOCK) where costcenterid=@Dimesion and status = 'Active')
 			select @PrefValue=tablename from ADM_Features with(nolock) where FeatureID=@Dimesion
-			set @PrefValue='update '+@PrefValue+' set statusid='+convert(nvarchar(50),@CCStatusID)+' where NodeID='+convert(nvarchar(50),@DimesionNodeID)
+			set @PrefValue='update a set a.statusid='+convert(nvarchar(50),@CCStatusID)+' from '+@PrefValue+' a with(nolock)
+			where a.NodeID='+convert(nvarchar(50),@DimesionNodeID)
 			exec(@PrefValue)
 				
-			SET @PrefValue='UPDATE COM_DocCCData 
-			SET dcCCNID'+CONVERT(NVARCHAR,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@DimesionNodeID)
-			+' WHERE InvDocDetailsID IN (SELECT InvDocDetailsID FROM Inv_DocDetails with(nolock) 
+			SET @PrefValue='UPDATE a 
+			SET a.dcCCNID'+CONVERT(NVARCHAR,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@DimesionNodeID)
+			+' from COM_DocCCData a with(nolock)
+			WHERE a.InvDocDetailsID IN (SELECT InvDocDetailsID FROM Inv_DocDetails with(nolock) 
 			WHERE COSTCENTERID='+CONVERT(NVARCHAR,@CostCenterID)+' AND DOCID='+CONVERT(NVARCHAR,@DocID)+')'
 			EXEC(@PrefValue)
 				
 			 if(@ISINVENTORY=1)
 			 begin						
 				select @INVID=InvDocDetailsID FROM  [INV_DocDetails] a WITH(NOLOCK)
-				WHERE a.CostCenterID=@CostCenterID AND DOCID=@DOCID
+				WHERE a.CostCenterID=@CostCenterID AND a.DOCID=@DOCID
 			end
 			else
 			begin 			
 				select @INVID=AccDocDetailsID FROM  [ACC_DocDetails] a WITH(NOLOCK)
-				WHERE a.CostCenterID=@CostCenterID AND DOCID=@DOCID 
+				WHERE a.CostCenterID=@CostCenterID AND a.DOCID=@DOCID 
 			end	
 			
 			Exec [spDOC_SetLinkDimension]

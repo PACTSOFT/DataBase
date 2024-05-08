@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetCostCenterSelectionBoxData]
-	@CostCenterID [bigint],
+	@CostCenterID [int],
 	@ColumnName [nvarchar](500),
 	@UserID [int] = 0,
 	@LangID [int] = 1
@@ -30,6 +30,10 @@ SET NOCOUNT ON
       set  @SQL='select distinct '+ @ColumnName+' from ACC_AccountsExtended  WITH(NOLOCK) '       
   else if(@CostCenterID=3)
 	 set  @SQL='select distinct '+ @ColumnName+' from  INV_ProductExtended WITH(NOLOCK) ' 
+	else if(@CostCenterID in(103,129))
+	 set  @SQL='select distinct '+ @ColumnName+' from  REN_QuotationExtended WITH(NOLOCK) ' 
+	  else if(@CostCenterID in(95,104))
+	 set  @SQL='select distinct '+ @ColumnName+' from  REN_ContractExtended WITH(NOLOCK) ' 	 
   else if(@CostCenterID>40000 and @CostCenterID<50000)
   begin
 	if(@ColumnName like 'dcAlpha%')
@@ -77,5 +81,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION    
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH      
+END CATCH
 GO

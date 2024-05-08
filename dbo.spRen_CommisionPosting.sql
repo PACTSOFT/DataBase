@@ -1,8 +1,9 @@
-﻿USE PACT2c253
+﻿USE PACT2C222
 GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spRen_CommisionPosting]
+	@accID [bigint],
 	@CostCenterID [int],
 	@DocID [bigint],
 	@UserID [int],
@@ -11,7 +12,7 @@ WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN  
    
-declare @totalPreviousPayRcts bigint,@I int,@CNT int,@DocIDValue BIGINT,@CCID INT,@DocXml nvarchar(max),@dbAcc BIGINT,@CrAcc BIGINT,@amt float,@DocDate datetime,@CP nvarchar(max),@CA nvarchar(max),@accID BIGINT,@sql nvarchar(max)
+declare @totalPreviousPayRcts bigint,@I int,@CNT int,@DocIDValue BIGINT,@CCID INT,@DocXml nvarchar(max),@dbAcc BIGINT,@CrAcc BIGINT,@amt float,@DocDate datetime,@CP nvarchar(max),@CA nvarchar(max),@sql nvarchar(max)
 declare @return_value int,@Prefix nvarchar(200),@RoleID bigint,@UserName nvarchar(500),@CompanyGUID nvarchar(50),@start datetime,@end datetime,@days int,@VatAmt float,@loc bigint,@invID bigint,@vno nvarchar(max),@documenttype int
 declare @lldim nvarchar(50),@MPDim  nvarchar(50),@MPDimVal  nvarchar(50),@lltabname nvarchar(50),@UFtabname nvarchar(50),@CPFld nvarchar(50),@UfDim nvarchar(50),@PrdID int,@PartDim nvarchar(50),@PartDimVal int,@VatAcc int
 
@@ -50,7 +51,8 @@ exec [spDOC_GetNode] @PartDim,'Rent',0,0,1,'GUID','Admin',1,1,@PartDimVal output
 select @lltabname=tablename from adm_features WITH(NOLOCK) where featureid=@lldim
 select @UFtabname=tablename from adm_features WITH(NOLOCK) where featureid=@UfDim
 
-set @sql='select @amt=a.Amount,@dbAcc=AdvanceRentAccountID,@CrAcc=RentalIncomeAccountID,@CP=u.ComPer,@CA=u.LLComsAccID,@DocDate=DocDate,@accID=a.accdocdetailsID
+set @sql='select @amt=a.Amount,@dbAcc=AdvanceRentAccountID,@CrAcc=RentalIncomeAccountID,@CP=u.ComPer,@CA=u.LLComsAccID,@DocDate=DocDate
+,@accID=a.accdocdetailsID
 ,@vno=a.Voucherno,@documenttype=a.DocumentType
 from  Acc_docDetails a with(nolock)    
 join com_docCCdata CC with(nolock) on CC.accdocdetailsID=a.accdocdetailsID
@@ -58,7 +60,7 @@ join '+@UFtabname+' uf WITH(NOLOCK) on cc.dcccnid'+Convert(nvarchar(max),(@UfDim
 join Ren_units u WITH(NOLOCK) on uf.nodeid=u.ccnodeid
 join com_ccccdata ucc WITH(NOLOCK) on ucc.costcenterid=93 and ucc.nodeid=u.unitid
 join '+@lltabname+' ll WITH(NOLOCK) on u.LandlordID=ll.nodeid
-where a.CostCenterID='+Convert(nvarchar(max),@CostCenterID)+' and DOCID='+Convert(nvarchar(max),@DocID)+'
+where a.accdocdetailsID='+Convert(nvarchar(max),@accID)+'
   and ucc.ccnid'+Convert(nvarchar(max),(@MPDim-50000))+'='+Convert(nvarchar(max),@MPDimVal)+' and CC.dcccnid'+Convert(nvarchar(max),(@PartDim-50000))+'='+Convert(nvarchar(max),@PartDimVal)
  print @sql
 exec SP_ExecuteSql  @sql,N'@amt float OUTPUT,@dbAcc BIGINT OUTPUT,@CrAcc BIGINT OUTPUT,@CP nvarchar(max) OUTPUT,@CA BIGINT OUTPUT,@DocDate datetime OUTPUT,@accID BIGINT OUTPUT,@CompanyGUID nvarchar(max) OUTPUT,@vno nvarchar(max) OUTPUT,@documenttype int OUTPUT',@amt OUTPUT,@dbAcc OUTPUT,@CrAcc OUTPUT,@CP OUTPUT,@CA OUTPUT,@DocDate OUTPUT,@accID OUTPUT,@CompanyGUID OUTPUT,@vno OUTPUT,@documenttype OUTPUT
@@ -73,7 +75,8 @@ BEGIN
 			select @DocDate=b.DocDate from  Acc_docDetails a with(nolock) 
 			join ADM_DocumentTypes c on a.CostCenterID=c.CostCenterID
 			join Acc_docDetails b with(nolock) on a.AccDocDetailsID=b.RefNodeid			
-			where a.CostCenterID=@CostCenterID and a.DOCID=@DocID and b.RefCCID=400 and b.CostCenterID=c.ConvertAs
+			where a.CostCenterID=@CostCenterID and a.DOCID=@DocID and a.AccDocDetailsID=@accID
+			 and b.RefCCID=400 and b.CostCenterID=c.ConvertAs
 		END
 		
 		exec [spDOC_GetNode] 3,'CONTRACT',0,0,1,'GUID','Admin',1,1,@PrdID output
@@ -88,7 +91,7 @@ BEGIN
 		SELECT @DocIDValue=0
 		
 		select @DocIDValue=DOCID from inv_docdetails	WITH(NOLOCK)
-		where RefNo=@vno and CostCenterID = @CCID 
+		where refnodeid=@accID and CostCenterID = @CCID 
 
 		set @Prefix=''
 		EXEC [sp_GetDocPrefix] '',@DocDate,@CCID,@Prefix output
@@ -168,7 +171,7 @@ BEGIN
 			
 			set @DocIDValue=0
 			select @DocIDValue=DOCID from inv_docdetails	WITH(NOLOCK)
-			where RefNo=@vno and CostCenterID = @CCID 
+			where refnodeid=@accID and CostCenterID = @CCID 
 				
 			set @DocXml='<Row><Transactions  DocDetailsID="0"  DocSeqNo="1"  LinkedInvDocDetailsID= ""  LinkedFieldName= "" ProductID="'+Convert(nvarchar(max),@PrdID)+'" CurrencyID="1" ExchangeRate="1" Unit="1" UOMConversion="1" CreditAccount="'+convert(nvarchar,@CrAcc)+'" DebitAccount ="'+convert(nvarchar,@dbAcc)+'"  Quantity="1" CommonNarration=""   CanRecur="0"  Rate="'+convert(nvarchar,@amt)+'"  Gross="'+convert(nvarchar,@amt)+'"  LineNarration="" ></Transactions>  <Numeric Query=" dcNum51='+convert(nvarchar,@amt)+',dcCalcNum51='+convert(nvarchar,@amt)+',dcCalcNum52=5,dcNum52=5,dcNum60=5,dcCalcNum60=5,dcNum53='+convert(nvarchar,@VatAmt)+',dcCalcNum53='+convert(nvarchar,@VatAmt)+',dcNum61='+convert(nvarchar,@VatAmt)+',dcCalcNum61='+convert(nvarchar,@VatAmt)+'," /> <Alpha  Query="dcAlpha153='''',dcAlpha152=''Service''," /> <CostCenters  /> <EXTRAXML/> <AccountsXML><Accounts CreditAccount="'+convert(nvarchar,@CrAcc)+'"  DebitAccount="'+convert(nvarchar,@dbAcc)+'" Amount="'+convert(nvarchar,@amt)+'" AmtFc="'+convert(nvarchar,@amt)+'"  CurrencyID="1" ExchangeRate="1"  ></Accounts>'
 

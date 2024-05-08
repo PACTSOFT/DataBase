@@ -21,11 +21,15 @@ SET NOCOUNT ON;
 		begin
 			iF(@CostCenterID=95 OR @CostCenterID=103 OR @CostCenterID=104 OR @CostCenterID=129)
 			BEGIN
-				SET @SQL='SELECT quotationid DraftID,'''' DocName,0 NoOfProducts,0 NetValue, D.CostCenterID,case when ModifiedDate is null then CONVERT(DATETIME,createdDate) else CONVERT(DATETIME,ModifiedDate) end AS [Date],
-				CASE WHEN '+CONVERT(NVARCHAR,@CostCenterID)+'=95 THEN ''Contract'' WHEN '+CONVERT(NVARCHAR,@CostCenterID)+'=103 THEN ''Quotation'' WHEN '+CONVERT(NVARCHAR,@CostCenterID)+'=104 THEN ''Purchase Contract'' WHEN '+CONVERT(NVARCHAR,@CostCenterID)+'=129 THEN ''Reservation'' ELSE '''' END Type,null HoldDate
+				SET @SQL='SELECT quotationid DraftID,'''' DocName,0 NoOfProducts,0 NetValue, D.CostCenterID,case when  D.ModifiedDate is null then CONVERT(DATETIME, D.createdDate) else CONVERT(DATETIME, D.ModifiedDate) end AS [Date],
+				CASE WHEN '+CONVERT(NVARCHAR,@CostCenterID)+'=95 THEN ''Contract'' WHEN '+CONVERT(NVARCHAR,@CostCenterID)+'=103 THEN ''Quotation'' WHEN '+CONVERT(NVARCHAR,@CostCenterID)+'=104 THEN ''Purchase Contract'' WHEN '+CONVERT(NVARCHAR,@CostCenterID)+'=129 THEN ''Reservation'' ELSE '''' END Type,null HoldDate,U.Name Unit ,T.FirstName Tenant,P.Name Property
 				FROM ren_quotation D WITH(NOLOCK) 
+				LEFT JOIN REN_Property P ON P.NodeID = D.PropertyID
+				LEFT JOIN REN_Units U ON U.UnitID = D.UnitID
+				LEFT JOIN REN_Tenant T ON T.TenantID = D.TenantID
 				WHERE D.costcenterid='+CONVERT(NVARCHAR,@CostCenterID)+' and D.CreatedBy='''+@UserName+''' and D.StatusID=430 and (D.RefQuotation IS NULL OR D.RefQuotation=0)
-				ORDER BY ModifiedDate DESC'
+				ORDER BY  D.ModifiedDate DESC'
+				PRINT @SQL
 				EXEC (@SQL)
 			END
 			ELSE if(@IsReport is not null and @IsReport =1) 

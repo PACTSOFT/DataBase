@@ -19,6 +19,7 @@ CREATE PROCEDURE [dbo].[spRPT_ComperativeStmt]
 	@LocationWHERE [nvarchar](max) = NULL,
 	@LinkedInvDocDetailsIDs [nvarchar](max),
 	@ShowQtnAddOn [bit],
+	@ShowRevision [bit] = 0,
 	@LangID [int]
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -26,12 +27,12 @@ BEGIN TRY
 SET NOCOUNT ON;  
 
 	DECLARE @SQL NVARCHAR(MAX),@DetailsIDs NVARCHAR(MAX)
-	DECLARE @TblProd AS TABLE(ID INT NOT NULL IDENTITY(1,1), ProductID BIGINT,AvgRate FLOAT)
-	DECLARE @I INT,@CNT INT,@ProductID BIGINT,@BalQty FLOAT,@AvgRate FLOAT,@BalValue FLOAT,@COGS FLOAT,@Dt DATETIME
+	DECLARE @TblProd AS TABLE(ID INT NOT NULL IDENTITY(1,1), ProductID INT,AvgRate FLOAT)
+	DECLARE @I INT,@CNT INT,@ProductID INT,@BalQty FLOAT,@AvgRate FLOAT,@BalValue FLOAT,@COGS FLOAT,@Dt DATETIME
 	
 	IF (@LinkedInvDocDetailsIDs<>'')
 	BEGIN
-		DECLARE @TblDocs AS TABLE(ID INT NOT NULL IDENTITY(1,1), CostCenterID INT,VoucherNo nvarchar(50),ParentVoucherNo nvarchar(50),DetailsID bigint,LinkedDetailsID bigint)
+		DECLARE @TblDocs AS TABLE(ID INT NOT NULL IDENTITY(1,1), CostCenterID INT,VoucherNo nvarchar(50),ParentVoucherNo nvarchar(50),DetailsID INT,LinkedDetailsID INT)
 		SET @SQL='select D.CostCenterID,D.VoucherNo,P.VoucherNo,D.InvDocDetailsID,D.LinkedInvDocDetailsID
 		FROM INV_DocDetails D with(nolock) 
 		LEFT JOIN INV_DocDetails P with(nolock) ON P.InvDocDetailsID=D.LinkedInvDocDetailsID
@@ -106,9 +107,10 @@ LEFT JOIN COM_UOM U with(nolock) ON U.UOMID = D.Unit '+@EnquiryFROM
 	
 	if(@DetailsIDs IS NOT NULL AND @DetailsIDs<>'')
 		SET @SQL=@SQL+' AND D.InvDocDetailsID IN ('+@DetailsIDs+')'
+	SET @SQL=@SQL+' ORDER BY D.DocSeqNo'
 		
 	EXEC(@SQL)
---	print(@SQL)
+	print(@SQL)
 
 select @QtnSELECT=@QtnSELECT+',(select Name from com_lookup with(nolock) where NodeID=T.'+sysColumnName+') '+sysColumnName
 from adm_costcenterdef where costcenterid=@QuotationDocument and ColumnCostCenterID=44 and IsColumnInUse=1 and SysTableName='COM_DocTextData'
@@ -116,7 +118,7 @@ from adm_costcenterdef where costcenterid=@QuotationDocument and ColumnCostCente
 
 	SET @SQL=' 
 DECLARE @I INT,@CNT INT
-DECLARE @Tbl AS TABLE(ID INT NOT NULL IDENTITY(1,1), DetailsID BIGINT,CostCenterID INT,LinkedInvDocDetailsID BIGINT,QDocID BIGINT)
+DECLARE @Tbl AS TABLE(ID INT NOT NULL IDENTITY(1,1), DetailsID INT,CostCenterID INT,LinkedInvDocDetailsID INT,QDocID INT)
 INSERT INTO @Tbl(DetailsID,CostCenterID,LinkedInvDocDetailsID,QDocID)
 SELECT D.[InvDocDetailsID],D.CostCenterID,NULL,D.DocID FROM [INV_DocDetails] D with(nolock)'
 	if CHARINDEX('DCC.dcCCNID',@EnqWHERE)>0
@@ -128,8 +130,18 @@ SELECT D.[InvDocDetailsID],D.CostCenterID,NULL,D.DocID FROM [INV_DocDetails] D w
 	
 	if(@DetailsIDs IS NOT NULL AND @DetailsIDs<>'')
 		SET @SQL=@SQL+' AND D.InvDocDetailsID IN ('+@DetailsIDs+')'
+
+	--declare @AlphaNumCol NVARCHAR(MAX)=''
+	--select @AlphaNumCol =@AlphaNumCol +',N.'+a.name from sys.columns a WITH(NOLOCK)
+	--join sys.tables b WITH(NOLOCK) on a.object_id=b.object_id
+	--where b.name='COM_DocNumData'
+
+	--select @AlphaNumCol =@AlphaNumCol +',T.'+a.name from sys.columns a WITH(NOLOCK)
+	--join sys.tables b WITH(NOLOCK) on a.object_id=b.object_id
+	--where b.name='COM_DocTextData'
+
 		
-SET @SQL=@SQL+' SET @I=0
+	SET @SQL=@SQL+' SET @I=0
 WHILE(1=1)
 BEGIN
 	SET @CNT=(SELECT Count(*) FROM @Tbl)
@@ -140,32 +152,67 @@ BEGIN
 	IF @CNT=(SELECT Count(*) FROM @Tbl)
 		BREAK
 	SET @I=@CNT
-END
+END'
 
-SELECT D.CostCenterID, D.InvDocDetailsID,TBL.LinkedInvDocDetailsID,D.VoucherNo,CONVERT(DATETIME,D.DocDate) DocDate,P.ProductID,P.ProductName,U.UnitName
-,D.Quantity,D.Rate,D.Gross,D.CreditAccount,Cr.AccountName CreditAccountName,D.DocID'
-if(@QTNComparisonDocument>0)
-	SET @SQL=@SQL+',dbo.fnRPT_ExeQtyByDoc(D.CostCenterID,D.InvDocDetailsID,'+convert(nvarchar,@QTNComparisonDocument)+',null,0) ExeQty'
-SET @SQL=@SQL+@QtnSELECT+',N.*,T.*
-FROM [INV_DocDetails] D with(nolock)'
-if @ShowQtnAddOn=1
-begin
-	SET @SQL=@SQL+' LEFT '
-end
-SET @SQL=@SQL+'JOIN @Tbl TBL ON TBL.DetailsID=D.InvDocDetailsID AND TBL.CostCenterID='+convert(nvarchar,@QuotationDocument)+@QtnFROM+'
-INNER JOIN INV_Product P with(nolock) ON P.ProductID = D.ProductID
-INNER JOIN ACC_Accounts CR with(nolock) ON CR.AccountID = D.CreditAccount
-LEFT JOIN COM_UOM U with(nolock) ON U.UOMID = D.Unit
-INNER JOIN COM_DocNumData N with(nolock) ON N.InvDocDetailsID= D.InvDocDetailsID
-INNER JOIN COM_DocTextData T with(nolock) ON T.InvDocDetailsID= D.InvDocDetailsID'
-if @ShowQtnAddOn=1
-begin
+	if @ShowRevision = 1
+	BEGIN
+		SET @SQL=@SQL+'
+DECLARE @RTbl AS TABLE(ID INT NOT NULL IDENTITY(1,1),DocID INT,CostCenterID INT,VersionNo INT,ModifiedDate FLOAT)
+INSERT INTO @RTbl	
+SELECT DocID,CostCenterID,VersionNo,MAX(ModifiedDate) ModifiedDate
+FROM [INV_DocDetails_History] with(nolock) 
+WHERE InvDocDetailsID in (select DetailsID from @Tbl WHERE CostCenterID='+convert(nvarchar,@QuotationDocument)+')
+GROUP BY DocID,CostCenterID,VersionNo '
+	
+		SET @SQL=@SQL+'
+		SELECT D.CostCenterID, D.InvDocDetailsID,TBL.LinkedInvDocDetailsID,D.VoucherNo,CONVERT(DATETIME,D.ModifiedDate) DocDate,P.ProductID,P.ProductName,U.UnitName
+		,D.Quantity,D.Rate,D.Gross,D.CreditAccount,Cr.AccountName CreditAccountName,D.DocID,D.VersionNo'
+		if(@QTNComparisonDocument>0)
+			SET @SQL=@SQL+',0 ExeQty'
+		SET @SQL=@SQL+@QtnSELECT+',N.*,T.*
+		FROM @RTbl R	
+		INNER JOIN [INV_DocDetails_History] D with(nolock) ON D.CostCenterID=R.CostCenterID AND D.DocID=R.DocID and D.VersionNo=R.VersionNo and D.ModifiedDate=R.ModifiedDate
+		INNER JOIN COM_DocNumData_History N with(nolock) ON N.InvDocDetailsID= D.InvDocDetailsID and N.ModifiedDate=D.ModifiedDate	
+		INNER JOIN COM_DocTextData_History T with(nolock) ON T.InvDocDetailsID= D.InvDocDetailsID and T.ModifiedDate=D.ModifiedDate	'
+		if @ShowQtnAddOn=1
+		begin
+			SET @SQL=@SQL+' LEFT '
+		end
+		SET @SQL=@SQL+' JOIN @Tbl TBL ON TBL.DetailsID=D.InvDocDetailsID AND TBL.CostCenterID='+convert(nvarchar,@QuotationDocument)+
+		REPLACE(@QtnFROM,'LEFT JOIN COM_DocNumData AS DOCNUM with(nolock) ON DOCNUM.InvDocDetailsID=D.InvDocDetailsID','JOIN COM_DocNumData_History AS DOCNUM with(nolock) ON DOCNUM.InvDocDetailsID=D.InvDocDetailsID and DOCNUM.ModifiedDate=D.ModifiedDate')
+	END
+	ELSE
+	BEGIN
+		SET @SQL=@SQL+'
+		SELECT D.CostCenterID, D.InvDocDetailsID,TBL.LinkedInvDocDetailsID,D.VoucherNo,CONVERT(DATETIME,D.DocDate) DocDate,P.ProductID,P.ProductName,U.UnitName
+		,D.Quantity,D.Rate,D.Gross,D.CreditAccount,Cr.AccountName CreditAccountName,D.DocID,D.VersionNo'
+		if(@QTNComparisonDocument>0)
+			SET @SQL=@SQL+',dbo.fnRPT_ExeQtyByDoc(D.CostCenterID,D.InvDocDetailsID,'+convert(nvarchar,@QTNComparisonDocument)+',null,0) ExeQty'
+		SET @SQL=@SQL+@QtnSELECT+',N.*,T.*
+		FROM [INV_DocDetails] D with(nolock)
+		INNER JOIN COM_DocNumData N with(nolock) ON N.InvDocDetailsID= D.InvDocDetailsID
+		INNER JOIN COM_DocTextData T with(nolock) ON T.InvDocDetailsID= D.InvDocDetailsID '
+		if @ShowQtnAddOn=1
+		begin
+			SET @SQL=@SQL+' LEFT '
+		end
+		SET @SQL=@SQL+' JOIN @Tbl TBL ON TBL.DetailsID=D.InvDocDetailsID AND TBL.CostCenterID='+convert(nvarchar,@QuotationDocument)+@QtnFROM
+	END
+
 	SET @SQL=@SQL+'
-WHERE D.DocID IN (select QDocID from @Tbl where CostCenterID='+convert(nvarchar,@QuotationDocument)+')'
-end
-SET @SQL=@SQL+'
-ORDER BY D.DocNumber
-'
+	INNER JOIN INV_Product P with(nolock) ON P.ProductID = D.ProductID
+	INNER JOIN ACC_Accounts CR with(nolock) ON CR.AccountID = D.CreditAccount
+	LEFT JOIN COM_UOM U with(nolock) ON U.UOMID = D.Unit'
+	
+	if @ShowQtnAddOn=1
+	begin
+		SET @SQL=@SQL+'
+	WHERE D.DocID IN (select QDocID from @Tbl where CostCenterID='+convert(nvarchar,@QuotationDocument)+')'
+	end
+
+	SET @SQL=@SQL+'
+	ORDER BY D.DocNumber,D.VersionNo
+	'
 if(@QTNComparisonDocument>0)
 begin
 	set @SQL=@SQL+' select D.InvDocDetailsID,DocID,VoucherNo,D.StatusID,D.LinkedInvDocDetailsID,dbo.fnRPT_ExeQtyByDoc(D.CostCenterID,D.InvDocDetailsID,'+convert(nvarchar,@PODocument)+',null,0) POQty'+@QtnCompQty
@@ -188,11 +235,19 @@ begin
 	SET @SQL=@SQL+' select 1 ''Comparison'' where 1!=1'
 end
 print(@SQL)
+print SUBSTRING(@SQL,4000,4000)
 EXEC(@SQL)
 
 	
-	SET @SQL=' SELECT UserColumnName ,C.SysColumnName--,C.CostCenterColID	 
+--	SET @SQL=' SELECT UserColumnName ,C.SysColumnName--,C.CostCenterColID	 
+--FROM ADM_CostCenterDef C with(nolock)
+--WHERE C.CostCenterID='+convert(nvarchar,@QuotationDocument)+' AND C.SysColumnName IN ('+@strExtraFields+')'
+SET @SQL=' declare @LangID int
+set @LangID='+convert(nvarchar,@LangID)+'
+ SELECT C.SysColumnName,
+ case S.LanguageID when 1 then UserColumnName else isnull(S.ResourceData,'''') end UserColumnName--,C.CostCenterColID	 
 FROM ADM_CostCenterDef C with(nolock)
+LEFT JOIN COM_LanguageResources S  WITH(NOLOCK) ON S.ResourceID=C.ResourceID AND S.LanguageID=@LangID
 WHERE C.CostCenterID='+convert(nvarchar,@QuotationDocument)+' AND C.SysColumnName IN ('+@strExtraFields+')'
 	EXEC(@SQL)
 	
@@ -245,5 +300,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

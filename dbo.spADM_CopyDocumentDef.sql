@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_CopyDocumentDef]
-	@DocumentTypeID [bigint],
+	@DocumentTypeID [int],
 	@ColIDs [nvarchar](max),
 	@DocumentsList [nvarchar](max),
 	@ReportsList [nvarchar](max),
@@ -11,7 +11,7 @@ CREATE PROCEDURE [dbo].[spADM_CopyDocumentDef]
 	@CopyActions [bit],
 	@CopyLayout [bit],
 	@UserName [nvarchar](200),
-	@UserID [bigint],
+	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -20,9 +20,10 @@ BEGIN TRANSACTION
 BEGIN TRY                
 SET NOCOUNT ON;              
     --Declaration Section              
-	DECLARE @HasAccess BIT,@DocumentID int,@DocumentColID bigint,@I int, @Cnt int,@AllowDDHistory BIT,@CostCenterID INT,@CostCenterColID bigint,@ColI int, @ColCnt int
+	DECLARE @SQL NVARCHAR(MAX)
+	DECLARE @HasAccess BIT,@DocumentID int,@DocumentColID INT,@I int, @Cnt int,@AllowDDHistory BIT,@CostCenterID INT,@CostCenterColID INT,@ColI int, @ColCnt int
 	SELECT @CostCenterID=CostCenterID FROM ADM_DocumentTypes WITH(NOLOCK) WHERE DocumentTypeID=@DocumentTypeID
-	declare @TblCols as Table(ID int identity(1,1),ColID bigint)
+	declare @TblCols as Table(ID int identity(1,1),ColID INT)
 	
   	DECLARE @DT float
 	set @DT=CONVERT(float,getdate())
@@ -42,10 +43,10 @@ SET NOCOUNT ON;
 	
 	if(@CopyActions=1 or @CopyLayout=1)
 	BEGIN
-		SELECT @I=1,@Cnt=COUNT(*) FROM #TAB
+		SELECT @I=1,@Cnt=COUNT(*) FROM #TAB with(nolock)
 		WHILE @I<=@Cnt              
 		BEGIN   
-			SELECT @DocumentID=CONVERT(INT,DocumentID) FROM #TAB WHERE ID=@I
+			SELECT @DocumentID=CONVERT(INT,DocumentID) FROM #TAB with(nolock) WHERE ID=@I
 			
 			if(@CopyLayout=1)
 			BEGIN
@@ -78,10 +79,10 @@ SET NOCOUNT ON;
 	BEGIN
 		SELECT @CostCenterColID=ColID FROM @TblCols WHERE ID=@ColI
 
-		SELECT @I=1,@Cnt=COUNT(*) FROM #TAB
+		SELECT @I=1,@Cnt=COUNT(*) FROM #TAB with(nolock)
 		WHILE @I<=@Cnt              
 		BEGIN   
-			SELECT @DocumentID=CONVERT(INT,DocumentID) FROM #TAB WHERE ID=@I
+			SELECT @DocumentID=CONVERT(INT,DocumentID) FROM #TAB with(nolock) WHERE ID=@I
 			--User access check               
 			SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,@DocumentID,10)
 			
@@ -113,6 +114,30 @@ SET NOCOUNT ON;
 					LEFT JOIN ADM_CostCenterDef DST WITH(NOLOCK) ON DST.SysColumnName= SRC.SysColumnName AND DST.CostCenterID=@DocumentID
 					WHERE SRC.CostCenterID=@CostCenterID AND SRC.CostCenterColID=@CostCenterColID
 				
+					DECLARE @strColIDs NVARCHAR(MAX)
+					set @SQL=''
+					set @strColIDs=''
+
+					IF EXISTS(SELECT SysColumnName FROM ADM_CostCenterDef WHERE CostCenterID=@CostCenterID AND CostCenterColID=@CostCenterColID AND SysColumnName LIKE 'dcNUM%')
+					BEGIN
+						SET @SQL='SELECT @strColIDs=STUFF((SELECT '',''+CONVERT(NVARCHAR,CostCenterColID) FROM ADM_CostCenterDef WITH(NOLOCK)  
+						WHERE CostCenterID=a.CostCenterID
+						AND (SysColumnName LIKE ''dcNUM''+REPLACE(a.SysColumnName,''dcNUM'','''')
+						OR SysColumnName LIKE ''dcCalcNum''+REPLACE(a.SysColumnName,''dcNUM'','''')
+						OR SysColumnName LIKE ''dcCalcNumFC''+REPLACE(a.SysColumnName,''dcNUM'','''')
+						OR SysColumnName LIKE ''dcExchRT'' +REPLACE(a.SysColumnName,''dcNUM'','''')
+						OR SysColumnName LIKE ''dcCurrID''+REPLACE(a.SysColumnName,''dcNUM'','''') 
+						OR SysColumnName=a.SysColumnName)
+						FOR XML PATH('''')),1,1,'''')
+
+						FROM ADM_CostCenterDef a WITH(NOLOCK)
+						WHERE CostCenterID='+convert(nvarchar,@CostCenterID)+' AND CostCenterColID='+convert(nvarchar,@CostCenterColID)
+						Exec sp_executesql @SQL,N'@strColIDs NVARCHAR(MAX) OUTPUT ',@strColIDs OUTPUT
+					END
+					ELSE
+					SET @strColIDs=@CostCenterColID
+
+					set @SQL='
 					INSERT INTO [ADM_CostCenterDef] 
 				    (CostCenterID
 					,ResourceID
@@ -128,6 +153,7 @@ SET NOCOUNT ON;
 					,IsMandatory
 					,IsEditable
 					,IsVisible
+					,IsColumnUserDefined
 					,ColumnCostCenterID
 					,ColumnCCListViewTypeID
 					,FetchMaxRows
@@ -170,10 +196,10 @@ SET NOCOUNT ON;
 					,Calculate
 					,Cformula
 					,IsReEvaluate)
-				 	SELECT @DocumentID
-				    ,@RID
-				    ,(SELECT TOP 1 CostCenterName FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@DocumentID)
-				    ,(SELECT SysTableName FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterID  AND CostCenterColID=@CostCenterColID)
+				 	SELECT '+convert(nvarchar,@DocumentID)+'
+				    ,'+convert(nvarchar,@RID)+'
+				    ,(SELECT TOP 1 CostCenterName FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID='+convert(nvarchar,@DocumentID)+')
+				    ,(SELECT SysTableName FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID='+convert(nvarchar,@CostCenterID)+'  AND CostCenterColID='+convert(nvarchar,@CostCenterColID)+' )
 				    ,SRC.UserColumnName
 				    ,SRC.SysColumnName
 					,SRC.UserColumnType
@@ -184,6 +210,7 @@ SET NOCOUNT ON;
 					,SRC.IsMandatory
 					,SRC.IsEditable
 					,SRC.IsVisible
+					,SRC.IsColumnUserDefined
 					,SRC.ColumnCostCenterID
 					,SRC.ColumnCCListViewTypeID
 					,SRC.FetchMaxRows
@@ -199,8 +226,8 @@ SET NOCOUNT ON;
 					,NEWID()
 					,SRC.CreatedBy
 					,SRC.CreatedDate
-					,@UserName
-					,@DT
+					,'''+convert(nvarchar,@UserName)+'''
+					,'''+convert(nvarchar,@DT)+'''
 					,SRC.IsUnique
 					,SRC.IsForeignKey
 					,SRC.ParentCostCenterID
@@ -227,8 +254,10 @@ SET NOCOUNT ON;
 					,SRC.Cformula
 					,SRC.IsReEvaluate
 					FROM  ADM_CostCenterDef SRC WITH(NOLOCK)
-					LEFT JOIN ADM_CostCenterDef DST WITH(NOLOCK) ON DST.SysColumnName= SRC.SysColumnName AND DST.CostCenterID=@DocumentID
-					WHERE SRC.CostCenterID=@CostCenterID AND SRC.CostCenterColID=@CostCenterColID
+					LEFT JOIN ADM_CostCenterDef DST WITH(NOLOCK) ON DST.SysColumnName= SRC.SysColumnName AND DST.CostCenterID='+convert(nvarchar,@DocumentID)+' 
+					WHERE SRC.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND SRC.CostCenterColID IN('+@strColIDs+')'
+					Exec sp_executesql @SQL
+
 				END
 				
 				IF EXISTS (SELECT * FROM  ADM_CostCenterDef SRC WITH(NOLOCK)
@@ -291,12 +320,12 @@ SET NOCOUNT ON;
 					WHERE SRC.CostCenterID=@CostCenterID AND SRC.CostCenterColID=@CostCenterColID
 					
 					if exists(select * FROM  ADM_CostCenterDef SRC WITH(NOLOCK)
-					join ADM_DocumentDef srcdf on SRC.CostCenterColID=srcdf.CostCenterColID
+					join ADM_DocumentDef srcdf with(nolock) on SRC.CostCenterColID=srcdf.CostCenterColID
 					WHERE SRC.CostCenterID=@CostCenterID AND SRC.CostCenterColID=@CostCenterColID)
 					BEGIN
 					
 						if exists(select * FROM  ADM_CostCenterDef SRC WITH(NOLOCK)
-						join ADM_DocumentDef srcdf on SRC.CostCenterColID=srcdf.CostCenterColID
+						join ADM_DocumentDef srcdf with(nolock) on SRC.CostCenterColID=srcdf.CostCenterColID
 						JOIN ADM_CostCenterDef DST WITH(NOLOCK) ON DST.SysColumnName= SRC.SysColumnName 
 						join ADM_DocumentDef DSTdf on DST.CostCenterColID=DSTdf.CostCenterColID
 						WHERE SRC.CostCenterID=@CostCenterID AND SRC.CostCenterColID=@CostCenterColID AND DST.CostCenterID=@DocumentID)
@@ -320,7 +349,7 @@ SET NOCOUNT ON;
 								   ,showbodytotal=isnull(srcdf.showbodytotal,1)
 								   ,basedonXMl=srcdf.basedonXMl,Posting=srcdf.Posting						
 							FROM  ADM_CostCenterDef SRC WITH(NOLOCK)
-							join ADM_DocumentDef srcdf on SRC.CostCenterColID=srcdf.CostCenterColID
+							join ADM_DocumentDef srcdf with(nolock) on SRC.CostCenterColID=srcdf.CostCenterColID
 							JOIN ADM_CostCenterDef DST WITH(NOLOCK) ON DST.SysColumnName= SRC.SysColumnName 
 							join ADM_DocumentDef DSTdf on DST.CostCenterColID=DSTdf.CostCenterColID
 							WHERE SRC.CostCenterID=@CostCenterID AND SRC.CostCenterColID=@CostCenterColID AND DST.CostCenterID=@DocumentID
@@ -375,7 +404,7 @@ SET NOCOUNT ON;
 								,srcdf.DrRefID
 								,srcdf.DrRefColID,srcdf.showbodytotal,srcdf.EvaluateAfter,srcdf.basedonXMl,srcdf.Posting,srcdf.RoundOffLineWise
 										FROM  ADM_CostCenterDef SRC WITH(NOLOCK)
-							join ADM_DocumentDef srcdf on SRC.CostCenterColID=srcdf.CostCenterColID
+							join ADM_DocumentDef srcdf with(nolock) on SRC.CostCenterColID=srcdf.CostCenterColID
 							JOIN ADM_CostCenterDef DST WITH(NOLOCK) ON DST.SysColumnName= SRC.SysColumnName 
 							join ADM_DocumentTypes DSTdf on DST.CostCenterID=DSTdf.CostCenterID
 							WHERE SRC.CostCenterID=@CostCenterID AND SRC.CostCenterColID=@CostCenterColID AND DST.CostCenterID=@DocumentID
@@ -458,7 +487,7 @@ SET NOCOUNT ON;
 	WHILE @ColI<=@ColCnt              
 	BEGIN
 		SELECT @CostCenterColID=ColID FROM @TblCols WHERE ID=@ColI
-		select @DataType=ColumnDataType from adm_costcenterdef where costcentercolid=@CostCenterColID
+		select @DataType=ColumnDataType from adm_costcenterdef with(nolock) where costcentercolid=@CostCenterColID
 
 		set @ID='C'+lower(replace(convert(nvarchar(50),newid()),'-',''))
 		
@@ -499,10 +528,10 @@ SET NOCOUNT ON;
 		SET @ColI=@ColI+1   
 	END 
 
-	SELECT @I=1,@Cnt=COUNT(*) FROM #TAB
+	SELECT @I=1,@Cnt=COUNT(*) FROM #TAB with(nolock)
 	WHILE @I<=@Cnt              
 	BEGIN   
-		SELECT @DocumentID=CONVERT(INT,DocumentID) FROM #TAB WHERE ID=@I
+		SELECT @DocumentID=CONVERT(INT,DocumentID) FROM #TAB with(nolock) WHERE ID=@I
 
 		update adm_revenureports
 		set ReportDefnXML=stuff(ReportDefnXML,len(ReportDefnXML)+2-CHARINDEX(reverse('</ColumnDef>'),reverse(ReportDefnXML)),0,@ColDef)
@@ -592,4 +621,5 @@ BEGIN CATCH
  SET NOCOUNT OFF                
  RETURN -999                 
 END CATCH
+
 GO

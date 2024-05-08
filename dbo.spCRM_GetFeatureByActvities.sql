@@ -58,12 +58,7 @@ SET @SelectedColumn=''
 	SET @PRIMARYKEY  = 'ContactID'
 	SET @SelectedColumn='O.FirstName DocNo, '
  END
- ELSE IF(@CostCenterID=122) 
- BEGIN
-	SET @tablejoin='LEFT OUTER JOIN  svc_serviceticketfollowup AS O with(nolock)  ON O.serviceticketfollowupID = A.NodeID AND A.CostCenterID= '+CONVERT(VARCHAR,@CostCenterID)
-	SET @PRIMARYKEY  = 'serviceticketfollowupID'
-	SET @SelectedColumn='O.ServiceTicketID DocNo, '
- END
+
  ELSE IF(@CostCenterID=95) 
  BEGIN
 	SET @tablejoin='LEFT OUTER JOIN  Ren_Contract AS O  with(nolock) ON O.ContractID = A.NodeID AND A.CostCenterID= '+CONVERT(VARCHAR,@CostCenterID)
@@ -141,6 +136,8 @@ SET @CustomQuery2=' '
  
  SET @SQL='  
 	SELECT  '+@SelectedColumn+'  A.ActivityID, 
+	CONVERT(datetime, A.ActStartDate) AS StartDateTime,   CONVERT(datetime, A.ActEndDate) AS EndDateTime, TotalDuration,  
+	convert(datetime,(select max(startdate)  from CRM_ActivityLog WITH(NOLOCK) where ActivityID=A.ActivityID)) LastStartDate ,
 	dbo.[fnGet_GetContactPersonForCalendar] (A.CostCenterID,A.NodeID,A.ContactID) CRMContactPerson,
 	A.ActivityTypeID, Isnull(A.ScheduleID,0) as ScheduleID, A.CostCenterID, A.NodeID, A.StatusID AS ActStatus, A.Subject AS ActSubject, A.Priority,   
 	A.PctComplete, A.Location, A.IsAllDayActivity,  CONVERT(datetime, A.ActualCloseDate) AS ActualCloseDate, A.ActualCloseTime, A.CustomerID,   
@@ -169,7 +166,8 @@ SET @CustomQuery2=' '
 IF @CostCenterID<>-100
 BEGIN
  SET @WHERE=' WHERE  (A.CostCenterID = '+CONVERT(VARCHAR,@CostCenterID)+')  and A.nodeid='+CONVERT(VARCHAR,@NodeID)+''    
-	 
+	 IF(@CostCenterID not between 40000 and 50000)
+	  BEGIN	
 		SET  @WHERE=@WHERE+ ' AND (A.CREATEDBY in 
 	  (select UserName from dbo.adm_users where userid in (select nodeid from dbo.COM_CostCenterCostCenterMap where 
 		  Parentcostcenterid=7 and costcenterid=7 and ParentNodeid='+CONVERT(NVARCHAR(40),@UserSeqno)+' 
@@ -184,7 +182,8 @@ BEGIN
 		 or '''+convert(varchar,@UserSeqno)+''' in            
 		 (select userid from crm_teams where isowner=0 and  teamid in            
 		 ( select teamnodeid from CRM_Assignment where CCID='+CONVERT(VARCHAR,@CostCenterID)+' and  IsFromActivity=A.ActivityID and IsTeam=1)) ) )         
-		 '      
+		 '
+	END	       
 END 
 if(@WHERE<>'')
 set @WHERE=@WHERE +' and a.statusid<>7'

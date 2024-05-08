@@ -21,8 +21,8 @@ SET NOCOUNT ON;
 	
 	SET @Sql=''
 	SELECT @Sql=@Sql+','+a.name
-	FROM sys.columns a
-	JOIN sys.columns b on a.name=b.name and b.object_id= a.object_id
+	FROM sys.columns a with(nolock)
+	JOIN sys.columns b with(nolock) on a.name=b.name and b.object_id= a.object_id
 	WHERE a.object_id= object_id(@TableName) and a.name not in ('NodeID','lft','rgt','GUID','CreatedDate')
 	
 	set @Sql='declare @lft bigint, @rgt bigint, @rootrgt bigint,@MaxNodeID bigint,@RootNodeID bigint
@@ -70,23 +70,20 @@ SET NOCOUNT ON;
 '
 	print @Sql
 	exec(@Sql)
-
-	insert into [COM_CCCCData]
-	([CostCenterID],[NodeID],[CCNID1],[CCNID2],[CCNID3],[CCNID4],[CCNID5],[CCNID6],[CCNID7],[CCNID8],[CCNID9],[CCNID10]
-		  ,[CCNID11],[CCNID12],[CCNID13],[CCNID14],[CCNID15],[CCNID16],[CCNID17],[CCNID18],[CCNID19],[CCNID20]
-		  ,[CCNID21],[CCNID22],[CCNID23],[CCNID24],[CCNID25],[CCNID26],[CCNID27],[CCNID28],[CCNID29],[CCNID30]
-		  ,[CCNID31],[CCNID32],[CCNID33],[CCNID34],[CCNID35],[CCNID36],[CCNID37],[CCNID38],[CCNID39],[CCNID40]
-		  ,[CCNID41],[CCNID42],[CCNID43],[CCNID44],[CCNID45],[CCNID46],[CCNID47],[CCNID48],[CCNID49],[CCNID50]
-		  ,[CompanyGUID],GUID,[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[AccountID],[ProductID])
-	SELECT @CostCenterID,t.NewNodeid,[CCNID1],[CCNID2],[CCNID3],[CCNID4],[CCNID5],[CCNID6],[CCNID7],[CCNID8],[CCNID9],[CCNID10]
-		  ,[CCNID11],[CCNID12],[CCNID13],[CCNID14],[CCNID15],[CCNID16],[CCNID17],[CCNID18],[CCNID19],[CCNID20]
-		  ,[CCNID21],[CCNID22],[CCNID23],[CCNID24],[CCNID25],[CCNID26],[CCNID27],[CCNID28],[CCNID29],[CCNID30]
-		  ,[CCNID31],[CCNID32],[CCNID33],[CCNID34],[CCNID35],[CCNID36],[CCNID37],[CCNID38],[CCNID39],[CCNID40]
-		  ,[CCNID41],[CCNID42],[CCNID43],[CCNID44],[CCNID45],[CCNID46],[CCNID47],[CCNID48],[CCNID49],[CCNID50]
-		  ,[CompanyGUID],newid(),[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[AccountID],[ProductID]
-	 FROM [COM_CCCCData]  c
-	  join #temp t on c.nodeid=t.oldnodeid and c.costcenterid=@CostCenterID
-  	select * from #temp
+	
+	SET @Sql=''
+	SELECT @Sql=@Sql+','+a.name
+	FROM sys.columns a with(nolock)
+	WHERE a.object_id= object_id('COM_CCCCData') and a.name LIKE 'CCNID%'
+	
+	SET @Sql='insert into [COM_CCCCData]([CostCenterID],[NodeID],[CompanyGUID],GUID,[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[AccountID],[ProductID]'+@Sql+')
+	SELECT c.CostCenterID,t.NewNodeid,[CompanyGUID],newid(),[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[AccountID],[ProductID]'+@Sql+'
+	FROM [COM_CCCCData]  c with(nolock)
+	join #temp t with(nolock) on c.nodeid=t.oldnodeid and c.costcenterid='+CONVERT(NVARCHAR,@CostCenterID)
+	
+	EXEC (@Sql)
+	
+  	select * from #temp with(nolock)
   	
 	drop table #temp
 	 

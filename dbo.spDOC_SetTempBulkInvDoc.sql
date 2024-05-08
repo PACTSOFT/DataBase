@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SetTempBulkInvDoc]
 	@CostCenterID [int],
-	@DocID [bigint],
+	@DocID [int],
 	@DocPrefix [nvarchar](50),
 	@DocNumber [nvarchar](500),
 	@DocDate [datetime],
@@ -22,13 +22,13 @@ CREATE PROCEDURE [dbo].[spDOC_SetTempBulkInvDoc]
 	@AttachmentsXML [nvarchar](max),
 	@ActivityXML [nvarchar](max),
 	@IsImport [bit],
-	@LocationID [bigint],
-	@DivisionID [bigint],
+	@LocationID [int],
+	@DivisionID [int],
 	@WID [int],
 	@RoleID [int],
 	@DocAddress [nvarchar](max) = null,
-	@RefCCID [bigint],
-	@RefNodeid [bigint],
+	@RefCCID [int],
+	@RefNodeid [int],
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
 	@UserID [int] = 0,
@@ -42,27 +42,27 @@ SET NOCOUNT ON;
 
 	--Declaration Section      
 	DECLARE @QUERYTEST NVARCHAR(100),@TYPE NVARCHAR(100),@Guid nvarchar(50),@ISSerial  BIT,@IsBatChes BIT,@IsDynamic BIT,@IStempINFO BIT,@UNIQUECNT int
-	DECLARE  @tempDOc BIGINT,@HasAccess int,@ACCOUNT1 BIGINT,@ACCOUNT2 BIGINT,@ACCOUNT1Name nvarchar(500),@ACCOUNT2Name nvarchar(500)      
-	DECLARE @Dt float,@XML XML,@DocumentType INT,@DocAbbr nvarchar(50),@ProductName nvarchar(500),@ProductID bigint      
-	DECLARE @InvDocDetailsID BIGINT,@I int,@Cnt int,@SQL NVARCHAR(MAX),@VoucherNo NVARCHAR(500),@ProductType int,@VoucherType int,@BILLDate FLOAT      
-	DECLARE @AccountsXML XML,@VersionNo INT ,@vno nvarchar(100)   
+	DECLARE  @tempDOc INT,@HasAccess int,@ACCOUNT1 INT,@ACCOUNT2 INT,@ACCOUNT1Name nvarchar(500),@ACCOUNT2Name nvarchar(500)      
+	DECLARE @Dt float,@XML XML,@DocumentType INT,@DocAbbr nvarchar(50),@ProductName nvarchar(500),@ProductID INT,@InvXML XML ,@AP varchar(10)        
+	DECLARE @InvDocDetailsID INT,@I int,@Cnt int,@SQL NVARCHAR(MAX),@VoucherNo NVARCHAR(500),@ProductType int,@VoucherType int,@BILLDate FLOAT      
+	DECLARE @AccountsXML XML,@VersionNo INT ,@vno nvarchar(100)  ,@TRANSXML XML  
 	DECLARE @Length int,@temp varchar(100),@t int ,@DocOrder int,@IsRevision BIT  ,@ind int,@indcnt int,@SECTIONID INT,@holseq int
-	DECLARE @return_value int,@TEMPxml NVARCHAR(max),@PrefValue NVARCHAR(500),@LinkedID bigint,@oldStatus int,@ImpDocID BIGINT,@ActXML xml
-	declare @level int,@maxLevel int,@StatusID int,@ReviseReason  nvarchar(max) ,@Iscode INT,@QtyAdjustments XML,@BinsXML XML,@TEmpWid BIGINT,@DeprXML nvarchar(max)
-	declare @TotLinkedQty float,@CheckHold bit,@AppRejDate datetime,@Remarks nvarchar(max),@Series int,@prefixCCID bigint,@DUP_VoucherNo NVARCHAR(max)   
-	declare @DetailIDs nvarchar(max),@HistoryStatus nvarchar(50),@DUPLICATECODE  NVARCHAR(MAX),@IsLockedPosting BIT,@BinDimesion bigint,@BinDimesionNodeID bigint
-	DECLARE  @PrefValueDoc BIT , @hideBillNo BIT   ,@QtyFin FLOAT , @QthChld FLOAT,@Dimesion bigint,@DimesionNodeID bigint,@cctablename nvarchar(50)     
-	DECLARE @ConsolidatedBatches nvarchar(50),@Tot float,@BatchID Bigint,@OldBatchID BIGINT,@NID BIGINT,@DLockCC BIGINT,@DLockCCValues NVARCHAR(max),@LockCC BIGINT,@LockCCValues NVARCHAR(max)
-	declare @loc int,@div int,@dim int,@IsQtyIgnored BIT,@WHERE nvarchar(max),@tempProd bigint,@CCGuid nvarchar(100),@LineWiseApproval bit,@sysinfo nvarchar(max)
-	declare @ddxml nvarchar(max),@bxml nvarchar(max),@ddID bigint,@Prefix nvarchar(200),@AUTOCCID bigint,@DetIDS nvarchar(max),@CCStatusID int,@TempDocDate DATETIME,@tempLevel BIGINT   
-	DECLARE @EMPYEAR NVARCHAR(20),@EMPCODE INT,@DocGrade INT,@RefBatchID BIGINT,@batchCol nvarchar(100),@varxml xml
+	DECLARE @return_value int,@TEMPxml NVARCHAR(max),@PrefValue NVARCHAR(500),@LinkedID INT,@oldStatus int,@ImpDocID INT,@ActXML xml
+	declare @level int,@maxLevel int,@StatusID int,@ReviseReason  nvarchar(max) ,@Iscode INT,@QtyAdjustments XML,@BinsXML XML,@TEmpWid INT,@DeprXML nvarchar(max)
+	declare @TotLinkedQty float,@CheckHold bit,@AppRejDate datetime,@Remarks nvarchar(max),@Series int,@prefixCCID INT,@DUP_VoucherNo NVARCHAR(max)   
+	declare @DetailIDs nvarchar(max),@HistoryStatus nvarchar(50),@DUPLICATECODE  NVARCHAR(MAX),@IsLockedPosting BIT,@BinDimesion INT,@BinDimesionNodeID INT
+	DECLARE  @PrefValueDoc BIT , @hideBillNo BIT   ,@QtyFin FLOAT , @QthChld FLOAT,@Dimesion INT,@DimesionNodeID INT,@cctablename nvarchar(50)     
+	DECLARE @ConsolidatedBatches nvarchar(50),@Tot float,@BatchID INT,@OldBatchID INT,@NID INT,@DLockCC INT,@DLockCCValues NVARCHAR(max),@LockCC INT,@LockCCValues NVARCHAR(max)
+	declare @loc int,@div int,@dim int,@IsQtyIgnored BIT,@WHERE nvarchar(max),@tempProd INT,@CCGuid nvarchar(100),@LineWiseApproval bit,@sysinfo nvarchar(max)
+	declare @ddxml nvarchar(max),@bxml nvarchar(max),@ddID INT,@Prefix nvarchar(200),@AUTOCCID INT,@DetIDS nvarchar(max),@CCStatusID int,@TempDocDate DATETIME,@tempLevel INT   
+	DECLARE @EMPYEAR NVARCHAR(20),@EMPCODE INT,@DocGrade INT,@RefBatchID INT,@batchCol nvarchar(100),@varxml xml
 	DECLARE @EMPID INT,@LEAVETYPE INT,@FromDate DATETIME,@TDate DATETIME,@DocLoc INT,@actDocDate INT,@AssignLeaves float,@LeaveYear varchar(5)
 	
-	declare @Codetemp table (prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200),IsManualCode bit)
-	declare @tblBILL TABLE(ID int identity(1,1),AccountID BIGINT, Amount FLOAT, DocNo NVARCHAR(500))        
-	declare @caseTab table(id int identity(1,1),CaseID BIGINT,StartDate DATETIME,StartTime NVARCHAR(20),EndDate  DATETIME,EndTime  NVARCHAR(20),AssignedTo BIGINT,Remarks NVARCHAR(MAX),SERIALNUMBER NVARCHAR(MAX))
-	declare @CustomerName nvarchar(500),@CaseNumber nvarchar(500),@SERIALNUMBER nvarchar(500),@CaseID bigint,@Assignedto bigint,@CaseDate float
-	declare @LockCrAcc bigint,@LockDrAcc bigint,@AccLockDate DATETIME,@AccType nvarchar(max),@CAccountTypeID bigint,@DAccountTypeID bigint,@IsUniqueDoc BIT,@UniqueDefn NVARCHAR(MAX),@UniqueQuery NVARCHAR(MAX),@UniqueCount INT,@SYSCOL NVARCHAR(50)
+	declare @Codetemp table (prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200),IsManualCode bit)
+	declare @tblBILL TABLE(ID int identity(1,1),AccountID INT, Amount FLOAT, DocNo NVARCHAR(500))        
+	declare @caseTab table(id int identity(1,1),CaseID INT,StartDate DATETIME,StartTime NVARCHAR(20),EndDate  DATETIME,EndTime  NVARCHAR(20),AssignedTo INT,Remarks NVARCHAR(MAX),SERIALNUMBER NVARCHAR(MAX))
+	declare @CustomerName nvarchar(500),@CaseNumber nvarchar(500),@SERIALNUMBER nvarchar(500),@CaseID INT,@Assignedto INT,@CaseDate float
+	declare @LockCrAcc INT,@LockDrAcc INT,@AccLockDate DATETIME,@AccType nvarchar(max),@CAccountTypeID INT,@DAccountTypeID INT,@IsUniqueDoc BIT,@UniqueDefn NVARCHAR(MAX),@UniqueQuery NVARCHAR(MAX),@UniqueCount INT,@SYSCOL NVARCHAR(50), @QTYADJ NVARCHAR(MAX),@QTYADJSQ NVARCHAR(MAX)
 	declare @TblUnique TABLE(ID INT IDENTITY(1,1),UsedColumn nvarchar(100))
 		
 	--Loading Global Preferences
@@ -77,14 +77,14 @@ SET NOCOUNT ON;
 	INSERT INTO @TblPref
 	SELECT PrefName,PrefValue,0 FROM COM_DocumentPreferences with(nolock)
 	WHERE CostCenterID=@CostCenterID and PrefName IN ('DocumentLinkDimension','AutoCode','BillwisePosting','Lock Data Between','EnableAssetSerialNo'
-	,'DocwiseSNo','Paypercent','ValueType','onsystemdate','Billlanding','SameserialNo','Enabletolerance','DontSaveCompleteLinked','DisableQtyCheck','AllowMultipleLinking','VendorBasedBillNo','Hide_Billno','DuplicateProductClubBins','LockCostCenterNodes','LockCostCenters'
+	,'DocwiseSNo','Paypercent','ValueType','onsystemdate','Billlanding','SameserialNo','Enabletolerance','DontSaveCompleteLinked','DisableQtyCheck','AllowMultipleLinking','VendorBasedBillNo','Hide_Billno','DuplicateProductClubBins','LockCostCenterNodes','LockCostCenters','DocQtyAdjustment'
 	,'VatAdvanceDoc','PostAsset','DimTransferSrc','IsBudgetDocument','UseQtyAdjustment','UpdateDueDate','UpdateLinkQty','UpdateLinkValue','UpdateJustReference','ExecReq','LinkForward','AuditTrial','EnableRevision','Autopostdocument','OverrideLock','Checkallproducts','ShortageDOC','ExcessDOC'
-	,'IsBudgetDocument','EnablePromotions','samebatchtoall','DocDateasPostedDate','GenerateSeq','EnableUniqueDocument','BackTrack','AssignVendors','DoNotEmailOrSMSUn-ApprovedDocuments','DumpStockCodes','DonotupdateInventory','DonotupdateAccounts','TempInfo')
+	,'IsBudgetDocument','EnablePromotions','samebatchtoall','DocDateasPostedDate','GenerateSeq','EnableUniqueDocument','BackTrack','AssignVendors','DoNotEmailOrSMSUn-ApprovedDocuments','DumpStockCodes','DonotupdateInventory','DonotupdateAccounts','TempInfo','OnPosted')
 	
 	set @batchCol=''
 	if exists(select Value from @TblPref where IsGlobal=0 and Name='samebatchtoall' and Value='true')
 	BEGIN
-		select @batchCol=SysColumnName from ADM_CostCenterDef
+		select @batchCol=SysColumnName from ADM_CostCenterDef with(nolock)
 		where CostCenterID=@CostCenterID and ColumnCostCenterID=16 and SysColumnName like 'dcalpha%'
 	END
 	
@@ -159,7 +159,7 @@ SET NOCOUNT ON;
 	 where costcenterid=3 and name='TempPartProduct' and isnumeric(Value)=1 
 
 	 if(@PrefValue is not null and @PrefValue<>'' and @PrefValue<>'0')
-		set @tempProd=convert(BIGINT,@PrefValue)
+		set @tempProd=convert(INT,@PrefValue)
 	 
 	SELECT @IsUniqueDoc=(case when Value='True' then 1 else 0 end) FROM @TblPref where IsGlobal=0 and  Name='EnableUniqueDocument'
 	SELECT @ISSerial=(case when Value='True' then 1 else 0 end) FROM @TblPref where IsGlobal=1 and  Name='EnableSerialProducts'
@@ -175,7 +175,7 @@ SET NOCOUNT ON;
 		insert into @table  
 		exec SPSplitString @AccType,','  
 
-		declare @AcctypesTable table (ID bigint identity(1,1),AccountTypeID bigint,AccountDate datetime)  
+		declare @AcctypesTable table (ID INT identity(1,1),AccountTypeID INT,AccountDate datetime)  
 		insert into @AcctypesTable   
 		select reverse(parsename(replace(reverse(TypeID),'~','.'),1)) as [AccountTypeID],  
 		 convert(datetime,reverse(parsename(replace(reverse(TypeID),'~','.'),2))) as [Date] from @table  
@@ -188,7 +188,7 @@ SET NOCOUNT ON;
 	begin
 		set @Dimesion=0
 		begin try
-			select @Dimesion=convert(bigint,@PrefValue)
+			select @Dimesion=convert(INT,@PrefValue)
 		end try
 		begin catch
 			set @Dimesion=0
@@ -223,13 +223,15 @@ SET NOCOUNT ON;
 	set @ActXML=@ActivityXML
 	set @PrefValue=''
 	
-	SELECT @Guid=X.value('@CCGuid','nvarchar(100)'),@PrefValue=X.value('@Guid','nvarchar(100)'),@ImpDocID=X.value('@ImpDocID','BIGINT')
+	SELECT @Guid=X.value('@CCGuid','nvarchar(100)'),@PrefValue=X.value('@Guid','nvarchar(100)'),@ImpDocID=X.value('@ImpDocID','INT')
 	,@bxml=X.value('@UniquNo','nvarchar(max)'),@DUPLICATECODE=X.value('@CheckStock','nvarchar(max)')    
+	,@AP=X.value('@AP','varchar(10)')
 	from @XML.nodes('/XML') as Data(X)
-	
+	if(@AP is null)
+		set @AP=''
 	--Pos Session Check
-	declare @PosSessionID bigint
-	SELECT @PosSessionID=X.value('@PosSessionID','bigint')  from @ActXML.nodes('/XML') as Data(X)
+	declare @PosSessionID INT
+	SELECT @PosSessionID=X.value('@PosSessionID','INT')  from @ActXML.nodes('/XML') as Data(X)
 	if(@PosSessionID is not null and not exists(select POSLoginHistoryID from POS_loginHistory with(nolock) where POSLoginHistoryID=@PosSessionID and IsUserClose=0))
 		RAISERROR('-152',16,1)	
 	
@@ -264,6 +266,18 @@ SET NOCOUNT ON;
 		update COM_DocID
 		set LockedBY=null
 		where ID=@DocID
+		
+		DELETE FROM [COM_Billwise]      
+		WHERE [DocNo]=@VoucherNo
+		
+		delete from COM_BillWiseNonAcc
+		where DocNo=@VoucherNo
+
+		DELETE FROM COM_ChequeReturn
+		WHERE [DocNo]=@VoucherNo AND DocSeqNo=1   
+
+		DELETE FROM COM_LCBills      
+		WHERE [DocNo]=@VoucherNo AND DocSeqNo=1  
 		
 	END
 	
@@ -389,14 +403,14 @@ SET NOCOUNT ON;
 		set @PrefValue=''      
 		select @PrefValue= isnull(Value,'') from @TblPref where IsGlobal=1 and Name='Maintain Dimensionwise stock'        
 
-		if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)        
+		if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)        
 		begin 					 
-			if(convert(bigint,@PrefValue)=50001)
+			if(convert(INT,@PrefValue)=50001)
 				set @dim=1
-			else if(convert(bigint,@PrefValue)=50002)
+			else if(convert(INT,@PrefValue)=50002)
 				set @dim=2
-			else if(convert(bigint,@PrefValue)>50002)			
-				set @dim=convert(bigint,@PrefValue)-50000 
+			else if(convert(INT,@PrefValue)>50002)			
+				set @dim=convert(INT,@PrefValue)-50000 
 		end 
 	END	
 
@@ -457,7 +471,7 @@ SET NOCOUNT ON;
 				
 	END
         
-	declare @tblIDsList table(Id bigint)  
+	declare @tblIDsList table(Id INT)  
 	insert into @tblIDsList  
 	exec SPSplitString @DetailIDs,'~'        
 	
@@ -474,7 +488,7 @@ SET NOCOUNT ON;
 		END
 	END
   
-	IF (@IsRevision=1 and @DocID>0 and not exists(select DocID from [INV_DocDetails_History] where DocID=@DocID))  
+	IF (@IsRevision=1 and @DocID>0 and not exists(select DocID from [INV_DocDetails_History] with(nolock) where DocID=@DocID))  
 	BEGIN    
 	 EXEC @return_value = [spDOC_SaveHistory]      
 			@DocID =@DocID ,
@@ -504,7 +518,7 @@ SET NOCOUNT ON;
 			
 		IF (@AllowLockData=1 and @IsLock=1 and  (SELECT Value FROM @TblPref where IsGlobal=0 and  Name='OverrideLock')<>'true')
 		BEGIN	
-			SELECT @LockCC=CONVERT(BIGINT,Value) FROM @TblPref WHERE  IsGlobal=1 and Name='LockCostCenters' and isnumeric(Value)=1
+			SELECT @LockCC=CONVERT(INT,Value) FROM @TblPref WHERE  IsGlobal=1 and Name='LockCostCenters' and isnumeric(Value)=1
 
 			if(@LockCC is null or @LockCC=0)
 				RAISERROR('-125',16,1)      			
@@ -513,7 +527,7 @@ SET NOCOUNT ON;
 		
 		IF (@DAllowLockData=1 and @IsLock=1)
 		BEGIN
-			SELECT @DLockCC=CONVERT(BIGINT,Value) FROM @TblPref where IsGlobal=0 and  Name='LockCostCenters' and isnumeric(Value)=1
+			SELECT @DLockCC=CONVERT(INT,Value) FROM @TblPref where IsGlobal=0 and  Name='LockCostCenters' and isnumeric(Value)=1
 		
 			if(@DLockCC is null or @DLockCC=0)
 				RAISERROR('-125',16,1)      			
@@ -521,12 +535,11 @@ SET NOCOUNT ON;
 	END
 	
 	  
-	      
-		
+	    
 		if(@HistoryStatus<>'Add')
 		BEGIN
 		
-			DECLARE @TblDeleteRows AS Table(ID BIGINT,DynamicType INT,Linkid BIGINT)
+			DECLARE @TblDeleteRows AS Table(ID INT,DynamicType INT,Linkid INT)
 		
 			INSERT INTO @TblDeleteRows(ID,DynamicType,Linkid)
 			SELECT InvDocDetailsID,0,LinkedInvDocDetailsID FROM INV_DocDetails WITH(NOLOCK)
@@ -538,46 +551,94 @@ SET NOCOUNT ON;
 			BEGIN
 			
 				if exists(SELECT ID from @tblIDsList a
-				join INV_DocDetails b on b.InvDocDetailsID=a.ID
+				join INV_DocDetails b with(nolock) on b.InvDocDetailsID=a.ID
 				where DocID<>@DocID)
 					RAISERROR('-101',16,1)  
-					
+				
+				if (@VoucherType=1 and exists(SELECT ID from @tblIDsList a
+				join INV_DocDetails b with(nolock) on b.RefInvDocDetailsID=a.ID))
+					RAISERROR('-502',16,1) 	
+				
+				--ondelete External function
+				set @cctablename=''
+				select @cctablename=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=8
+				if(@cctablename<>'')
+				BEGIN
+					set @DetIDS=''
+					select @DetIDS=@DetIDS+CONVERT(nvarchar,ID)+',' from @TblDeleteRows
+					set @DetIDS=@DetIDS+'-1'
+					exec @cctablename @CostCenterID,@DocID,@DetIDS,@UserID,@LangID
+				END	
+				
 				--DELETE DOCUMENT EXTRA COSTCENTER FEILD DETAILS
-				DELETE T FROM COM_DocCCData t
+				DELETE T FROM COM_DocCCData t with(nolock)
 				join @TblDeleteRows a on t.InvDocDetailsID=a.ID		
 
 				--DELETE DOCUMENT EXTRA NUMERIC FEILD DETAILS      
-				DELETE T FROM [COM_DocNumData] t
+				DELETE T FROM [COM_DocNumData] t with(nolock)
 				join @TblDeleteRows a on t.InvDocDetailsID=a.ID
 				
 				--DELETE DOCUMENT EXTRA TEXT FEILD DETAILS      
-				DELETE T FROM [COM_DocTextData] T
+				DELETE T FROM [COM_DocTextData] T with(nolock)
 				join @TblDeleteRows a on t.InvDocDetailsID=a.ID
 
 				--DELETE Accounts DocDetails      
-				DELETE T FROM [ACC_DocDetails] T
+				DELETE T FROM [ACC_DocDetails] T with(nolock)
 				join @TblDeleteRows a on t.InvDocDetailsID=a.ID 
 
 				--DELETE Accounts DocDetails      
-				DELETE T FROM [INV_SerialStockProduct] T
+				DELETE T FROM [INV_SerialStockProduct] T with(nolock)
 				join @TblDeleteRows a on t.InvDocDetailsID=a.ID 
 				
-				DELETE T FROM [INV_DocDetails] T
+				DELETE T FROM [INV_DocDetails] T with(nolock)
 				join @TblDeleteRows a on t.InvDocDetailsID=a.ID	
 
 			END
 			
-			DELETE T FROM INV_DocExtraDetails T
+			DELETE T FROM INV_DocExtraDetails T with(nolock)
 			join @TblDeleteRows a on t.InvDocDetailsID=a.ID
 			
-			DELETE T FROM INV_DocExtraDetails T
+			DELETE T FROM INV_DocExtraDetails T with(nolock)
 			join @tblIDsList a on t.InvDocDetailsID=a.ID
 			
-			DELETE T FROM [ACC_DocDetails] T
+			DELETE T FROM [ACC_DocDetails] T with(nolock)
 			join @tblIDsList a on t.InvDocDetailsID=a.ID
 			
-			DELETE T FROM [INV_SerialStockProduct] T
+			DELETE T FROM [INV_SerialStockProduct] T with(nolock)
 			join @tblIDsList a on t.InvDocDetailsID=a.ID
+
+
+			if(@Dimesion>50000)    
+			begin
+				set @DimesionNodeID=0	
+				set @vno=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')
+				select @cctablename=tablename from ADM_Features WITH(NOLOCK) where FeatureID=@Dimesion
+				set @DUPLICATECODE='select @NodeID=NodeID from '+@cctablename+' WITH(NOLOCK) where Name in('''+@vno+''''	
+				
+				if(@VersionNo>=1)  
+				begin
+					if exists(select value from @TblPref where IsGlobal=0 and Name='RevisPrefix' and Value is not null and Value<>'')
+						select @vno=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')+'/'+Value+convert(nvarchar,@VersionNo)
+						from @TblPref where IsGlobal=0 and Name='RevisPrefix' 					
+					ELSE
+						set	@vno=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')+'/'+convert(nvarchar,@VersionNo)
+
+				set @DUPLICATECODE=@DUPLICATECODE + ','''+@vno+''''
+				end
+
+				set @DUPLICATECODE=@DUPLICATECODE+')'
+							
+				EXEC sp_executesql @DUPLICATECODE,N'@NodeID INT OUTPUT',@DimesionNodeID output
+			end 
+
+			
+			if(@IsRevision=1)  
+			begin 
+				SET @VoucherNo=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')   
+				set @VersionNo=@VersionNo+1 
+
+				set @VoucherNo=@VoucherNo+'/'+convert(nvarchar, @VersionNo  )
+			end
 
 			SET  @xml=@StatXML       
 			
@@ -590,21 +651,21 @@ SET NOCOUNT ON;
 				,ActDocDate=@ActDocDate
 				,BillNo=Case WHEN  X.value('@BillNo','NVarChar(500)') is not null THEN X.value('@BillNo','NVarChar(500)') ELSE @BillNo  END        
 				,BillDate=CONVERT(FLOAT,X.value('@BillDate','datetime'))      
-				,LinkedInvDocDetailsID= X.value('@LinkedInvDocDetailsID','bigint')      
+				,LinkedInvDocDetailsID= X.value('@LinkedInvDocDetailsID','INT')      
 				,LinkedFieldName=X.value('@LinkedFieldName','nvarchar(200)')      
 				,LinkedFieldValue= X.value('@LinkedFieldValue','float')      
 				,CommonNarration= X.value('@CommonNarration','nvarchar(max)')      
 				,LineNarration= X.value('@LineNarration','nvarchar(max)')      
-				,DebitAccount=ISNULL( X.value('@DebitAccount','bigint'),1)      
-				,CreditAccount= ISNULL(X.value('@CreditAccount','bigint'),1)      
+				,DebitAccount=ISNULL( X.value('@DebitAccount','INT'),1)      
+				,CreditAccount= ISNULL(X.value('@CreditAccount','INT'),1)      
 				,DocSeqNo= X.value('@DocSeqNo','int')      
-				,ProductID= X.value('@ProductID','bigint')      
+				,ProductID= X.value('@ProductID','INT')      
 				,Quantity= X.value('@Quantity','float')      
-				,Unit= X.value('@Unit','bigint')      
+				,Unit= X.value('@Unit','INT')      
 				,HoldQuantity=ISNULL( X.value('@HoldQuantity','float'),0)      
 				,ReserveQuantity=ISNULL( X.value('@ReserveQuantity','float'),0)              
 				,IsQtyIgnored= ISNULL(X.value('@IsQtyIgnored','bit'),0)      
-				,IsQtyFreeOffer= ISNULL(X.value('@IsQtyFreeOffer','bigint'),0)      
+				,IsQtyFreeOffer= ISNULL(X.value('@IsQtyFreeOffer','INT'),0)      
 				,Rate= X.value('@Rate',' float')      
 				,AverageRate= ISNULL(X.value('@AverageRate','float'),0)      
 				,Gross= (X.value('@Gross',' float') * ISNULL(X.value('@ExchangeRate','float'),1) )     
@@ -625,13 +686,14 @@ SET NOCOUNT ON;
 								   when @DocumentType=38 and X.value('@VoucherType','int') is not null then 1 else  @VoucherType end 
 				,ParentSchemeID= X.value('@ParentSchemeID','nvarchar(500)')
 				,RefNO= X.value('@RefNO','nvarchar(200)')
-				,[BatchID]=1
+				,[BatchID]=isnull(X.value('@BatchID','INT'),1)
 				,BatchHold =NULL
 				,ReleaseQuantity =0
 				,RefInvDocDetailsID=NULL				
 				,CanRecur=X.value('@CanRecur','BIT')
+				,AP=@AP
 				from @xml.nodes('DocXML/Transactions') as Data(X)      
-				WHERE InvDocDetailsID=isnull(X.value('@DocDetailsID','BIGINT'),0)    
+				WHERE InvDocDetailsID=isnull(X.value('@DocDetailsID','INT'),0)    
 				
 				set @xml=@NumXML
 				SELECT @DetailIDs=X.value('@NumUpdateCols','nvarchar(max)')
@@ -639,7 +701,7 @@ SET NOCOUNT ON;
 		
 				set @SQL='update [COM_DocNumData] set '+@DetailIDs+' AccDocDetailsID=null
 				from @xml.nodes(''NumXML/Numeric'') as Data(X)				
-				where isnull(X.value(''@DocDetailsID'',''BIGINT''),0)=InvDocDetailsID'
+				where isnull(X.value(''@DocDetailsID'',''INT''),0)=InvDocDetailsID'
 				
 				exec sp_executesql @sql,N'@xml xml',@xml
 				
@@ -649,23 +711,23 @@ SET NOCOUNT ON;
 				
 				set @SQL='update [COM_DocTextData] set '+@DetailIDs+' AccDocDetailsID=null
 				from @xml.nodes(''TextXML/Alpha'') as Data(X)				
-				where isnull(X.value(''@DocDetailsID'',''BIGINT''),0)=InvDocDetailsID'
+				where isnull(X.value(''@DocDetailsID'',''INT''),0)=InvDocDetailsID'
 							
 				exec sp_executesql @sql,N'@xml xml',@TextXML
-		
+
 				SELECT @DetailIDs=X.value('@CCUpdateCols','nvarchar(max)')
 				from @ActXML.nodes('/XML') as Data(X)
 		
 				set @SQL='update [COM_DocCCData] set '+@DetailIDs+' AccDocDetailsID=null
 				from @xml.nodes(''CCXML/CostCenters'') as Data(X)				
-				where isnull(X.value(''@DocDetailsID'',''BIGINT''),0)=InvDocDetailsID'
+				where isnull(X.value(''@DocDetailsID'',''INT''),0)=InvDocDetailsID'
 			
 				exec sp_executesql @sql,N'@xml xml',@CCXML	
 				
 		END
 		else
 		BEGIN
-			SET @VersionNo=1    		
+			SET @VersionNo=0
 			set @DimesionNodeID=0
 		
 		
@@ -677,7 +739,7 @@ SET NOCOUNT ON;
 			if(@IsImport=1 and @ImpDocID is not null and @ImpDocID>0)
 			BEGIN
 				SELECT  top 1 @DocID=DocID,@VoucherNo=VoucherNo,@DocNumber=DocNumber,@DocPrefix=DocPrefix,@VersionNo=VersionNo
-				FROM INV_DocDetails WHERE DocID=@ImpDocID
+				FROM INV_DocDetails with(nolock) WHERE DocID=@ImpDocID
 				
 				select @Guid=GUID from COM_DocID WITH(NOLOCK) WHERE ID=@ImpDocID
 				
@@ -693,18 +755,18 @@ SET NOCOUNT ON;
 				if NOT EXISTS(SELECT CurrentCodeNumber FROM COM_CostCenterCodeDef WITH(NOLOCK) WHERE CostCenterID=@prefixCCID AND CodePrefix=@DocPrefix)      
 				begin      
 					INSERT INTO COM_CostCenterCodeDef(CostCenteriD,FeatureiD,CodePrefix,CodeNumberRoot,CodeNumberInc,CurrentCodeNumber,CodeNumberLength,GUID,CreatedBy,CreatedDate,Location,Division)
-					VALUES(@prefixCCID,@prefixCCID,@DocPrefix,CONVERT(BIGINT,@DocNumber),1,CONVERT(BIGINT,@DocNumber),len(@DocNumber),Newid(),@UserName,convert(float,getdate()),@LocationID,@DivisionID)      
-					SET @tempDOc=CONVERT(BIGINT,@DocNumber)+1
+					VALUES(@prefixCCID,@prefixCCID,@DocPrefix,CONVERT(INT,@DocNumber),1,CONVERT(INT,@DocNumber),len(@DocNumber),Newid(),@UserName,convert(float,getdate()),@LocationID,@DivisionID)      
+					SET @tempDOc=CONVERT(INT,@DocNumber)+1
 					SET @Length=len(@DocNumber)
 				end      
 				ELSE
 				BEGIN
-					SELECT  @tempDOc=ISNULL(CurrentCodeNumber,0)+1,@Length=isnull(CodeNumberLength,1)  FROM COM_CostCenterCodeDef--AS CurrentCodeNumber
+					SELECT  @tempDOc=ISNULL(CurrentCodeNumber,0)+1,@Length=isnull(CodeNumberLength,1)  FROM COM_CostCenterCodeDef with(nolock)
 					WHERE CostCenterID=@prefixCCID AND CodePrefix=@DocPrefix
 				 	
 		 			  if(@DocNumber='1' and @RefCCID>0 and @RefCCID<>300)
 							set  @DocNumber=@tempDOc
-					IF(CONVERT(BIGINT,@DocNumber)>=@tempDOc)      
+					IF(CONVERT(INT,@DocNumber)>=@tempDOc)      
 					BEGIN      
 						SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,43,138)
 						
@@ -742,7 +804,7 @@ SET NOCOUNT ON;
 				   
 				IF EXISTS(SELECT DocID FROM INV_DocDetails a WITH(NOLOCK) 
 				LEFT JOIN  ADM_DocumentTypes b WITH(NOLOCK) on a.CostCenterID=b.CostCenterID
-				WHERE (b.Series=@prefixCCID or a.CostCenterID=@prefixCCID) AND DocPrefix=@DocPrefix AND CONVERT(BIGINT,DocNumber)=CONVERT(BIGINT,@DocNumber))
+				WHERE (b.Series=@prefixCCID or a.CostCenterID=@prefixCCID) AND DocPrefix=@DocPrefix AND CONVERT(INT,DocNumber)=CONVERT(INT,@DocNumber))
 				BEGIN 
 					set @PrefValue=''  
 					select @PrefValue=Value from @TblPref where IsGlobal=0 and  Name='SameserialNo'
@@ -770,7 +832,7 @@ SET NOCOUNT ON;
 				END      
 
 				SET @VoucherNo=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')
-
+				
 				if(@IsRevision=1)  
 				begin    
 					set @VoucherNo=@VoucherNo+'/'+convert(nvarchar, @VersionNo  )
@@ -842,7 +904,7 @@ SET NOCOUNT ON;
 				,[StockValueFC]
 				,[CreatedBy]      
 				,[CreatedDate],ModifiedBy,ModifiedDate,UOMConversion       
-				,UOMConvertedQty,WorkflowID , WorkFlowStatus , WorkFlowLevel,RefCCID,RefNodeid,ParentSchemeID,RefNo,BatchID)    
+				,UOMConvertedQty,WorkflowID , WorkFlowStatus , WorkFlowLevel,RefCCID,RefNodeid,ParentSchemeID,RefNo,BatchID,AP)    
 				SELECT       
 				 @DocID      
 				, @CostCenterID
@@ -858,22 +920,22 @@ SET NOCOUNT ON;
 				, @StatusID  
 				, Case WHEN  X.value('@BillNo','NVarChar(500)') is not null THEN X.value('@BillNo','NVarChar(500)') ELSE @BillNo  END    
 				, @BILLDate      
-				, X.value('@LinkedInvDocDetailsID','bigint')      
+				, X.value('@LinkedInvDocDetailsID','INT')      
 				, X.value('@LinkedFieldName','nvarchar(200)')      
 				, X.value('@LinkedFieldValue','float')      
 				, X.value('@CommonNarration','nvarchar(max)')      
 				, X.value('@LineNarration','nvarchar(max)')      
-				, X.value('@DebitAccount','BIGINT')      
-				, X.value('@CreditAccount','BIGINT')      
+				, X.value('@DebitAccount','INT')      
+				, X.value('@CreditAccount','INT')      
 				, X.value('@DocSeqNo','int')      
-				, X.value('@ProductID','BIGINT')      
+				, X.value('@ProductID','INT')      
 				, X.value('@Quantity','float')      
-				, ISNULL( X.value('@Unit','bigint'),(select UOMID from inv_product  where productid=X.value('@ProductID','BIGINT')))
+				, ISNULL( X.value('@Unit','INT'),(select UOMID from inv_product  where productid=X.value('@ProductID','INT')))
 				, ISNULL( X.value('@HoldQuantity','float'),0)     
 				, ISNULL( X.value('@ReserveQuantity','float'),0)      
 				, ISNULL( X.value('@ReleaseQuantity','float'),0) --Release Qyt            
 				, ISNULL(X.value('@IsQtyIgnored','bit'),0)      
-				, ISNULL(X.value('@IsQtyFreeOffer','bigint'),0)      
+				, ISNULL(X.value('@IsQtyFreeOffer','INT'),0)      
 				, X.value('@Rate',' float')      
 				, ISNULL(X.value('@AverageRate','float'),0)      
 				, ( X.value('@Gross',' float') * ISNULL(X.value('@ExchangeRate','float'),1) )     
@@ -889,9 +951,10 @@ SET NOCOUNT ON;
 				, X.value('@UOMConversion','float')       
 				, X.value('@UOMConvertedQty','float')             
 				, @WID,@StatusID,@level,@RefCCID,@RefNodeid, X.value('@ParentSchemeID','nvarchar(500)')
-				, X.value('@RefNO','nvarchar(200)') ,isnull(X.value('@BatchID','BIGINT'),1)
+				, X.value('@RefNO','nvarchar(200)') ,isnull(X.value('@BatchID','INT'),1)
+				,@AP
 				from @xml.nodes('DocXML/Transactions') as Data(X)
-				where isnull(X.value('@DocDetailsID','BIGINT'),0)=0
+				where isnull(X.value('@DocDetailsID','INT'),0)=0
 				
 				
 				set @xml=@NumXML
@@ -901,8 +964,8 @@ SET NOCOUNT ON;
 				set @SQL='INSERT INTO [COM_DocNumData]('+@DetailIDs+'InvDocDetailsID)
 				select '+@DetIDS+' a.[InvDocDetailsID]
 				from @xml.nodes(''NumXML/Numeric'') as Data(X)
-				Join [INV_DocDetails] a on X.value(''@DocSeqNo'',''int'')=a.DocSeqNo
-				where isnull(X.value(''@DocDetailsID'',''BIGINT''),0)=0 and  a.docid='+convert(nvarchar(20),@DocID)
+				Join [INV_DocDetails] a with(nolock) on X.value(''@DocSeqNo'',''int'')=a.DocSeqNo
+				where isnull(X.value(''@DocDetailsID'',''INT''),0)=0 and  a.docid='+convert(nvarchar(20),@DocID)
 				
 				exec sp_executesql @sql,N'@xml xml',@xml
 				
@@ -913,19 +976,19 @@ SET NOCOUNT ON;
 				set @SQL='INSERT INTO [COM_DocTextData]('+@DetailIDs+'InvDocDetailsID)
 				select '+@DetIDS+' a.[InvDocDetailsID]
 				from @xml.nodes(''TextXML/Alpha'') as Data(X)
-				Join [INV_DocDetails] a on X.value(''@DocSeqNo'',''int'')=a.DocSeqNo
-				where isnull(X.value(''@DocDetailsID'',''BIGINT''),0)=0 and a.docid='+convert(nvarchar(20),@DocID)
+				Join [INV_DocDetails] a with(nolock) on X.value(''@DocSeqNo'',''int'')=a.DocSeqNo
+				where isnull(X.value(''@DocDetailsID'',''INT''),0)=0 and a.docid='+convert(nvarchar(20),@DocID)
 
 				exec sp_executesql @sql,N'@xml xml',@TextXML
-		
+
 				SELECT @DetailIDs=X.value('@CCCols','nvarchar(max)'),@DetIDS=X.value('@CCSelCols','nvarchar(Max)')
 				from @ActXML.nodes('/XML') as Data(X)
 		
 				set @SQL='INSERT INTO [COM_DocCCData]('+@DetailIDs+'InvDocDetailsID)
 				select '+@DetIDS+' a.[InvDocDetailsID]
 				from @xml.nodes(''CCXML/CostCenters'') as Data(X)
-				Join [INV_DocDetails] a on X.value(''@DocSeqNo'',''int'')=a.DocSeqNo
-				where isnull(X.value(''@DocDetailsID'',''BIGINT''),0)=0 and a.docid='+convert(nvarchar(20),@DocID)
+				Join [INV_DocDetails] a with(nolock) on X.value(''@DocSeqNo'',''int'')=a.DocSeqNo
+				where isnull(X.value(''@DocDetailsID'',''INT''),0)=0 and a.docid='+convert(nvarchar(20),@DocID)
 
 				exec sp_executesql @sql,N'@xml xml',@CCXML
 	
@@ -935,14 +998,15 @@ SET NOCOUNT ON;
 	and exists(select Value from @TblPref where IsGlobal=0 and Name='DonotupdateInventory' and Value='false')
 	and @VoucherType=-1
 	BEGIN	
+			set @SQL=''
 			set @DUPLICATECODE='
-			declare @tab table(seq nvarchar(5),pid bigint'
+			declare @tab table(seq nvarchar(5),pid INT'
 			 if(@loc=1)
-				set @DUPLICATECODE=@DUPLICATECODE+',c2 bigint' 
+				set @DUPLICATECODE=@DUPLICATECODE+',c2 INT' 
 			if(@div=1)
-				set @DUPLICATECODE=@DUPLICATECODE+',c1 bigint'
+				set @DUPLICATECODE=@DUPLICATECODE+',c1 INT'
 			if(@dim>0)
-				set @DUPLICATECODE=@DUPLICATECODE+',cn bigint'
+				set @DUPLICATECODE=@DUPLICATECODE+',cn INT'
 				
 			set @DUPLICATECODE=@DUPLICATECODE+')
 			insert into @tab
@@ -967,7 +1031,7 @@ SET NOCOUNT ON;
 			if(@dim>0)
 				set @DUPLICATECODE=@DUPLICATECODE+',dcCCNID'+convert(nvarchar,@dim)
 				
-			set @DUPLICATECODE=@DUPLICATECODE+'
+			set @DUPLICATECODE=@DUPLICATECODE+'			
 			set @SQL=''''
 			select @SQL=@SQL+ProductCode +'':''+seq+''    '' from 
 			(SELECT t.seq,p.ProductCode,p.productName,			
@@ -1024,7 +1088,7 @@ SET NOCOUNT ON;
         ,X.value('@StockCode','nvarchar(500)')      
         ,X.value('@Quantity','float')      
         ,case when (@DocumentType=5 and @VoucherType=1) THEN 157 ELSE X.value('@StatusID','int') END
-        ,case when (@DocumentType=5 and @VoucherType=1) THEN 0 ELSE X.value('@RefInvDocDetailsID','bigint') END
+        ,case when (@DocumentType=5 and @VoucherType=1) THEN 0 ELSE X.value('@RefInvDocDetailsID','INT') END
         ,X.value('@Narration','nvarchar(max)')       
         ,X.value('@SerialGUID','nvarchar(50)')      
         ,X.value('@IsIssue','bit')      
@@ -1034,7 +1098,7 @@ SET NOCOUNT ON;
       , @UserName      
       , @Dt      
 	  from @AccountsXML.nodes('/EXTRAXML/xml/Row') as Data(X)         
-	  Join [INV_DocDetails] a on X.value('@DocSeqNo','int')=a.DocSeqNo
+	  Join [INV_DocDetails] a with(nolock) on X.value('@DocSeqNo','int')=a.DocSeqNo
 	  where a.docid=@DocID
    END 
    
@@ -1046,7 +1110,7 @@ SET NOCOUNT ON;
 		,X.value('@Fld1','Nvarchar(max)'),X.value('@Fld2','Nvarchar(max)'),X.value('@Fld3','Nvarchar(max)'),X.value('@Fld4','Nvarchar(max)'),X.value('@Fld5','Nvarchar(max)')
 		,X.value('@Fld6','Nvarchar(max)'),X.value('@Fld7','Nvarchar(max)'),X.value('@Fld8','Nvarchar(max)'),X.value('@Fld9','Nvarchar(max)'),X.value('@Fld10','Nvarchar(max)')
 		from @AccountsXML.nodes('/DocExtraXML/DocExtraXML/Row') as Data(X) 
-		 Join [INV_DocDetails] a on X.value('@DocSeqNo','int')=a.DocSeqNo
+		 Join [INV_DocDetails] a with(nolock) on X.value('@DocSeqNo','int')=a.DocSeqNo
 		 where a.docid=@DocID
 		
 	END	
@@ -1089,7 +1153,7 @@ SET NOCOUNT ON;
          ,WorkFlowStatus   
          ,WorkFlowLevel  
          ,RefCCID  
-         ,RefNodeid)      
+         ,RefNodeid,AP)      
             
         SELECT a.InvDocDetailsID,0,@VoucherNo      
          , @CostCenterID      
@@ -1109,10 +1173,10 @@ SET NOCOUNT ON;
          , X.value('@LineNarration','nvarchar(max)')               
          ,case when @IsImport=1  and X.value('@DebitAccount','nvarchar(500)')=@ACCOUNT1Name then  @ACCOUNT1      
              when @IsImport=1 and X.value('@IsNegative','bit')=1 and X.value('@DebitAccount','nvarchar(500)')=@ACCOUNT2Name then  @ACCOUNT2      
-             else ISNULL( X.value('@DebitAccount','BIGINT'),0) end              
+             else ISNULL( X.value('@DebitAccount','INT'),0) end              
          ,case when @IsImport=1  and X.value('@CreditAccount','nvarchar(500)')=@ACCOUNT2Name then   @ACCOUNT2      
              when @IsImport=1 and X.value('@IsNegative','bit')=1  and X.value('@CreditAccount','nvarchar(500)')=@ACCOUNT1Name then   @ACCOUNT1      
-             else ISNULL( X.value('@CreditAccount','BIGINT'),0) end 
+             else ISNULL( X.value('@CreditAccount','INT'),0) end 
          , X.value('@Amount','FLOAT')      
          , 0      
          , ISNULL(X.value('@CurrencyID','int'),1)      
@@ -1125,9 +1189,9 @@ SET NOCOUNT ON;
          , @StatusID  
          , @level   
          , @RefCCID  
-         , @RefNodeid   
+         , @RefNodeid  ,@AP 
            from @AccountsXML.nodes('/AccXML/Accounts') as Data(X)         
-		   Join [INV_DocDetails] a on X.value('@DocSeqNo','int')=a.DocSeqNo
+		   Join [INV_DocDetails] a with(nolock) on X.value('@DocSeqNo','int')=a.DocSeqNo
 				where a.docid=@DocID
    END 
      
@@ -1147,6 +1211,88 @@ SET NOCOUNT ON;
       
 	select @InvDocDetailsID=InvDocDetailsID from [INV_DocDetails] WITH(NOLOCK)
 	where docid=@DocID
+
+	if exists(SELECT Value FROM @TblPref where IsGlobal=0 and  Name='OnPosted' and Value='true') and @StatusID<>369
+		set @Dimesion=0
+		  --generate Line wise dimension
+		  
+	  if(@Dimesion>0 and not exists(SELECT Value FROM @TblPref where IsGlobal=0 and  Name='GenerateSeq' and Value='true'))    
+	  begin 
+		set @vno=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')
+		
+		if(@DimesionNodeID is null or (@DimesionNodeID<=0 and @DimesionNodeID>-10000))
+		BEGIN	
+				set @CCStatusID = (select  statusid from com_status with(nolock) where costcenterid=@Dimesion and status = 'Active')
+				
+				SET @PrefValue=''    
+				SELECT @PrefValue=Value FROM @TblPref where IsGlobal=0 and  Name='AutoCode'    
+				if(@PrefValue='true')
+				BEGIN
+						
+						delete from @Codetemp
+						insert into @Codetemp
+						EXEC [spCOM_GetCodeData] @Dimesion,1,''  
+						
+						select @ProductName=code,@CaseNumber= prefix, @CaseID=number from @Codetemp
+				END
+				ELSE
+				BEGIN
+					set @ProductName=@vno
+					set @CaseNumber=''
+					set @CaseID=0
+				END
+				
+				--select @CCStatusID
+				EXEC @DimesionNodeID = [dbo].[spCOM_SetCostCenter]
+					@NodeID = 0,@SelectedNodeID = 1,@IsGroup = 0,
+					@Code = @ProductName,
+					@Name = @vno,
+					@AliasName='',
+					@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
+					@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
+					@CustomCostCenterFieldsQuery=NULL,@ContactsXML=NULL,@NotesXML=NULL,
+					@CostCenterID = @Dimesion,@CompanyGUID=@COMPANYGUID,@GUID='',@UserName=@UserName,@RoleID=1,@UserID=1,
+					@CodePrefix=@CaseNumber,@CodeNumber=@CaseID,
+					@CheckLink = 0,@IsOffline=@IsOffline
+				
+				set @DimesionNodeID=0						
+				select @cctablename=tablename from ADM_Features with(nolock) where FeatureID=@Dimesion
+				set @DUPLICATECODE='select @NodeID=NodeID from '+@cctablename+' with(nolock) where Name='''+@vno+''''				
+				EXEC sp_executesql @DUPLICATECODE,N'@NodeID INT OUTPUT',@DimesionNodeID output				
+		END
+		
+		if(@DimesionNodeID>0 or @DimesionNodeID<-10000)
+		BEGIN
+			
+			if(@VersionNo>=1)  
+			begin
+				if exists(select value from @TblPref where IsGlobal=0 and Name='RevisPrefix' and Value is not null and Value<>'')
+					select @vno=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')+'/'+Value+convert(nvarchar,@VersionNo)
+					from @TblPref where IsGlobal=0 and Name='RevisPrefix' 					
+				ELSE
+					set	@vno=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')+'/'+convert(nvarchar,@VersionNo)
+			end
+
+			set @CCStatusID = (select  statusid from com_status with(nolock) where costcenterid=@Dimesion and status = 'Active')
+			select @cctablename=tablename from ADM_Features with(nolock) where FeatureID=@Dimesion
+			set @DUPLICATECODE='update '+@cctablename+' set statusid='+convert(nvarchar(50),@CCStatusID)+',Name='''+convert(nvarchar(50),@vno)+''' where NodeID='+convert(nvarchar(50),@DimesionNodeID)
+			exec(@DUPLICATECODE)
+				
+			SET @DUPLICATECODE='UPDATE COM_DocCCData 
+			SET dcCCNID'+CONVERT(NVARCHAR,(@Dimesion-50000))+'='+CONVERT(NVARCHAR,@DimesionNodeID)
+			+' WHERE InvDocDetailsID IN (SELECT InvDocDetailsID FROM Inv_DocDetails with(nolock) 
+			WHERE COSTCENTERID='+CONVERT(NVARCHAR,@CostCenterID)+' AND DOCID='+CONVERT(NVARCHAR,@DocID)+')'
+			EXEC(@DUPLICATECODE)
+				
+			Exec [spDOC_SetLinkDimension]
+				@InvDocDetailsID=@InvDocDetailsID, 
+				@Costcenterid=@CostCenterID,         
+				@DimCCID=@Dimesion,
+				@DimNodeID=@DimesionNodeID,
+				@UserID=@UserID,    
+				@LangID=@LangID    
+		 END		     
+ end 
 	
 	DECLARE @AuditTrial BIT    
 	SELECT @AuditTrial=CONVERT(BIT,Value) FROM @TblPref where IsGlobal=0 and  Name='AuditTrial'      
@@ -1182,18 +1328,30 @@ SET NOCOUNT ON;
 		   update com_billwise  
 		   set RefDocNo=NULL,RefDocSeqNo=NULL,[IsNewReference]=1,[RefDocDueDate]=NULL  
 		   where RefDocNo=@VoucherNo and RefDocSeqNo=1  
-		   and AccountID not in (select  X.value('@AccountID','bigint') from @XML.nodes('/BillWise/Row') as Data(X)  )   
+		   and AccountID not in (select  X.value('@AccountID','INT') from @XML.nodes('/BillWise/Row') as Data(X)  )   
 		  
 			set @sql='INSERT INTO [COM_Billwise]      
 			 ([DocNo],[DocDate],[DocDueDate],[DocSeqNo],BillNo,BillDate,StatusID,RefStatusID      
 			   ,[AccountID],[AdjAmount],[AdjCurrID],[AdjExchRT],AmountFC,[DocType],[IsNewReference],[RefDocNo]      
 			   ,[RefDocSeqNo],[RefDocDate],[RefDocDueDate],[RefBillWiseID],[DiscAccountID],[DiscAmount],[DiscCurrID]      
 			   ,[DiscExchRT],[Narration],[IsDocPDC],VatAdvance'+@DocCC+')
-			 SELECT  '+convert(nvarchar(max),@VoucherNo)+'
-			   , '+convert(nvarchar(max),CONVERT(FLOAT,@DocDate))+'    
-			   , '+convert(nvarchar(max),CONVERT(FLOAT,@DueDate))+'        
-			   , X.value(''@DocSeqNo'',''int''),'+convert(nvarchar(max),@BillNo)+','+convert(nvarchar(max),@BILLDate)+','+convert(nvarchar(max),@StatusID)+',X.value(''@RefStatusID'',''int'')
-			   , X.value(''@AccountID'',''bigint'')      
+			 SELECT  '''+convert(nvarchar(max),@VoucherNo)+'''
+			   , '''+convert(nvarchar(max),CONVERT(FLOAT,@DocDate))+''''
+			   
+			   if(@DueDate is not null)
+			   set @sql=@sql+', '''+convert(nvarchar(max),CONVERT(FLOAT,@DueDate))+''''
+			   else
+				set @sql=@sql+',NULL'
+				 
+			    set @sql=@sql+', X.value(''@DocSeqNo'',''int''),'''+convert(nvarchar(max),@BillNo)+''''
+			   
+			   if(@BILLDate is not null)
+				 set @sql=@sql+', '''+convert(nvarchar(max),CONVERT(FLOAT,@BILLDate))+''''
+			   else
+					set @sql=@sql+',NULL'
+				 
+			    set @sql=@sql+','+convert(nvarchar(max),@StatusID)+',X.value(''@RefStatusID'',''int'')
+			   , X.value(''@AccountID'',''INT'')      
 			   , replace(X.value(''@AdjAmount'',''nvarchar(50)''),'','','''')    
 			   , X.value(''@AdjCurrID'',''int'')      
 			   , X.value(''@AdjExchRT'',''float'')  ,replace(X.value(''@AmountFC'',''nvarchar(50)''),'','','''')     
@@ -1203,8 +1361,8 @@ SET NOCOUNT ON;
 			   , X.value(''@RefDocSeqNo'',''int'')      
 			 , CONVERT(FLOAT,X.value(''@RefDocDate'',''DATETIME''))      
 			 , CONVERT(FLOAT,X.value(''@RefDueDate'',''DATETIME''))      
-			   , X.value(''@RefBillWiseID'',''bigint'')      
-			   , X.value(''@DiscAccountID'',''bigint'')      
+			   , X.value(''@RefBillWiseID'',''INT'')      
+			   , X.value(''@DiscAccountID'',''INT'')      
 			   , X.value(''@DiscAmount'',''float'')      
 			   , X.value(''@DiscCurrID'',''int'')      
 			   , X.value(''@DiscExchRT'',''float'')      
@@ -1212,7 +1370,8 @@ SET NOCOUNT ON;
 			   , X.value(''@IsDocPDC'',''bit'') , X.value(''@VatAdvance'',''float'')'+@DocCC+'
 			 from @XML.nodes(''/BillWise/Row'') as Data(X)      
 			 join [COM_DocCCData]  d WITH(NOLOCK)on d.InvDocDetailsID='+convert(nvarchar(max),@InvDocDetailsID)
-			  EXEC sp_executesql @DUPLICATECODE,N'@XML XML',@XML
+			 
+			  EXEC sp_executesql @sql,N'@XML XML',@XML
 			 
   END      
   
@@ -1240,12 +1399,12 @@ SET NOCOUNT ON;
     ModifiedDate=@Dt      
    FROM COM_Notes C       
    INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X)        
-   ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID      
+   ON convert(INT,X.value('@NoteID','INT'))=C.NoteID      
    WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'      
       
    --If Action is DELETE then delete Notes      
    DELETE FROM COM_Notes      
-   WHERE NoteID IN(SELECT X.value('@NoteID','bigint')      
+   WHERE NoteID IN(SELECT X.value('@NoteID','INT')      
     FROM @XML.nodes('/NotesXML/Row') as Data(X)      
     WHERE X.value('@Action','NVARCHAR(10)')='DELETE')      
   END      
@@ -1277,14 +1436,14 @@ SET NOCOUNT ON;
     GUID=X.value('@GUID','NVARCHAR(50)'),      
     ModifiedBy=@UserName,      
     ModifiedDate=@Dt      
-   FROM COM_Files C       
+   FROM COM_Files C with(nolock)       
    INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)        
-   ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID      
+   ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID      
    WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'      
       
    --If Action is DELETE then delete Attachments      
    DELETE FROM COM_Files      
-   WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')      
+   WHERE FileID IN(SELECT X.value('@AttachmentID','INT')      
     FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)      
     WHERE X.value('@Action','NVARCHAR(10)')='DELETE')      
   END      
@@ -1295,6 +1454,46 @@ SET NOCOUNT ON;
   begin
 		
 		set @XML=@ActivityXML
+
+		set @TEMPxml=''
+		SELECT @TEMPxml=CONVERT(NVARCHAR(MAX), X.query('QtyAdjustments'))
+		from @XML.nodes('/XML') as Data(X)
+		if (exists(select Value from @TblPref where IsGlobal=0 and  Name='DocQtyAdjustment' and Value='true') and @TEMPxml<>'')
+		BEGIN
+			set @QtyAdjustments=@TEMPxml
+			DELETE T FROM COM_DocQtyAdjustments T WITH(NOLOCK) WHERE T.DocID=@DocID AND T.InvDocDetailsID=0
+			insert into COM_DocQtyAdjustments(InvDocDetailsID,Fld1,Fld2,Fld3,Fld4,Fld5,Fld6,Fld7,Fld8,Fld9,Fld10,Islinked,DocID,Fld11,Fld12,Fld13,Fld14,Fld15,Fld16,Fld17,Fld18,Fld19,Fld20,RefVoucherNo)
+			select 0,X.value('@Fld1','Float'),X.value('@Fld2','Float'),X.value('@Fld3','Float')
+			,X.value('@Fld4','Float'),X.value('@Fld5','Float'),X.value('@Fld6','Float'),X.value('@Fld7','Float')
+			,X.value('@Fld8','Float'),X.value('@Fld9','Float'),X.value('@Fld10','nvarchar(max)'),X.value('@Islinked','BIT')
+			,@DocID,X.value('@Fld11','nvarchar(max)'),X.value('@Fld12','nvarchar(max)'),X.value('@Fld13','nvarchar(max)')
+			,X.value('@Fld14','nvarchar(max)'),X.value('@Fld15','nvarchar(max)'),X.value('@Fld16','nvarchar(max)'),X.value('@Fld17','nvarchar(max)')
+			,X.value('@Fld18','nvarchar(max)'),X.value('@Fld19','nvarchar(max)'),X.value('@Fld20','nvarchar(max)'),X.value('@RefVoucherNo','nvarchar(200)')
+			from @QtyAdjustments.nodes('/QtyAdjustments/Row') as Data(X) 
+
+			SET @AuditTrial=0    
+			SELECT @AuditTrial=CONVERT(BIT,Value) FROM @TblPref where IsGlobal=0 and  Name='AuditTrial'    
+			SET @PrefValue=''    
+			SELECT @PrefValue=Value FROM @TblPref where IsGlobal=0 and  Name='EnableRevision' 
+    
+			IF (@AuditTrial=1 or @PrefValue='true')  
+			BEGIN  
+				
+				SET @QTYADJ=''
+				SET @QTYADJSQ=''
+
+				select @QTYADJ =@QTYADJ + 'A.' +a.name+',' from sys.columns a
+				join sys.tables b on a.object_id=b.object_id
+				where b.name='COM_DocQtyAdjustments'
+
+				SET @QTYADJSQ='INSERT INTO [COM_DocQtyAdjustmentsHISTORY]('+@QTYADJ+'[ModifiedDate])
+					SELECT a.*,case when @DT is null THEN i.[ModifiedDate] else @DT end FROM COM_DocQtyAdjustments A WITH(NOLOCK)
+					JOIN [INV_DocDetails] i WITH(NOLOCK) on a.[InvDocDetailsID] =i.[InvDocDetailsID]
+					WHERE A.DocID='+CONVERT(VARCHAR,@DocID)+' AND A.InvDocDetailsID=0'
+					
+					exec sp_executesql @QTYADJSQ,N'@DT float',@DT
+			END
+		END
 		
 		--Shortage of stock
 		set @TEMPxml=''
@@ -1305,7 +1504,7 @@ SET NOCOUNT ON;
 			select @PrefValue=Value from @TblPref where IsGlobal=0 and  Name='ShortageDOC'    
 			set @AUTOCCID=0
 			set @varxml=@TEMPxml
-			set @AUTOCCID=convert(bigint,@PrefValue)
+			set @AUTOCCID=convert(INT,@PrefValue)
 			
 			SELECT @ddxml=CONVERT(NVARCHAR(MAX), X.query('DocXML'))
 			from @varxml.nodes('/ShortageXML') as Data(X)
@@ -1328,7 +1527,7 @@ SET NOCOUNT ON;
 			set @SQL=Replace(@SQL,'<ActXML','<XML')
 
 			set @TEmpWid=0
-			SELECT @TEmpWid=X.value('@WOrkFlowID','bigint')
+			SELECT @TEmpWid=X.value('@WOrkFlowID','INT')
 			from @varxml.nodes('/ShortageXML') as Data(X)
 			
 			set @Prefix=''
@@ -1365,6 +1564,14 @@ SET NOCOUNT ON;
 			  @UserName = @UserName,      
 			  @UserID = @UserID,      
 			  @LangID = @LangID    
+
+			  if(@return_value>0)
+			  begin
+					update b 
+					set b.refno=a.voucherno from INV_DocDetails a with(nolock)
+					join inv_docdetails b with(nolock) on b.refnodeid=a.InvDocDetailsID
+					where a.docid=@DOCID and b.DocID=@return_value
+				end
 		END	
 		
 		--Excess of stock
@@ -1377,7 +1584,7 @@ SET NOCOUNT ON;
 
 			set @AUTOCCID=0
 			set @varxml=@TEMPxml
-			set @AUTOCCID=convert(bigint,@PrefValue)
+			set @AUTOCCID=convert(INT,@PrefValue)
 			
 			SELECT @ddxml=CONVERT(NVARCHAR(MAX), X.query('DocXML'))
 			from @varxml.nodes('/ExcessXML') as Data(X)
@@ -1402,7 +1609,7 @@ SET NOCOUNT ON;
 
 
 			set @TEmpWid=0
-			SELECT @TEmpWid=X.value('@WOrkFlowID','bigint')
+			SELECT @TEmpWid=X.value('@WOrkFlowID','INT')
 			from @varxml.nodes('/ExcessXML') as Data(X)
 			
 			
@@ -1441,6 +1648,14 @@ SET NOCOUNT ON;
 			  @UserName = @UserName,      
 			  @UserID = @UserID,      
 			  @LangID = @LangID    
+
+			  if(@return_value>0)
+			  begin
+					update b 
+					set b.refno=a.voucherno from INV_DocDetails a with(nolock)
+					join inv_docdetails b with(nolock) on b.refnodeid=a.InvDocDetailsID
+					where a.docid=@DOCID and b.DocID=@return_value
+				end
 		END
 			
   end
@@ -1457,7 +1672,8 @@ SET NOCOUNT ON;
 				--set @Remarks='Workflow'		
 				--set @AppRejDate=getdate()
 				--Post Notification 
-				EXEC spCOM_SetNotifEvent 441,@CostCenterID,@DocID,@CompanyGUID,@UserName,@UserID,@RoleID
+				--not to go to next level
+				--EXEC spCOM_SetNotifEvent 441,@CostCenterID,@DocID,@CompanyGUID,@UserName,@UserID,@RoleID
 				
 			end
 			
@@ -1500,7 +1716,215 @@ SET NOCOUNT ON;
 		set docdate=floor(@dt)
 		where DocNo=@VoucherNo
 	END
+	
+	--Loading Unique Columns
+	SET @InvXML  =@StatXML
+	
+	
+	Declare @TEMPUNIQUE TABLE(ID INT identity(1,1), SYSCOLUMNNAME NVARCHAR(50),USERCOLUMNNAME NVARCHAR(50) , SECTIONID INT )
+	declare @tempCode NVARCHAR(200),@Create bit,@IDocDetailsID int
+	INSERT INTO @TEMPUNIQUE     
+	SELECT CC.SYSCOLUMNNAME,R.RESOURCEDATA,CC.SECTIONID FROM ADM_COSTCENTERDEF CC WITH(NOLOCK)
+	JOIN COM_LANGUAGERESOURCES R WITH(NOLOCK) ON CC.RESOURCEID = R.RESOURCEID    
+	WHERE CC.COSTCENTERID=@CostCenterID AND CC.ISUNIQUE=1    
+	SELECT @UNIQUECNT = COUNT(ID) FROM @TEMPUNIQUE    
+	
+	if(@UNIQUECNT>0)
+	BEGIN
+		declare @tblList table(ID int identity(1,1),TransactionRows nvarchar(max))  
+		insert into @tblList  
+		exec SPSplitString @StatXML,'<Transactions'
+		
+		--Set loop initialization varaibles      
+		SELECT @I=0, @Cnt=count(*) FROM @tblList     
+		
+		WHILE(@I<@Cnt)        
+		BEGIN      
+		SELECT @IDocDetailsID=X.value('@DocDetailsID','INT'),@holseq =ISNULL(X.value('@DocSeqNo','INT') ,0) from @InvXML.nodes('DocXML/Transactions') as Data(X) WHERE X.value('@DocSeqNo','INT')=@I
 
+		select @InvDocDetailsID=InvDocDetailsID from [INV_DocDetails] WITH(NOLOCK)
+	where docid=@DocID and DocSeqNo=@holseq
+
+		IF(@TEXTXML IS NOT NULL AND CONVERT(NVARCHAR(MAX),@TEXTXML)<>'' and @UNIQUECNT>0)      
+		BEGIN     
+	       
+			DECLARE @iUNIQ INT,  @QRYUNIQ NVARCHAR(MAX)
+			DECLARE @DUPNODENO NVARCHAR(200)    
+			   
+			SET  @iUNIQ = 0 
+			WHILE (@iUNIQ < @UNIQUECNT )    
+			BEGIN     
+				SET @iUNIQ = @iUNIQ + 1     
+				SELECT @SYSCOL = SYSCOLUMNNAME  ,@TYPE = USERCOLUMNNAME  , @SECTIONID = SECTIONID  FROM @TEMPUNIQUE WHERE ID =  @iUNIQ     
+				 PRINT 'T'
+				  PRINT @SYSCOL
+				set @DUPNODENO=''
+				IF(@SYSCOL LIKE '%dcAlpha%')    
+				BEGIN    				    				   
+					continue;   
+				END     
+				ELSE IF(@SYSCOL LIKE '%dcCCNID%')     
+				BEGIN    
+					   				
+					SET @cctablename = 'COM_DOCCCDATA' 
+					 set @ind=Charindex(@SYSCOL+'=',convert(nvarchar(max),@CCXML))
+					 if(@ind>0)
+					 BEGIN
+						 set @ind=Charindex('=',convert(nvarchar(max),@CCXML), Charindex(@SYSCOL+'=',convert(nvarchar(max),@CCXML),0))
+						 set @indcnt=Charindex(',',convert(nvarchar(max),@CCXML), Charindex(@SYSCOL+'=',convert(nvarchar(max),@CCXML),0)) 
+						 set @indcnt=@indcnt-@ind-1
+						 if(@ind>0 and @indcnt>0)				 
+							set @DUPNODENO=Substring(convert(nvarchar(max),@CCXML),@ind+1,@indcnt)  
+					 END	
+					   
+				END     
+				ELSE IF(@SYSCOL LIKE '%dcNum%')     
+				BEGIN  
+					SET @cctablename = 'COM_DOCNUMDATA'    
+					 set @ind=Charindex(@SYSCOL,convert(nvarchar(max),@NUMXML))
+					 if(@ind>0)
+					 BEGIN
+						 set @ind=Charindex('=',convert(nvarchar(max),@NUMXML), Charindex(@SYSCOL,convert(nvarchar(max),@NUMXML),0))
+						 set @indcnt=Charindex(',',convert(nvarchar(max),@NUMXML), Charindex(@SYSCOL,convert(nvarchar(max),@NUMXML),0)) 
+						 set @indcnt=@indcnt-@ind-1
+						 if(@ind>0 and @indcnt>0)				 
+							set @DUPNODENO=Substring(convert(nvarchar(max),@NUMXML),@ind+1,@indcnt)  
+					 END
+				END     
+		          
+				 
+		     
+				--sectionid = 3 for linewise    
+				if(@DUPNODENO is not null and @DUPNODENO<>'')
+				BEGIN     
+					SET @tempCode ='@QUERYTEST  NVARCHAR(100) OUTPUT'    
+					SET @DUPLICATECODE =  ' IF EXISTS (SELECT DOCEXT.INVDOCDETAILSID    FROM '+ @cctablename +' DOCEXT with(nolock)
+					JOIN INV_DOCDETAILS INV with(nolock) ON DOCEXT.INVDOCDETAILSID=INV.INVDOCDETAILSID WHERE  INV.StatusID<>376 AND '
+					IF(@SECTIONID = 3)
+						set @DUPLICATECODE = @DUPLICATECODE+' INV.INVDOCDETAILSID <> '+ CONVERT(NVARCHAR(50),@IDocDetailsID) +' AND '
+					else
+						set @DUPLICATECODE = @DUPLICATECODE+' INV.DOCID <> '+ CONVERT(NVARCHAR(50),@DocID) +' AND '
+
+					SET @DUPLICATECODE = @DUPLICATECODE+ '    
+					INV.COSTCENTERID =  '+ CONVERT(NVARCHAR(50), @CostCenterID) +' and '+ @SYSCOL+' = '''+ @DUPNODENO +''')     
+					BEGIN     
+					SET @QUERYTEST = (SELECT  TOP 1 INV.VOUCHERNO FROM '+ @cctablename +' DOCEXT with(nolock)
+					JOIN INV_DOCDETAILS INV with(nolock) ON DOCEXT.INVDOCDETAILSID = INV.INVDOCDETAILSID WHERE  '
+					IF(@SECTIONID = 3)
+						set @DUPLICATECODE = @DUPLICATECODE+' INV.INVDOCDETAILSID <> '+ CONVERT(NVARCHAR(50),@IDocDetailsID) +' AND '
+					else
+						set @DUPLICATECODE = @DUPLICATECODE+' INV.DOCID <> '+ CONVERT(NVARCHAR(50),@DocID) +' AND '
+
+					SET @DUPLICATECODE = @DUPLICATECODE+ '  INV.COSTCENTERID =  '+     
+					CONVERT(NVARCHAR(50), @CostCenterID) +' and '+ @SYSCOL+' = '''+ @DUPNODENO +''')         
+					END  '    
+			         
+				   EXEC sp_executesql @DUPLICATECODE ,@tempCode ,@QUERYTEST OUTPUT    
+			          
+					IF(@QUERYTEST IS NOT NULL)    
+					BEGIN    
+						IF(@SECTIONID = 3)    
+							RAISERROR('-346',16,1)    
+						ELSE    
+							RAISERROR('-347',16,1)     
+					END
+				END	  
+			END     
+		END 
+		--
+		--
+		IF(@UNIQUECNT>0)      
+		BEGIN  
+	  		SELECT @IDocDetailsID=X.value('@DocDetailsID','INT') from @InvXML.nodes('DocXML/Transactions') as Data(X) WHERE X.value('@DocSeqNo','INT')=@I
+			SET  @iUNIQ = 0 
+			SET @cctablename = 'COM_DOCTEXTDATA'
+			WHILE (@iUNIQ < @UNIQUECNT )    
+			BEGIN     
+				SET @iUNIQ = @iUNIQ + 1     
+				SELECT @SYSCOL = SYSCOLUMNNAME  ,@TYPE = USERCOLUMNNAME  , @SECTIONID = SECTIONID  FROM @TEMPUNIQUE WHERE ID =  @iUNIQ     
+				  PRINT 'T1'
+				  PRINT @SYSCOL
+				  print @IDocDetailsID
+				set @DUPNODENO=''
+				IF(@SYSCOL LIKE '%dcAlpha%')    
+				BEGIN    
+					SET @tempCode='@DUPNODENO nvarchar(max) OUTPUT '     
+					SET @DUPLICATECODE  = 'SELECT   @DUPNODENO ='+@SYSCOL +'     
+					from COM_DOCTEXTDATA WITH(NOLOCK) where InvDocDetailsID='+convert(nvarchar,@IDocDetailsID)   
+					PRINT   @DUPLICATECODE
+					EXEC sp_executesql @DUPLICATECODE, @tempCode,@DUPNODENO OUTPUT 
+					PRINT @DUPNODENO
+				END     
+				ELSE    			    
+					 continue;  			
+		          
+				--sectionid = 3 for linewise    
+				if(@DUPNODENO is not null and @DUPNODENO<>'')
+				BEGIN     
+					SET @tempCode ='@QUERYTEST  NVARCHAR(100) OUTPUT'    
+					SET @DUPLICATECODE =  ' IF EXISTS (SELECT DOCEXT.INVDOCDETAILSID    FROM '+ @cctablename +' DOCEXT with(nolock)
+					JOIN INV_DOCDETAILS INV with(nolock) ON DOCEXT.INVDOCDETAILSID=INV.INVDOCDETAILSID WHERE  '
+					IF(@SECTIONID = 3)
+						set @DUPLICATECODE = @DUPLICATECODE+' INV.INVDOCDETAILSID <> '+ CONVERT(NVARCHAR(50),@IDocDetailsID) +' AND '
+					else
+						set @DUPLICATECODE = @DUPLICATECODE+' INV.DOCID <> '+ CONVERT(NVARCHAR(50),@DocID) +' AND '
+
+					SET @DUPLICATECODE = @DUPLICATECODE+ '    
+					INV.COSTCENTERID =  '+ CONVERT(NVARCHAR(50), @CostCenterID) +' and '+ @SYSCOL+' = '''+ @DUPNODENO +''')     
+					BEGIN     
+					SET @QUERYTEST = (SELECT  TOP 1 INV.VOUCHERNO FROM '+ @cctablename +' DOCEXT with(nolock)
+					JOIN INV_DOCDETAILS INV with(nolock) ON DOCEXT.INVDOCDETAILSID = INV.INVDOCDETAILSID WHERE  '
+					IF(@SECTIONID = 3)
+						set @DUPLICATECODE = @DUPLICATECODE+' INV.INVDOCDETAILSID <> '+ CONVERT(NVARCHAR(50),@IDocDetailsID) +' AND '
+					else
+						set @DUPLICATECODE = @DUPLICATECODE+' INV.DOCID <> '+ CONVERT(NVARCHAR(50),@DocID) +' AND '
+
+					SET @DUPLICATECODE = @DUPLICATECODE+ '  INV.COSTCENTERID =  '+     
+					CONVERT(NVARCHAR(50), @CostCenterID) +' and '+ @SYSCOL+' = '''+ @DUPNODENO +''')         
+					END  '    
+			         
+				   EXEC sp_executesql @DUPLICATECODE ,@tempCode ,@QUERYTEST OUTPUT    
+			          
+					IF(@QUERYTEST IS NOT NULL)    
+					BEGIN    
+						IF(@SECTIONID = 3)    
+							RAISERROR('-346',16,1)    
+						ELSE    
+							RAISERROR('-347',16,1)     
+					END
+				END	       
+			END     		
+		END
+
+	SET @I=@I+1 
+	END
+	END
+	--
+	
+	--validate Data External function
+	set @tempCode=''
+	select @tempCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=9
+	if(@tempCode<>'')
+	begin
+		--select @tempCode,@CostCenterID,@DocID,@UserID,@LangID
+		exec @tempCode @CostCenterID,@DocID,@UserID,@LangID
+	end
+	
+	if(@WID is not null and @WID>0 and @StatusID=441)
+	begin
+		set @tempCode=''
+		select @tempCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=12
+		if(@tempCode<>'')
+			exec @tempCode @CostCenterID,@DocID,@UserID,@LangID
+	end
+	
+	if(@WID is not null and @WID>0 and @StatusID=372)
+	begin
+		set @tempCode=''
+		select @tempCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=16
+		if(@tempCode<>'')
+			exec @tempCode @CostCenterID,@DocID,@UserID,@LangID
+	end
 	
 COMMIT TRANSACTION  
 --ROLLBACK TRANSACTION  
@@ -1627,4 +2051,5 @@ BEGIN CATCH
  RETURN -999         
     
 END CATCH
+
 GO

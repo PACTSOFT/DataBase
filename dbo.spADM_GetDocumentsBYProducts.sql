@@ -9,7 +9,7 @@ CREATE PROCEDURE [dbo].[spADM_GetDocumentsBYProducts]
 	@CustWhere [nvarchar](max),
 	@Docs [nvarchar](max),
 	@DeleteOldValues [bit],
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -34,9 +34,15 @@ SET NOCOUNT ON;
 		else if(@AvgRateBasedOn='ModifiedDate')
 			set @AvgRateBasedOn='a.ModifiedDate,0 cd'
 
-  
-         
-		set @sql='select * from (select distinct DocID,CostCenterID,'
+		set @sql=''
+         if(@ProductIDs<>'')
+			set @sql='
+			declare @tab table (lft int,rgt int)
+			insert into @tab
+			select lft,rgt from inv_product
+			where productid in('+@ProductIDs+')'
+		
+		set @sql=@sql+' select * from (select distinct DocID,CostCenterID,'
 	
 		if(@SortAvgRate='true')
 			set @SQL=@SQL+@AvgRateBasedOn
@@ -45,9 +51,11 @@ SET NOCOUNT ON;
 			
 		set @SQL=@SQL+',VoucherType,VoucherNO,case when documenttype =5 THEN 1 else 0 end dt from INV_DocDetails a  WITH(NOLOCK)
 		join COM_DocCCData b WITH(NOLOCK) on a.InvDocDetailsID=b.InvDocDetailsID  '
+		
+		
 		if(@ProductIDs<>'')
-			set @sql =@sql+' join inv_product pg WITH(NOLOCK) on pg.ProductID in('+@ProductIDs+')
-		join inv_product p WITH(NOLOCK) on a.productid=p.productid and p.lft between pg.lft and pg.rgt '
+			set @sql =@sql+' join inv_product p WITH(NOLOCK) on a.productid=p.productid 
+			join @tab  t on   p.lft between t.lft and t.rgt '
 		
 		set @sql =@sql+' where vouchertype=-1 and isqtyignored=0  '+@CustWhere+'  and a.statusid=369
 		and DocDate between '+convert(nvarchar,convert(float,@FromDate))+' and '+convert(nvarchar,convert(float,@ToDate))
@@ -65,10 +73,9 @@ SET NOCOUNT ON;
 			set @SQL=@SQL+',VoucherType,VoucherNO,0 dt from INV_DocDetails a  WITH(NOLOCK)
 			join COM_DocCCData b WITH(NOLOCK) on a.InvDocDetailsID=b.InvDocDetailsID '
 			
-			if(@ProductIDs<>'')
-			set @sql =@sql+' join inv_product pg WITH(NOLOCK) on pg.ProductID in('+@ProductIDs+')
-					join inv_product p WITH(NOLOCK) on a.productid=p.productid and p.lft between pg.lft and pg.rgt '
-		
+		if(@ProductIDs<>'')
+			set @sql =@sql+' join inv_product p WITH(NOLOCK) on a.productid=p.productid 
+			join @tab  t on   p.lft between t.lft and t.rgt '
 		 
 			set @sql =@sql+'where CostCenterID in ('+@Docs+') and isqtyignored=0  '+@CustWhere+'  and a.statusid=369
 			and DocDate between '+convert(nvarchar,convert(float,@FromDate))+' and '+convert(nvarchar,convert(float,@ToDate))
@@ -117,6 +124,5 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF        
 RETURN -999         
 END CATCH        
---SELECT * FROM ADM_FEATURES WHERE FEATUREID=40034   
-  
+--SELECT * FROM ADM_FEATURES WHERE FEATUREID=40034
 GO

@@ -85,11 +85,11 @@ BEGIN
 				SET @NUMFILEDNAME='Earning'+convert(varchar,@i1)
 				SET @STR='INSERT INTO #EMPPAY 
 								SELECT '+ CONVERT(VARCHAR,@EMPNODE) +' ,''1'','+ CONVERT(VARCHAR,@I1) +' ,'+ @NUMFILEDNAME +','''',0 FROM PAY_EMPPAY WITH(NOLOCK) WHERE EMPLOYEEID='+CONVERT(VARCHAR,@EmpNode)
-				EXEC (@STR)
+				EXEC sp_executesql @STR
 				SET @NUMFILEDNAME='Deduction'+convert(varchar,@i1)
 				SET @STR='INSERT INTO #EMPPAY 
 								SELECT '+ CONVERT(VARCHAR,@EMPNODE) +' ,''2'','+ CONVERT(VARCHAR,@I1) +' ,'+ @NUMFILEDNAME +','''',0 FROM PAY_EMPPAY WITH(NOLOCK) WHERE EMPLOYEEID='+CONVERT(VARCHAR,@EmpNode)
-				EXEC (@STR)
+				EXEC sp_executesql @STR
 			SET @I1=@I1+1
 			END
 		UPDATE #EMPPAY SET CALCFILEDNAME='DCCALCNUM'+CONVERT(VARCHAR,SNO)
@@ -144,7 +144,7 @@ SET @strQry=''
 CREATE TABLE #TAB3 (STARTDATE DATETIME)
 SET @strQry='ALTER TABLE #TAB3 ADD '+ @STRCOLS +''
 --PRINT (@strQry)
-EXEC (@strQry)
+EXEC sp_executesql @STRQRY
 SET @strQry=''
 SET @strQry='INSERT INTO #TAB3
 select td.dcalpha17,'+ CONVERT(NVARCHAR(max),@STRCOLS1)+'
@@ -152,7 +152,7 @@ select td.dcalpha17,'+ CONVERT(NVARCHAR(max),@STRCOLS1)+'
  where id.costcenterid=40054 and id.invdocdetailsid=td.invdocdetailsid and id.invdocdetailsid=dn.invdocdetailsid and id.invdocdetailsid=cc.invdocdetailsid
  and id.vouchertype=11 and cc.dcccnid51='+ CONVERT(NVARCHAR,@EmpNode) +''
 -- PRINT (@strQry)
-EXEC (@strQry)
+EXEC sp_executesql @STRQRY
  
 CREATE TABLE #TAB1 (STARTDATE DATETIME,FIELDNAME VARCHAR(100),AMOUNT FLOAT,SNO INT)
 SET @strQry=''
@@ -160,7 +160,7 @@ SET @strQry='INSERT INTO  #TAB1
  SELECT STARTDATE,CA.COLNAME,CA.COLVALUE,0 FROM #TAB3
  CROSS APPLY(VALUES '+ CONVERT(NVARCHAR(MAX), @STRCOLS2) +') AS CA(COLNAME,COLVALUE)'
 --PRINT (@strQry)
-EXEC (@strQry)
+EXEC sp_executesql @STRQRY
 
 	UPDATE T SET T.SNO=T1.SNO FROM #EMPPAY T1 INNER JOIN #TAB1 T ON T1.CALCFILEDNAME=T.FIELDNAME AND T1.TYPE=1
 	UPDATE T SET T.AMOUNT=T1.AMOUNT FROM #TAB1 T1 INNER JOIN @monthTable T ON T1.STARTDATE=T.STARTDATE AND T1.SNO=T.SNO

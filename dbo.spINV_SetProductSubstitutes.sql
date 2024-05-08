@@ -8,7 +8,7 @@ CREATE PROCEDURE [dbo].[spINV_SetProductSubstitutes]
 	@DATA [nvarchar](max) = NULL,
 	@CompanyGUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -17,14 +17,14 @@ BEGIN TRY
 SET NOCOUNT ON; 
 
 		--Declaration Section  
-		DECLARE @Dt FLOAT ,@HasAccess BIT ,@XML xml
+		DECLARE @Dt FLOAT ,@XML xml
 		SET @Dt=CONVERT(float,GETDATE())--Setting Current Date  
   
 		SET @XML=@DATA 
   
 		IF @SUBSTITUTEGROUPID=0 --FOR NEW SUBSTITUTE
 		BEGIN 
-			SELECT @SUBSTITUTEGROUPID=ISNULL(MAX(SubstituteGroupID),0)+1 FROM [INV_ProductSubstitutes] 
+			SELECT @SUBSTITUTEGROUPID=ISNULL(MAX(SubstituteGroupID),0)+1 FROM [INV_ProductSubstitutes] WITH(NOLOCK)  
 			IF EXISTS (SELECT SubstituteGroupName FROM [INV_ProductSubstitutes] WITH(NOLOCK) 
 			WHERE SubstituteGroupName=@SUBSTITUTEGROUPNAME)
 			BEGIN
@@ -36,9 +36,10 @@ SET NOCOUNT ON;
 			--DELETE SUBTITUTE PRODUCTS
 			DELETE FROM [INV_ProductSubstitutes]
 			WHERE SubstituteGroupID=@SUBSTITUTEGROUPID AND ProductID IN
-			(SELECT X.value('@ProductID','BIGINT')
+			(SELECT X.value('@ProductID','INT')
 			from @XML.nodes('/Data/Row') as Data(X)
-			WHERE X.value('@MapAction','nvarchar(10)') ='Delink')
+			--WHERE X.value('@MapAction','nvarchar(10)') ='Delink'
+			)
 		END 
 		
 		--INSERT SUBTITUTE PRODUCTS
@@ -49,9 +50,9 @@ SET NOCOUNT ON;
 		,[SProductID]
 		,[GUID]   
 		,[CreatedBy]  
-		,[CreatedDate],CompanyGUID)  			  
-		SELECT @SUBSTITUTEGROUPID,@SUBSTITUTEGROUPNAME,X.value('@ProductID','BIGINT'),0,NEWID()
-		,@UserName,@Dt,@CompanyGUID
+		,[CreatedDate],CompanyGUID,SNo)  			  
+		SELECT @SUBSTITUTEGROUPID,@SUBSTITUTEGROUPNAME,X.value('@ProductID','INT'),0,NEWID()
+		,@UserName,@Dt,@CompanyGUID,ISNULL(X.value('@SNo','INT'),0)
 		from @XML.nodes('/Data/Row') as Data(X)
 		WHERE X.value('@MapAction','nvarchar(10)') ='Link'
 
@@ -78,20 +79,5 @@ BEGIN CATCH
 	ROLLBACK TRANSACTION
 	SET NOCOUNT OFF  
 	RETURN -999   
-END CATCH 
-  
- -- spINV_SetProductSubstitutes 
- --'-100'
- --,'GROUP1'
- --,'<Data><Row ProductID=''2408'' MapAction=''Link'' /><Row ProductID=''2407'' MapAction=''Link'' /><Row ProductID=''2406'' MapAction=''Link'' /></Data>'
- --,'830b4366-ab3c-4150-aefe-f5acaddc7089'
- --,'admin'
- --,1
- --,1   
-  
-
-
-
-
-
+END CATCH
 GO

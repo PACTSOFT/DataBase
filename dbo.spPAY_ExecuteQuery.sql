@@ -8,8 +8,8 @@ CREATE PROCEDURE [dbo].[spPAY_ExecuteQuery]
 	@EffectFrom [varchar](20) = null,
 	@Query [nvarchar](max),
 	@Flag [int] = 0,
-	@userid [bigint] = 1,
-	@langid [bigint] = 1
+	@userid [int] = 1,
+	@langid [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN
@@ -20,7 +20,7 @@ SELECT @Audit=Value FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE CostCenter
 
 IF (ISNULL(@Flag,0)=1)
 	BEGIN
-			EXEC(@Query)
+			EXEC sp_executesql @Query
 
 		if(@EditSeqNo=0)
 			set @HistoryStatus='Add'
@@ -45,7 +45,7 @@ ELSE IF (ISNULL(@Flag,0)=2)
 			END
 		END
 
-		EXEC(@Query)
+		EXEC sp_executesql @Query
 
 	END
 END

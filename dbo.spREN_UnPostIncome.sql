@@ -3,10 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_UnPostIncome]
-	@ContractID [bigint],
-	@DELETECCID [bigint],
-	@DELETEDOCID [bigint] = 0,
-	@UserID [bigint] = 1,
+	@ContractID [int],
+	@DELETECCID [int],
+	@DELETEDOCID [int] = 0,
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
+	@UserID [int] = 1,
 	@UserName [nvarchar](50),
 	@RoleID [int] = 1,
 	@LangID [int] = 1
@@ -25,6 +27,8 @@ SET NOCOUNT ON;
 				 @DocPrefix =  '',  
 				 @DocNumber = '',  
 				 @DocID=@DELETEDOCID ,
+				 @SysInfo =@SysInfo, 
+				 @AP =@AP, 
 				 @UserID = @UserID,  
 				 @UserName = @UserName,  
 				 @LangID = @RoleID,
@@ -63,7 +67,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH  
-  
-
+END CATCH
 GO

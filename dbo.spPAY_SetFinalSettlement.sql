@@ -68,5 +68,4 @@ Begin Catch
 	SELECT ERROR_MESSAGE() AS ErrorMessage
 	ROLLBACK transaction
 End Catch
-
 GO

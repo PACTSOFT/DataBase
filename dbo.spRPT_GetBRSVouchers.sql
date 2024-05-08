@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spRPT_GetBRSVouchers]
-	@BankAccountID [bigint],
+	@BankAccountID [int],
 	@Status [int],
 	@FromDate [datetime],
 	@ToDate [datetime],
@@ -53,8 +53,8 @@ SET NOCOUNT ON;
 			case when SF.CostCenterID is not null then SF.SysColumnName else f.SysColumnName end,
 			X.value('ID[1]','nvarchar(max)')
 		from @XML.nodes('PactRevenURpts/PactRevenURptDef/Columns/ColumnDef/Identity') as Data(X)
-		left join ADM_CostCenterDef f with(nolock) ON X.value('Field[1]','BIGINT')=f.CostCenterColID
-		left join ADM_CostCenterDef SF with(nolock) ON X.value('SelectedField[1]','BIGINT')=SF.CostCenterColID  
+		left join ADM_CostCenterDef f with(nolock) ON X.value('Field[1]','INT')=f.CostCenterColID
+		left join ADM_CostCenterDef SF with(nolock) ON X.value('SelectedField[1]','INT')=SF.CostCenterColID  
 		where f.CostCenterID>50000 or SF.CostCenterID>50000  
 		
 		select @join=@join+' join '+f.TableName+' CC'+convert(nvarchar,d.ccid)+' with(nolock) on CC.dcCCNID'+convert(nvarchar,(d.ccid-50000))+'=CC'+convert(nvarchar,d.ccid)+'.NodeID ',@cols=@cols+ ',CC'+convert(nvarchar,d.ccid)+'.'+d.syscol+' as ['+case when @isFromReport=0 THEN f.Name ELSE  d.head end +']'
@@ -65,14 +65,14 @@ SET NOCOUNT ON;
 		insert into @tab
 		select 0,f.SysColumnName , case when @isFromReport=0 THEN  X.value('Caption[1]','nvarchar(max)') else X.value('ID[1]','nvarchar(max)') end
 		from @XML.nodes('PactRevenURpts/PactRevenURptDef/Columns/ColumnDef/Identity') as Data(X)
-		left join ADM_CostCenterDef f with(nolock) ON X.value('Field[1]','BIGINT')=f.CostCenterColID
+		left join ADM_CostCenterDef f with(nolock) ON X.value('Field[1]','INT')=f.CostCenterColID
 		where f.SysColumnName like 'dcAlpha%'
 
 		insert into @tab
 		select 0,f.SysColumnName , case when @isFromReport=0 THEN  X.value('Caption[1]','nvarchar(max)') else X.value('ID[1]','nvarchar(max)') end
 		from @XML.nodes('PactRevenURpts/PactRevenURptDef/Columns/ColumnDef/Identity') as Data(X)
-		left join ADM_CostCenterDef f with(nolock) ON abs(X.value('Field[1]','BIGINT'))=f.CostCenterColID
-		where X.value('Category[1]','BIGINT')=402
+		left join ADM_CostCenterDef f with(nolock) ON abs(X.value('Field[1]','INT'))=f.CostCenterColID
+		where X.value('Category[1]','INT')=402
 		
 		--select *,@XML from @tab
 		
@@ -84,7 +84,7 @@ SET NOCOUNT ON;
 		insert into @tab
 		select 0,f.SysColumnName , case when @isFromReport=0 THEN  X.value('Caption[1]','nvarchar(max)') else X.value('ID[1]','nvarchar(max)') end
 		from @XML.nodes('PactRevenURpts/PactRevenURptDef/Columns/ColumnDef/Identity') as Data(X)
-		left join ADM_CostCenterDef f with(nolock) ON X.value('Field[1]','BIGINT')=f.CostCenterColID
+		left join ADM_CostCenterDef f with(nolock) ON X.value('Field[1]','INT')=f.CostCenterColID
 		where f.SysColumnName like 'dcNum%'
 
 	--	select *,@XML from @tab		
@@ -94,20 +94,21 @@ SET NOCOUNT ON;
 		
 		set @join=@join+' left join COM_DocNumData num with(nolock) on D.AccDocDetailsID=num.AccDocDetailsID'
 	
-		set @SELECT='SELECT distinct D.DocID,D.CostCenterID, L.DocumentName, D.DocPrefix, D.DocNumber,D.AccDocDetailsID,D.VoucherNo,CONVERT(DATETIME,DocDate) Date,A.AccountName Account,D.CommonNarration,
-D.ChequeNumber ChequeNo,CONVERT(DATETIME,D.ChequeDate) ChequeDate,#@AMT@#
-D.BRS_Status,CONVERT(DATETIME,ClearanceDate) ClearanceDate'
+		set @SELECT='SELECT distinct D.DocID,D.CostCenterID, L.DocumentName, D.DocPrefix, D.DocNumber,D.AccDocDetailsID,D.VoucherNo,CONVERT(DATETIME,DocDate) Date,case when D.BankAccountID is not null and D.BankAccountID>0 then BA.AccountName else A.AccountName end Account,D.CommonNarration,
+				D.ChequeNumber ChequeNo,CONVERT(DATETIME,D.ChequeDate) ChequeDate,#@AMT@#
+				D.BRS_Status,CONVERT(DATETIME,ClearanceDate) ClearanceDate, D.RefCCID,D.REfNodeid'
 		if(@LockWhere <>'')
-			SET @SELECT=@SELECT+',case when c.fromdate is null then 0 else 1 end as IsLock' 
+			SET @SELECT=@SELECT+',case when BL.FromDate is null AND c.fromdate is null then 0 else 1 end as IsLock' 
 		else
-			SET @SELECT=@SELECT+',0 IsLock'
+			SET @SELECT=@SELECT+',case when BL.FromDate is null then 0 else 1 end as IsLock'
 		SET @SELECT=@SELECT+@cols
 		
 		SET @ACCFROMSQL='
 FROM ACC_DocDetails D WITH(NOLOCK)
-LEFT JOIN ACC_Accounts A WITH(NOLOCK) ON A.AccountID=D.CreditAccount
-LEFT JOIN  ADM_DocumentTypes AS L WITH(NOLOCK) ON L.CostCenterID = D.CostCenterID
-left join COM_DocTextData txt with(nolock) on txt.AccDocDetailsID=D.AccDocDetailsID
+LEFT JOIN ACC_Accounts BA WITH(NOLOCK) ON BA.AccountID=D.BankAccountID
+JOIN ACC_Accounts A WITH(NOLOCK) ON A.AccountID=D.CreditAccount
+JOIN  ADM_DocumentTypes AS L WITH(NOLOCK) ON L.CostCenterID = D.CostCenterID
+join COM_DocTextData txt with(nolock) on txt.AccDocDetailsID=isnull(D.linkedAccDocDetailsID,D.AccDocDetailsID)
 join COM_DocCCData CC with(nolock) on D.AccDocDetailsID=CC.AccDocDetailsID'
 		if(@LockWhere <>'')
 			  SET @ACCFROMSQL=@ACCFROMSQL+' left join ADM_DimensionWiseLockData c  WITH(NOLOCK) on D.DocDate between c.fromdate and c.todate and c.isEnable=1 '+@LockWhere
@@ -124,6 +125,7 @@ join COM_DocCCData CC with(nolock) on D.AccDocDetailsID=CC.AccDocDetailsID'
 		--Accounting Select
 		SET @SQL=replace(@SELECT,'#@AMT@#','NULL Cr,D.'+@Amount+' Dr,')+@ACCFROMSQL+@join
 		set @SQL=@SQL+'
+LEFT JOIN ADM_BRSLockedDates BL WITH(NOLOCK) ON BL.AccountID=D.DebitAccount AND D.DocDate between BL.FromDate and BL.ToDate and BL.isEnable=1 
 WHERE D.DocumentType<>14 and  D.DocumentType<>19 and (D.StatusID=369 or D.StatusID=449 or D.StatusID=429) and  D.DebitAccount='+CONVERT(NVARCHAR,@BankAccountID)
 		set @SQL=@SQL+@WHERE
 			
@@ -131,7 +133,8 @@ WHERE D.DocumentType<>14 and  D.DocumentType<>19 and (D.StatusID=369 or D.Status
 		UNION ALL 
 '
 		set @SQL=@SQL+replace(@SELECT,'#@AMT@#','D.'+@Amount+' Cr,NULL Dr,')+replace(@ACCFROMSQL,'D.CreditAccount','D.DebitAccount')+@join
-		set @SQL=@SQL+' 
+		set @SQL=@SQL+'
+LEFT JOIN ADM_BRSLockedDates BL WITH(NOLOCK) ON BL.AccountID=D.CreditAccount AND D.DocDate between BL.FromDate and BL.ToDate and BL.isEnable=1  
 WHERE D.DocumentType<>14 and  D.DocumentType<>19 and (D.StatusID=369 or D.StatusID=449 or D.StatusID=429) and D.CreditAccount='+CONVERT(NVARCHAR,@BankAccountID)
 		set @SQL=@SQL+@WHERE
 		
@@ -140,16 +143,18 @@ WHERE D.DocumentType<>14 and  D.DocumentType<>19 and (D.StatusID=369 or D.Status
 		UNION ALL 
 '
 		set @join=replace(@join,'D.AccDocDetailsID=num.AccDocDetailsID','D.InvDocDetailsID=num.InvDocDetailsID')
-		set @SQL=@SQL+replace(@SELECT,'#@AMT@#','NULL Cr,D.'+@Amount+' Dr,')+replace(replace(@ACCFROMSQL,'D.AccDocDetailsID=CC.AccDocDetailsID','D.InvDocDetailsID=CC.InvDocDetailsID'),'txt.AccDocDetailsID=D.AccDocDetailsID','txt.InvDocDetailsID=D.InvDocDetailsID')+@join
+		set @SQL=@SQL+replace(@SELECT,'#@AMT@#','NULL Cr,D.'+@Amount+' Dr,')+replace(replace(@ACCFROMSQL,'D.AccDocDetailsID=CC.AccDocDetailsID','D.InvDocDetailsID=CC.InvDocDetailsID'),'txt.AccDocDetailsID=isnull(D.linkedAccDocDetailsID,D.AccDocDetailsID)','txt.InvDocDetailsID=D.InvDocDetailsID')+@join
 		set @SQL=@SQL+'
+LEFT JOIN ADM_BRSLockedDates BL WITH(NOLOCK) ON BL.AccountID=D.DebitAccount AND D.DocDate between BL.FromDate and BL.ToDate and BL.isEnable=1  
 WHERE (D.StatusID=369 or D.StatusID=449 or D.StatusID=429) and  D.DebitAccount='+CONVERT(NVARCHAR,@BankAccountID)
 		set @SQL=@SQL+@WHERE
 			
 		set @SQL=@SQL+' 
 		UNION ALL 
 '
-		set @SQL=@SQL+replace(@SELECT,'#@AMT@#','D.'+@Amount+' Cr,NULL Dr,')+replace(replace(replace(@ACCFROMSQL,'D.CreditAccount','D.DebitAccount'),'D.AccDocDetailsID=CC.AccDocDetailsID','D.InvDocDetailsID=CC.InvDocDetailsID'),'txt.AccDocDetailsID=D.AccDocDetailsID','txt.InvDocDetailsID=D.InvDocDetailsID')+@join
-		set @SQL=@SQL+' 
+		set @SQL=@SQL+replace(@SELECT,'#@AMT@#','D.'+@Amount+' Cr,NULL Dr,')+replace(replace(replace(@ACCFROMSQL,'D.CreditAccount','D.DebitAccount'),'D.AccDocDetailsID=CC.AccDocDetailsID','D.InvDocDetailsID=CC.InvDocDetailsID'),'txt.AccDocDetailsID=isnull(D.linkedAccDocDetailsID,D.AccDocDetailsID)','txt.InvDocDetailsID=D.InvDocDetailsID')+@join
+		set @SQL=@SQL+'
+LEFT JOIN ADM_BRSLockedDates BL WITH(NOLOCK) ON BL.AccountID=D.CreditAccount AND D.DocDate between BL.FromDate and BL.ToDate and BL.isEnable=1   
 WHERE (D.StatusID=369 or D.StatusID=449 or D.StatusID=429) and D.CreditAccount='+CONVERT(NVARCHAR,@BankAccountID)
 		set @SQL=@SQL+@WHERE
 		
@@ -163,6 +168,7 @@ WHERE (D.StatusID=369 or D.StatusID=449 or D.StatusID=429) and D.CreditAccount='
 		
 		print (@SQL)
 		print (substring(@SQL,4001,4000))
+		print 'ww'
 		EXEC(@SQL)
 	
 		
@@ -274,6 +280,7 @@ WHERE (D.StatusID=369 or D.StatusID=449 or D.StatusID=429) and D.CreditAccount='
 		set @SQL=@SQL+'
 		) as t'
 		print (@SQL)
+			
 		EXEC(@SQL)
 		
 		SELECT AccountCode,AccountName FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=@BankAccountID
@@ -341,6 +348,7 @@ WHERE (D.StatusID=369 or D.StatusID=449 or D.StatusID=429) and D.CreditAccount='
 					 
 				end
 				set @SQL=@SQL+') as t'
+			
 				print (@SQL)
 				EXEC(@SQL)
 		END
@@ -385,4 +393,5 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH  
+
 GO

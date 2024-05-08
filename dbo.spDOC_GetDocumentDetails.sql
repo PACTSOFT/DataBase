@@ -3,10 +3,10 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetDocumentDetails]
-	@COSTCENTERID [bigint],
+	@COSTCENTERID [int],
 	@DocumentTypeID [int],
 	@FLAG [int],
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -89,7 +89,7 @@ declare @CCID int
 
 		case when (c.columncostcenterid=44 and C.UserDefaultValue is not null and isnumeric(C.UserDefaultValue)=1) 
 		then (select L.name from COM_LOOKUP L with(nolock) where L.NodeID=CONVERT(INT,C.UserDefaultValue) )
-		else '' end as LookUpName,c.Cformula,IsPartialLinking,DD.distxml
+		else '' end as LookUpName,c.Cformula,IsPartialLinking,DD.distxml,c.MinChar,c.MaxChar
 
 		FROM ADM_CostCenterDef C WITH(NOLOCK)              
 		LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID              
@@ -149,7 +149,7 @@ declare @CCID int
 		WHERE FEATUREID > 50000   and ISEnabled=1      
 	END     
      
-	select * from COM_CostCenterCodeDef WITH(NOLOCK) 
+	select 1 where 1<>1
 	     
 	SELECT *,CostCenterID as MENUID  FROM ADM_DocumentTypes WITH(NOLOCK) WHERE DocumentType=26      
 
@@ -192,11 +192,22 @@ declare @CCID int
 	select SrcDoc,linkedfrom,Fld from COM_DocLinkCloseDetails WITH(NOLOCK)
 	where CostCenterID=@COSTCENTERID
 	
-	Select C52.Name as ComponentName,C54.SNo From Com_CC50052 C52 With(Nolock) inner join Com_CC50054 C54 With(Nolock) 
-	on C52.NodeID=C54.ComponentID Where FieldType='overtime' And C54.GradeID=1	And C54.Payrolldate=(Select max(payrolldate) From Com_CC50054 with(nolock)) order by C54.SNo
+	IF EXISTS (SELECT * FROM SYS.TABLES WITH(NOLOCK) WHERE NAME='')
+	BEGIN
+		set @Query ='Select C52.Name as ComponentName,C54.SNo From Com_CC50052 C52 With(Nolock) 
+		inner join Com_CC50054 C54 With(Nolock) on C52.NodeID=C54.ComponentID 
+		Where FieldType=''overtime'' And C54.GradeID=1	And C54.Payrolldate=(Select max(payrolldate) From Com_CC50054 with(nolock)) 
+		order by C54.SNo'
+		EXEC (@Query)
+	END
+	ELSE
+		SELECT 1 WHERE 1<>1
 	
 	select ActualFileName,GUID,FileExtension from com_files  WITH(NOLOCK)
 	where FeatureID=400 and FeaturePK=@COSTCENTERID
+	
+	select Name,convert(int,replace(Name,'dcAlpha','')) Ind from sys.columns where Name like 'dcAlpha%' and system_type_id=61
+	and object_id=object_id('COM_DocTextData')
 	
 SET NOCOUNT OFF;              
 RETURN 1              

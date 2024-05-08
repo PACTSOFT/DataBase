@@ -4,9 +4,9 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_GetEmployeeAttendance]
 	@Date [nvarchar](max),
-	@EmployeeID [bigint] = 0,
-	@userid [bigint] = 1,
-	@langid [bigint] = 1
+	@EmployeeID [int] = 0,
+	@userid [int] = 1,
+	@langid [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY
@@ -90,5 +90,4 @@ BEGIN CATCH
 SET NOCOUNT OFF    
 RETURN -999     
 END CATCH
-
 GO

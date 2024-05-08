@@ -3,12 +3,12 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetBarcodeDocumentsData]
-	@DocumentID [bigint],
+	@DocumentID [int],
 	@DocumentSeqNo [nvarchar](max),
 	@GroupNodeExists [bit],
 	@SelectedColsQuery [nvarchar](max),
 	@JoinsQuery [nvarchar](max),
-	@UserID [bigint],
+	@UserID [int],
 	@UserName [nvarchar](50),
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -17,7 +17,7 @@ BEGIN TRY
 SET NOCOUNT ON;
 
 	--Declaration Section
-	DECLARE @SQL NVARCHAR(MAX),@GTPQuery nvarchar(max),@GTPWhere nvarchar(max)
+	DECLARE @SQL NVARCHAR(MAX),@GTPQuery nvarchar(max),@GTPWhere nvarchar(max),@DocType int
 	DECLARE @SELECTSQL NVARCHAR(MAX), @FROMSQL NVARCHAR(MAX)
 	
 	SET @SELECTSQL=@SelectedColsQuery
@@ -25,9 +25,11 @@ SET NOCOUNT ON;
 	
 	IF LEN(@SELECTSQL)>0
 		SET @SELECTSQL= @SELECTSQL+','
-		
+
 IF(@DocumentID>40000 and @DocumentID<50000)
 BEGIN
+	Select @DocType=DocumentType From ADM_DocumentTypes with(nolock) Where CostCenterID=@DocumentID
+	
 	if @FROMSQL not like '%INV_Product%'
 		set @FROMSQL=' LEFT JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=D.ProductID'+@FROMSQL
 
@@ -45,7 +47,7 @@ BEGIN
 	LD.DocPrefix+''-''+LD.DocNumber as LinkSerialNoWithPrefix,
 	LDR.AccountCode LinkDrAccountCode,LDR.AccountName LinkDrAccountName,LDR.AliasName LinkDrAccountAlias,
 	LCR.AccountCode LinkCrAccountCode,LCR.AccountName LinkCrAccountName,LCR.AliasName LinkCrAccountAlias,
-	T.*,N.*,UOM.BaseName Unit,
+	T.*,N.*,UOM.UnitName Unit,
 	B.BatchNumber Batch_No, B.BatchCode Batch_Code,CONVERT(DATETIME,B.MfgDate) Batch_MfgDate,CONVERT(DATETIME,B.ExpiryDate) Batch_ExpDate
 	FROM INV_DocDetails D WITH(NOLOCK) LEFT JOIN
 	INV_DocDetails LD WITH(NOLOCK) ON LD.InvDocDetailsID=D.LinkedInvDocDetailsID LEFT JOIN 	
@@ -58,12 +60,15 @@ BEGIN
 	COM_Currency C WITH(NOLOCK) ON C.CurrencyID=D.CurrencyID LEFT JOIN
 	COM_Status S WITH(NOLOCK) ON S.StatusID=D.StatusID LEFT JOIN 
 	COM_UOM UOM WITH(NOLOCK) on D.Unit=UOM.UOMID'+@FROMSQL+'	
-	WHERE P.ManufacturerBarcode<>1'
+	WHERE P.PrintBarcode=1'
 	if @DocumentSeqNo like '%,%'
 		SET @SQL=@SQL+' AND D.DocID IN('+@DocumentSeqNo+')'
 	else
 		SET @SQL=@SQL+' AND D.DocID='+@DocumentSeqNo
 
+	if (@DocType=5)
+		SET @SQL=@SQL+' AND D.VoucherType=1'
+		
 	SET @SQL=@SQL+' AND D.DynamicInvDocDetailsID IS NULL'
 	
 	if(@SELECTSQL like '%PCK.label PCKLabel%')
@@ -93,12 +98,32 @@ BEGIN
 			set @GTPWhere='P.ProductID='+@DocumentSeqNo
 	end
 	
-	SET @SQL='SELECT '+@SELECTSQL+'P.*
+	SET @SQL='
+	SELECT '+@SELECTSQL+'P.*,ROW_NUMBER()OVER ( ORDER BY P.[ProductID]) ID
+	INTO #TBLPRODUCT
 	FROM INV_Product P WITH(NOLOCK) 
-	LEFT JOIN COM_CCCCData as COM_DocCCData WITH(NOLOCK) on COM_DocCCData.CostCenterID=3 AND COM_DocCCData.NodeID=P.ProductID
-	'
+	LEFT JOIN COM_CCCCData as COM_DocCCData WITH(NOLOCK) on COM_DocCCData.CostCenterID=3 AND COM_DocCCData.NodeID=P.ProductID '
 	SET @SQL=@SQL+@FROMSQL+@GTPQuery
-	SET @SQL=@SQL+' WHERE P.ManufacturerBarcode<>1 AND '+@GTPWhere	
+	SET @SQL=@SQL+' WHERE P.PrintBarcode=1 AND '+@GTPWhere	
+	
+	SET @SQL=@SQL+'
+	DECLARE @I INT,@CNT INT,@ProductID INT,@UOMID INT,@SalesRate FLOAT
+	SELECT @I=1,@CNT=COUNT(*) FROM #TBLPRODUCT WITH(NOLOCK)
+	WHILE (@I<=@CNT)
+	BEGIN
+		SELECT @SalesRate=0,@ProductID=ProductID,@UOMID=UOMID FROM #TBLPRODUCT WITH(NOLOCK) WHERE ID=@I
+		
+		select top 1 @SalesRate=SellingRate from COM_CCPrices WITH(NOLOCK)   
+		where WEF<=convert(float,CONVERT(DATETIME,GETDATE()))
+		and (ProductID=@ProductID or ProductID=1) and (UOMID=isnull(@UOMID,1) or UOMID=1)   
+		order by WEF Desc,ProductID Desc,AccountID Desc,UOMID Desc
+		
+		IF(@SalesRate>0)
+			UPDATE #TBLPRODUCT SET SellingRate=@SalesRate WHERE PRODUCTID=@ProductID
+		SET @I=@I+1
+	END '
+	SET @SQL=@SQL+ ' SELECT * FROM #TBLPRODUCT WITH(NOLOCK)'
+	SET @SQL=@SQL+ ' DROP TABLE #TBLPRODUCT'
 END
 ELSE IF (@DocumentID=2)
 BEGIN	
@@ -154,11 +179,7 @@ BEGIN
 END
 
 PRINT(@SQL)
-EXEC(@SQL)
-
-
-	
-		
+EXEC sp_executesql @SQL
 
 IF @DocumentID>40000 and @DocumentID<50000
 BEGIN
@@ -168,7 +189,6 @@ BEGIN
 	INNER JOIN Inv_DocDetails D with(nolock) ON D.InvDocDetailsID=S.InvDocDetailsID
 	WHERE D.DocID=@DocumentSeqNo
 	order by S.SerialProductID
-	
 	
 	--CHECK AUDIT TRIAL ALLOWED AND INSERTING AUDIT TRIAL DATA
 	DECLARE @AuditTrial BIT
@@ -181,7 +201,7 @@ BEGIN
 		SET @SQL='INSERT INTO INV_DocDetails_History_ATUser(DocType,DocID,VoucherNo,ActionType,ActionTypeID,UserID,CreatedBy,CreatedDate)
 		SELECT '+convert(nvarchar,@DocumentID)+',DocID,VoucherNo,''Barcode'',2,'+convert(nvarchar,@UserID)+','''+@UserName+''',CONVERT(FLOAT,GETDATE())
 		 FROM INV_DocDetails WITH(NOLOCK) WHERE DocID IN ('+@DocumentSeqNo+')'
-		EXEC(@SQL)
+		EXEC sp_executesql @SQL
 	END
 END
 
@@ -203,4 +223,5 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
 GO

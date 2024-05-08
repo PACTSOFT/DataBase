@@ -4,12 +4,14 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_SuspendAccDocument]
 	@CostCenterID [int],
-	@DocID [bigint],
+	@DocID [int],
 	@DocPrefix [nvarchar](50),
 	@DocNumber [nvarchar](500),
 	@Remarks [nvarchar](max),
 	@LockWhere [nvarchar](max) = '',
 	@SuspendAll [bit] = 0,
+	@sysinfo [nvarchar](max) = '',
+	@AP [varchar](10) = '',
 	@UserID [int] = 0,
 	@UserName [nvarchar](100),
 	@RoleID [int] = 0,
@@ -20,8 +22,8 @@ BEGIN TRANSACTION
 BEGIN TRY      
 SET NOCOUNT ON;    
   --Declaration Section    
-  DECLARE @HasAccess bit,@VoucherNo nvarchar(200),@PrefValue NVARCHAR(500),@NodeID bigint,@WID BIGINT,@level bigint
-  DECLARE @sql nvarchar(max),@tablename nvarchar(200),@CurrentNo bigint,@DocDate datetime,@DocType int
+  DECLARE @HasAccess bit,@VoucherNo nvarchar(200),@PrefValue NVARCHAR(500),@NodeID INT,@WID INT,@level INT
+  DECLARE @sql nvarchar(max),@tablename nvarchar(200),@CurrentNo INT,@DocDate datetime,@DocType int
   	declare @ModDate float
   	DECLARE	@return_value int
 			set @ModDate=convert(float,getdate())
@@ -56,8 +58,8 @@ SET NOCOUNT ON;
 	END
 	
 	
-DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLockCC bigint  
- DECLARE @LockFromDate DATETIME,@LockToDate DATETIME,@AllowLockData BIT,@LockCC bigint,@LockCCValues nvarchar(max)     
+DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLockCC INT  
+ DECLARE @LockFromDate DATETIME,@LockToDate DATETIME,@AllowLockData BIT,@LockCC INT,@LockCCValues nvarchar(max)     
     
  SELECT @AllowLockData=CONVERT(BIT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='Lock Data Between'       
  SELECT @DAllowLockData=CONVERT(BIT,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='Lock Data Between'  
@@ -68,7 +70,7 @@ DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLoc
   BEGIN   
    SELECT @LockFromDate=CONVERT(DATETIME,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockDataFromDate'      
    SELECT @LockToDate=CONVERT(DATETIME,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockDataToDate'      
-   SELECT @LockCC=CONVERT(BIGINT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockCostCenters' and isnumeric(Value)=1  
+   SELECT @LockCC=CONVERT(INT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockCostCenters' and isnumeric(Value)=1  
   
    if(@DocDate BETWEEN @LockFromDate AND @LockToDate)  
    BEGIN  
@@ -76,12 +78,12 @@ DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLoc
 		RAISERROR('-125',16,1)    
      else if(@LockCC>50000)  
      BEGIN  
-       SELECT @LockCCValues=CONVERT(BIGINT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockCostCenterNodes'  
+       SELECT @LockCCValues=CONVERT(INT,Value) FROM ADM_GlobalPreferences with(nolock) WHERE Name='LockCostCenterNodes'  
   
       set @LockCCValues= rtrim(@LockCCValues)  
       set @LockCCValues=substring(@LockCCValues,0,len(@LockCCValues)- charindex(',',reverse(@LockCCValues))+1)  
   
-      set @sql ='if exists (select a.AccDocDetailsID FROM  [COM_DocCCData] a  
+      set @sql ='if exists (select a.AccDocDetailsID FROM  [COM_DocCCData] a with(nolock)  
       join [ACC_DocDetails] b with(nolock) on a.AccDocDetailsID=b.AccDocDetailsID  
       WHERE b.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND b.docid='+convert(nvarchar,@DocID)+' and a.dcccnid'+convert(nvarchar,(@LockCC-50000))+' in('+@LockCCValues+'))  
       RAISERROR(''-125'',16,1)  '  
@@ -104,7 +106,7 @@ DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLoc
   BEGIN  
    SELECT @DLockFromDate=CONVERT(DATETIME,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='LockDataFromDate'  
    SELECT @DLockToDate=CONVERT(DATETIME,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='LockDataToDate'  
-   SELECT @DLockCC=CONVERT(BIGINT,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='LockCostCenters' and isnumeric(PrefValue)=1  
+   SELECT @DLockCC=CONVERT(INT,PrefValue) FROM COM_DocumentPreferences WITH(NOLOCK) where CostCenterID=@CostCenterID and  PrefName='LockCostCenters' and isnumeric(PrefValue)=1  
     
    if(@DocDate BETWEEN @DLockFromDate AND @DLockToDate)  
    BEGIN  
@@ -112,12 +114,12 @@ DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLoc
 		RAISERROR('-125',16,1)    
      else if(@DLockCC>50000)  
      BEGIN  
-		  SELECT @LockCCValues=CONVERT(BIGINT,PrefValue) FROM COM_DocumentPreferences with(nolock) WHERE CostCenterID=@CostCenterID and  PrefName='LockCostCenterNodes'  
+		  SELECT @LockCCValues=CONVERT(INT,PrefValue) FROM COM_DocumentPreferences with(nolock) WHERE CostCenterID=@CostCenterID and  PrefName='LockCostCenterNodes'  
 	  
 		  set @LockCCValues= rtrim(@LockCCValues)  
 		  set @LockCCValues=substring(@LockCCValues,0,len(@LockCCValues)- charindex(',',reverse(@LockCCValues))+1)  
 	  
-		  set @sql ='if exists (select a.AccDocDetailsID FROM  [COM_DocCCData] a  
+		  set @sql ='if exists (select a.AccDocDetailsID FROM  [COM_DocCCData] a with(nolock)  
 		  join [ACC_DocDetails] b with(nolock) on a.AccDocDetailsID=b.AccDocDetailsID  
 		  WHERE b.CostCenterID='+convert(nvarchar,@CostCenterID)+' AND b.docid='+convert(nvarchar,@DocID)+' and a.dcccnid'+convert(nvarchar,(@DLockCC-50000))+' in('+@LockCCValues+'))  
 		  RAISERROR(''-125'',16,1)  '  
@@ -126,7 +128,7 @@ DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLoc
    END         
   END  
  END  
- declare @IsLineWisePDC bit,@CrossDimension bit ,@PrePayment bigint
+ declare @IsLineWisePDC bit,@CrossDimension bit ,@PrePayment INT
 	set @IsLineWisePDC=0
 	select @IsLineWisePDC=isnull(PrefValue,0) from COM_DocumentPreferences WITH(NOLOCK)    
 	where CostCenterID=@CostCenterID and PrefName='LineWisePDC'   	
@@ -142,34 +144,56 @@ DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLoc
 			if(@IsLineWisePDC=1 and exists (SELECT a.ACCDocDetailsID from ACC_DocDetails a  with(nolock)	 
 			 join ACC_DocDetails B with(nolock) on a.ACCDocDetailsID =b.RefNodeid and b.RefCCID=400  
 			 where a.CostCenterid=@CostCenterID and a.DocID =@DocID and b.Statusid<>370))
-				RAISERROR('-399',16,1) 	
-	 
-			declare @AccDocID bigint,@DELETECCID BIGINT,@delcnt int,@deli int,@DeleteDOcid bigint
-			DECLARE @DELDocID BIGINT
-			declare @ttdel table(id int identity(1,1),docid bigint,CCID BIGINT)
-			insert into @ttdel
-			SELECT distinct b.DocID,b.COSTCENTERID FROM  [ACC_DocDetails] a WITH(NOLOCK)
-			join  [ACC_DocDetails] b WITH(NOLOCK) on a.AccDocDetailsID=b.RefNodeid 
-			WHERE a.DocID =@DocID and b.RefCCID=400
-			
-			select @deli=0,@delcnt=COUNT(docid) from @ttdel
-			while(@deli<@delcnt)
-			BEGIN
-				set @deli=@deli+1
-				select @DeleteDOcid=docid,@DELETECCID=CCID from @ttdel where id=@deli
-					    
-				 EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]  
-				 @CostCenterID = @DELETECCID,  
-				 @DocPrefix = '',  
-				 @DocNumber = '',
-				 @DocID=@DeleteDOcid,
-				 @UserID = @UserID,  
-				 @UserName = @UserName,  
-				 @LangID = @LangID,  
-				 @RoleID= @RoleID
-			END
+				RAISERROR('-399',16,1) 				
 	END
-   
+		declare @AccDocID INT,@DELETECCID INT,@delcnt int,@deli int,@DeleteDOcid INT
+		DECLARE @DELDocID INT
+		declare @ttdel table(id int identity(1,1),docid INT,CCID INT)
+		insert into @ttdel
+		SELECT distinct b.DocID,b.COSTCENTERID FROM  [ACC_DocDetails] a WITH(NOLOCK)
+		join  [ACC_DocDetails] b WITH(NOLOCK) on a.AccDocDetailsID=b.RefNodeid 
+		WHERE a.DocID =@DocID and b.RefCCID=400
+		
+		select @deli=0,@delcnt=COUNT(docid) from @ttdel
+		while(@deli<@delcnt)
+		BEGIN
+			set @deli=@deli+1
+			select @DeleteDOcid=docid,@DELETECCID=CCID from @ttdel where id=@deli
+				    
+			 EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]  
+			 @CostCenterID = @DELETECCID,  
+			 @DocPrefix = '',  
+			 @DocNumber = '',
+			 @DocID=@DeleteDOcid,
+			 @UserID = @UserID,  
+			 @UserName = @UserName,  
+			 @LangID = @LangID,  
+			 @RoleID= @RoleID
+		END
+		DELETE FROM @ttdel
+		insert into @ttdel
+		SELECT distinct b.DocID,b.COSTCENTERID FROM  [ACC_DocDetails] a WITH(NOLOCK)
+		join  [INV_DocDetails] b WITH(NOLOCK) on a.AccDocDetailsID=b.RefNodeid 
+		WHERE a.DocID =@DocID and b.RefCCID=400
+		
+		select @deli=min(id),@delcnt=max(id) from @ttdel
+		while(@deli<=@delcnt)
+		BEGIN
+			
+			select @DeleteDOcid=docid,@DELETECCID=CCID from @ttdel where id=@deli
+				    
+			 EXEC @return_value = [dbo].[spDOC_DeleteInvDocument]  
+			 @CostCenterID = @DELETECCID,  
+			 @DocPrefix = '',  
+			 @DocNumber = '',
+			 @DocID=@DeleteDOcid,
+			 @UserID = @UserID,  
+			 @UserName = @UserName,  
+			 @LangID = @LangID,  
+			 @RoleID= @RoleID
+			 
+			 set @deli=@deli+1
+		END
  
 	if exists (SELECT a.ACCDocDetailsID from ACC_DocDetails a 	 WITH(nolock) 
 	 join ACC_DocDetails B WITH(nolock) on a.ACCDocDetailsID =b.RefNodeid and b.RefCCID=400  
@@ -187,10 +211,10 @@ DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLoc
 		
 		if(@PrefValue is not null and @PrefValue<>'')
 		begin
-			declare @Dimesion bigint
+			declare @Dimesion INT
 			set @Dimesion=0
 			begin try
-				select @Dimesion=convert(bigint,@PrefValue)
+				select @Dimesion=convert(INT,@PrefValue)
 			end try
 			begin catch
 				set @Dimesion=0
@@ -198,10 +222,10 @@ DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLoc
 			if(@Dimesion>0)
 			begin
 				
-				select @tablename=tablename from ADM_Features where FeatureID=@Dimesion
+				select @tablename=tablename from ADM_Features with(nolock) where FeatureID=@Dimesion
 				set @sql='select @NodeID=NodeID from '+@tablename+' WITH(nolock) where Name='''+@VoucherNo+''''
 				print @sql
-				EXEC sp_executesql @sql,N'@NodeID bigint OUTPUT',@NodeID output
+				EXEC sp_executesql @sql,N'@NodeID INT OUTPUT',@NodeID output
 				 
 				if(@NodeID>1)
 				begin
@@ -266,8 +290,11 @@ DECLARE @DLockFromDate DATETIME,@DLockToDate DATETIME,@DAllowLockData BIT ,@DLoc
 				@Ininv =0,
 				@ReviseReason ='',
 				@LangID =@LangID,
-			@UserName=@UserName,
-			@ModDate=@ModDate
+				@UserName=@UserName,
+				@ModDate=@ModDate,
+				@CCID=@CostCenterID,
+				@sysinfo=@sysinfo,
+				@AP=@AP
 		END	
 		
 		if exists(select * from COM_Approvals WITH(NOLOCK) where CCID=@COSTCENTERID and CCNODEID=@DOCID)

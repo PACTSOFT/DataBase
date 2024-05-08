@@ -14,38 +14,45 @@ CREATE PROCEDURE [dbo].[spRPT_MRP]
 	@CCWHERE [nvarchar](max),
 	@SELECT [nvarchar](max),
 	@FROM [nvarchar](max),
-	@UserID [bigint],
+	@StockCCWhere [nvarchar](max) = '',
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY	
 SET NOCOUNT ON
 	--Declaration Section
-	DECLARE @Query NVARCHAR(MAX),@SubTagSQL NVARCHAR(MAX),@PID bigint,@TI int,@XML xml,@OrderDateField nvarchar(30),@OrderWhere nvarchar(max)
+	DECLARE @Query NVARCHAR(MAX),@SubTagSQL NVARCHAR(MAX),@PID INT,@TI int,@XML xml,@OrderDateField nvarchar(30),@OrderWhere nvarchar(max)
 		,@OrderDetailsIDFilter nvarchar(max),@OrdersByDoc nvarchar(max)
 
-	DECLARE @TblQOH AS TABLE(ProductID bigint,Qty float)
-	DECLARE @TblAvgRate AS TABLE(ProductID bigint,TagID bigint,BalanceQty float,AvgRate float,BalValue float)
-	DECLARE @TblExpQty AS TABLE(ProductID bigint,DocDate datetime,CostCenterID int,PendingQty float)
-	DECLARE @TblComQty AS TABLE(ProductID bigint,DocDate datetime,CostCenterID int,PendingQty float)
-	CREATE TABLE #TblOrderFilter(InvDetailsID bigint)
-	CREATE TABLE #TblProducts(ID int IDENTITY(1,1) NOT NULL,ProductID bigint,PreexpiryDays int)
+	DECLARE @TblQOH AS TABLE(ProductID INT,Qty float)
+	DECLARE @TblAvgRate AS TABLE(ProductID INT,TagID INT,BalanceQty float,AvgRate float,BalValue float)
+	DECLARE @TblExpQty AS TABLE(ProductID INT,DocDate datetime,CostCenterID int,PendingQty float)
+	DECLARE @TblComQty AS TABLE(ProductID INT,DocDate datetime,CostCenterID int,PendingQty float)
+	CREATE TABLE #TblOrderFilter(InvDetailsID INT)
+	CREATE TABLE #TblProducts(ID int IDENTITY(1,1) NOT NULL,ProductID INT,PreexpiryDays int)
 	
 	INSERT INTO #TblProducts(ProductID)
 	EXEC SPSplitString @ProductID,','
 
 	IF len(@CCWHERE)>0 --OR @DimensionID>0
 	BEGIN
-		SET @CCWHERE=' INNER JOIN COM_DocCCData DCC with(nolock) ON A.InvDocDetailsID=DCC.InvDocDetailsID '	+@CCWHERE
+		SET @CCWHERE=' INNER JOIN COM_DocCCData DCC with(nolock) ON A.InvDocDetailsID=DCC.InvDocDetailsID '+@CCWHERE
 	END
 
 	/******* QOH *******/
-	SET @Query='SELECT A.ProductID, SUM(UOMConvertedQty*VoucherType)
-		FROM INV_DocDetails A WITH(NOLOCK) inner join #TblProducts TP on TP.ProductID=A.ProductID
-		WHERE (VoucherType=1 OR VoucherType=-1) AND IsQtyIgnored=0 and A.StatusID<>376
+	SET @Query='SELECT A.ProductID, SUM(A.UOMConvertedQty*A.VoucherType)
+		FROM INV_DocDetails A WITH(NOLOCK) 
+		inner join #TblProducts TP on TP.ProductID=A.ProductID'
+	
+	IF len(@StockCCWhere)>0 
+	BEGIN
+		SET @Query=@Query+' INNER JOIN COM_DocCCData DCC with(nolock) ON A.InvDocDetailsID=DCC.InvDocDetailsID '+@StockCCWhere
+	END	
+	SET @Query=@Query+' WHERE (A.VoucherType=1 OR A.VoucherType=-1) AND A.IsQtyIgnored=0 and A.StatusID<>376
 		and (A.DocumentType=3 or A.DocDate<'+convert(nvarchar,convert(float,@FromDate))+')
 		GROUP BY A.ProductID'
-	--print(@Query)
+	print(@Query)
 	INSERT INTO @TblQOH(ProductID,Qty)
 	EXEC(@Query)
 	
@@ -182,7 +189,7 @@ SET NOCOUNT ON
 			select @TblName=TableName from ADM_Features WITH(NOLOCK) WHere FeatureID=@JobDim
 			
 			set @Query='Select TP.ProductID,J.Name,case when isdate(J.ccAlpha49)=1 then convert(datetime,J.ccAlpha49) else null end JobDate
-,a.Qty - isnull((select sum(UOMConvertedQty) from inv_docdetails INV with(nolock) inner join COM_DocCCDATA DCC with(nolock) on DCC.InvDocDetailsID=INV.InvDocDetailsID
+,(case when a.IsBom=1 then isnull(a.Qty*b.FPQty,0) else a.Qty end) - isnull((select sum(UOMConvertedQty) from inv_docdetails INV with(nolock) inner join COM_DocCCDATA DCC with(nolock) on DCC.InvDocDetailsID=INV.InvDocDetailsID
 where DCC.dcccnid'+convert(nvarchar,convert(int,@JobDim)-50000)+'=J.NodeID and IsQtyIgnored=0 and StatusID<>376 and VoucherType=1 and ProductID=TP.ProductID),0) Qty
 --,BomName,[StageID],b.FPQty,a.[BomID],a.[ProductID],a.[Qty],a.IsBom,a.[UOMID],b.ProductID BomProductID,i.ProductName,b.CCID,b.CCNodeID,DimID
 from PRD_JobOuputProducts a WITH(NOLOCK) 
@@ -246,5 +253,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

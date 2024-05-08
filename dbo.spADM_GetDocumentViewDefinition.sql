@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetDocumentViewDefinition]
 	@DocumentViewID [int],
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -39,7 +39,7 @@ SELECT [DocumentViewDefID]
       ,[CreatedBy]
       ,[CreatedDate]
       ,[ModifiedBy]
-      ,[ModifiedDate],TabID,ViewFor
+      ,[ModifiedDate],TabID,ViewFor,ISNULL(FieldColor,'') FieldColor
   FROM [ADM_DocumentViewDef] with(nolock)
   where [DocumentViewID]=@DocumentViewID
   
@@ -76,10 +76,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH  
-  
-  
-  
-  
-  
+END CATCH
 GO

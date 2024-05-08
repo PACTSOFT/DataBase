@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetGSTPostingDetails]
-	@DocID [bigint],
+	@DocID [int],
 	@CostCenterID [int] = 0,
 	@GSTType [nvarchar](16) = '',
 	@CompanyID [int] = 0,
@@ -26,11 +26,16 @@ SET NOCOUNT ON
 		SELECT GSTType,SysColumnName,GSTColumnName FROM INV_GSTMapping WITH(NOLOCK)
 		WHERE CostCenterID=@CostCenterID AND GSTType='EWB' AND GSTColumnName='transporterId'
 	END
+	ELSE IF (@GSTType='GST')
+	BEGIN
+		SELECT SysColumnName,GSTColumnName FROM INV_GSTMapping WITH(NOLOCK)
+		WHERE CostCenterID=0 AND GSTType='GST'
+	END
 	ELSE
 	BEGIN
-		CREATE TABLE #AddDeatils (ID INT IDENTITY(1,1) PRIMARY KEY,DocID BIGINT,AddType INT,Gstin NVARCHAR(32),LglName NVARCHAR(100),TrdName NVARCHAR(100),Addr1 NVARCHAR(MAX),Addr2 NVARCHAR(MAX),Place NVARCHAR(100),Pincode INT,StateCode NVARCHAR(100),Phone NVARCHAR(32),Email NVARCHAR(64),Pos NVARCHAR(32),gstReg NVARCHAR(32))
+		CREATE TABLE #AddDeatils (ID INT IDENTITY(1,1) PRIMARY KEY,DocID INT,AddType INT,Gstin NVARCHAR(32),LglName NVARCHAR(100),TrdName NVARCHAR(100),Addr1 NVARCHAR(MAX),Addr2 NVARCHAR(MAX),Place NVARCHAR(100),Pincode INT,StateCode NVARCHAR(100),Phone NVARCHAR(32),Email NVARCHAR(64),Pos NVARCHAR(32),gstReg NVARCHAR(32),UserName NVARCHAR(32),Password NVARCHAR(32))
 		
-		CREATE TABLE #Transaction (ID INT IDENTITY(1,1) PRIMARY KEY,DocID BIGINT,totValue FLOAT,cgstValue FLOAT,sgstValue FLOAT,igstValue FLOAT,cessValue FLOAT,
+		CREATE TABLE #Transaction (ID INT IDENTITY(1,1) PRIMARY KEY,DocID INT,totValue FLOAT,cgstValue FLOAT,sgstValue FLOAT,igstValue FLOAT,cessValue FLOAT,
 		stateCessValue FLOAT,totDiscount FLOAT,totOtherCharges FLOAT,roundOffAmout FLOAT,totInvValue FLOAT,totInvValueFc FLOAT)
 
 		CREATE TABLE #GSTMapping (ID INT IDENTITY(1,1) PRIMARY KEY,SysColumnName NVARCHAR(32),GSTColumnName NVARCHAR(32),SysTableName NVARCHAR(32),IsCalc BIT,DataType NVARCHAR(32),ValueType NVARCHAR(16),Reference INT,DefColumnName NVARCHAR(MAX))
@@ -47,7 +52,7 @@ SET NOCOUNT ON
 		UNION
 		SELECT @DocID,4
 		
-		DECLARE @CCData TABLE (ID INT IDENTITY(1,1) PRIMARY KEY,Reference INT,NodeID BIGINT)
+		DECLARE @CCData TABLE (ID INT IDENTITY(1,1) PRIMARY KEY,Reference INT,NodeID INT)
 		
 		TRUNCATE TABLE #GSTMapping
 		
@@ -56,7 +61,7 @@ SET NOCOUNT ON
 		,GM.IsCalc,CD.ColumnDataType,GM.ValueType,GM.Reference,F.TableName
 		FROM INV_GSTMapping GM WITH(NOLOCK)
 		LEFT JOIN ADM_CostCenterDef CD WITH(NOLOCK) ON CD.CostCenterID=(CASE WHEN GM.Reference IN (92,93,94) THEN 110 ELSE GM.Reference END) AND CD.SysColumnName=GM.SysColumnName
-		LEFT JOIN ADM_Features F WITH(NOLOCK) ON F.FeatureID=(CASE WHEN GM.Reference IN (92,93,94) THEN 110 ELSE CD.ColumnCostCenterID END)
+		LEFT JOIN ADM_Features F WITH(NOLOCK) ON F.FeatureID=(CASE WHEN GM.Reference IN (92,93,94) AND (CD.ColumnCostCenterID IS NULL OR CD.ColumnCostCenterID=0) THEN 110 ELSE CD.ColumnCostCenterID END)
 		WHERE GM.CostCenterID=@CostCenterID AND GM.GSTType=@GSTType AND GM.ValueType IN ('Seller','Buyer') AND GM.Reference<>0
 		
 		SELECT @I=1,@ICNT=COUNT(*) FROM #GSTMapping WITH(NOLOCK)
@@ -206,6 +211,7 @@ SET NOCOUNT ON
 							SET @TransColumns=@TransColumns+',SUM(ISNULL(DND.'+REPLACE(REPLACE(@DefColumnName,',',',0)+ISNULL(DND.'),'dcNum','dcCalcNum')+',0)) '+@GSTColumnName
 						ELSE
 							SET @TransColumns=@TransColumns+',SUM(ISNULL(DND.'+REPLACE(@DefColumnName,',',',0)+ISNULL(DND.')+',0)) '+@GSTColumnName
+						
 					END
 					ELSE
 					BEGIN
@@ -292,7 +298,7 @@ SET NOCOUNT ON
 		ELSE IF (@GSTType='EWB')	
 			SET @SQL=@SQL+'(CASE WHEN IDD.VoucherType=-1 THEN ''Outward'' ELSE ''Inward'' END) supplyType,'
 		
-		SET @SQL=@SQL+'(CASE WHEN IDD.VoucherType=-1 OR IDD.DocumentType=6 THEN FA.Gstin ELSE TA.Gstin END) fromGstin,
+		SET @SQL=@SQL+'FA.UserName,FA.Password,(CASE WHEN IDD.VoucherType=-1 OR IDD.DocumentType=6 THEN FA.Gstin ELSE TA.Gstin END) fromGstin,
 		(CASE WHEN IDD.VoucherType=-1 OR IDD.DocumentType=6 THEN FA.LglName ELSE TA.LglName END) fromLglName,
 		(CASE WHEN IDD.VoucherType=-1 OR IDD.DocumentType=6 THEN FA.TrdName ELSE TA.TrdName END) fromTrdName,
 		(CASE WHEN IDD.VoucherType=-1 OR IDD.DocumentType=6 THEN FA.Addr1 ELSE TA.Addr1 END) fromAddr1,
@@ -377,7 +383,7 @@ SET NOCOUNT OFF
 RETURN -999       
 END CATCH     
 		
---exec spDOC_GetGSTPostingDetails 25378,40011,'EINV',1 ,1,1
+
 
 
 

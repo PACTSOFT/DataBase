@@ -1,4 +1,4 @@
-﻿USE PACT2c253
+﻿USE PACT2C222
 GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
@@ -7,6 +7,7 @@ CREATE PROCEDURE [dbo].[spPAY_GetEmpAdjDetailsMultiple]
 	@PayrollMonth [nvarchar](100),
 	@PayrollStart [nvarchar](100),
 	@PayrollEnd [nvarchar](100),
+	@Flag [int] = 0,
 	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
@@ -39,21 +40,60 @@ IF(CONVERT(INT,isnull(@DontConsiderDocsDaysBasedonPostedDate,0))>0)
 begin
 
 SET @SQ=''
-SET @SQ='
-SELECT B.dcCCNID51 as EmpSeqNo,D.NodeID as ComponentID,D.Name as LeaveType,
-	CONVERT(DATETIME,c.dcAlpha4) as FromDate,CONVERT(DATETIME,c.dcAlpha5) as ToDate,c.dcAlpha7 as NoOfDays,A.StatusID,Convert(DATETIME,DocDate) as DocDate,CONVERT(DATETIME,c.dcAlpha15) as RejoinDate,ISNULL(c.dcAlpha16,'''') as PostedFrom
-	FROM INV_DocDetails A WITH(NOLOCK)
-	JOIN COM_DocCCData B WITH(NOLOCK) ON B.InvDocDetailsID=A.InvDocDetailsID
-	JOIN COM_DocTextData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
-	JOIN COM_CC50052 D WITH(NOLOCK) ON D.NodeID=B.dcCCNID52 
-	join com_approvals App WITH(NOLOCK) ON App.CCNODEID=a.DocID and app.ApprovalID in (select top 1 ApprovalID from com_approvals A1 WITH(NOLOCK) where  a1.CCNODEID=a.DocID AND a1.CCID=a.CostCenterID AND a1.StatusID=369 AND CONVERT(DATETIME,a1.CreatedDate)>= CONVERT(DATETIME,'''+CONVERT(NVARCHAR,( CONVERT(NVARCHAR,@DontConsiderDocsDaysBasedonPostedDate) +'-'+ CONVERT(NVARCHAR(3),DATENAME(MONTH,@PayrollMonth))+'-'+ CONVERT(NVARCHAR,YEAR(@PayrollMonth)) ))+''') order by CONVERT(DATETIME,a1.CreatedDate) desc)  
-	WHERE C.tDocumentType=62 AND a.StatusID=369 AND  ISDATE(ISNULL(c.dcAlpha4,''''))=1 AND ISDATE(ISNULL(c.dcAlpha5,''''))=1  AND B.dcCCNID51 IN('+@EmpIDs+') 
-	AND B.dcCCNID52 IN ('+@ConsiderLOPBasedOn+') AND
-(
-	CONVERT(DATETIME,dcAlpha4) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')
-	or CONVERT(DATETIME,dcAlpha5) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')
-	or CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') between CONVERT(DATETIME,dcAlpha4) and CONVERT(DATETIME,dcAlpha5)
-	or CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''') between CONVERT(DATETIME,dcAlpha4) and CONVERT(DATETIME,dcAlpha4))'
+
+IF(@Flag=0)-- LOP Auto Adj. 
+BEGIN
+	SET @SQ='
+	SELECT B.dcCCNID51 as EmpSeqNo,D.NodeID as ComponentID,D.Name as LeaveType,
+		CONVERT(DATETIME,c.dcAlpha4) as FromDate,CONVERT(DATETIME,c.dcAlpha5) as ToDate,c.dcAlpha7 as NoOfDays,A.StatusID,Convert(DATETIME,DocDate) as DocDate,CONVERT(DATETIME,c.dcAlpha15) as RejoinDate,ISNULL(c.dcAlpha16,'''') as PostedFrom
+		FROM INV_DocDetails A WITH(NOLOCK)
+		JOIN COM_DocCCData B WITH(NOLOCK) ON B.InvDocDetailsID=A.InvDocDetailsID
+		JOIN COM_DocTextData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
+		JOIN COM_CC50052 D WITH(NOLOCK) ON D.NodeID=B.dcCCNID52 
+		join com_approvals App WITH(NOLOCK) ON App.CCNODEID=a.DocID and app.ApprovalID in (select top 1 ApprovalID from com_approvals A1 WITH(NOLOCK) where  a1.CCNODEID=a.DocID AND a1.CCID=a.CostCenterID AND a1.StatusID=369 AND CONVERT(DATETIME,a1.CreatedDate)>= CONVERT(DATETIME,'''+CONVERT(NVARCHAR,( CONVERT(NVARCHAR,@DontConsiderDocsDaysBasedonPostedDate) +'-'+ CONVERT(NVARCHAR(3),DATENAME(MONTH,@PayrollMonth))+'-'+ CONVERT(NVARCHAR,YEAR(@PayrollMonth)) ))+''') order by CONVERT(DATETIME,a1.CreatedDate) desc)  
+		WHERE C.tDocumentType=62 AND a.StatusID=369 AND  ISDATE(ISNULL(c.dcAlpha4,''''))=1 AND ISDATE(ISNULL(c.dcAlpha5,''''))=1  AND B.dcCCNID51 IN('+@EmpIDs+') 
+		AND B.dcCCNID52 IN ('+@ConsiderLOPBasedOn+') AND
+	(
+		CONVERT(DATETIME,dcAlpha4) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')
+		or CONVERT(DATETIME,dcAlpha5) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')
+		or CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') between CONVERT(DATETIME,dcAlpha4) and CONVERT(DATETIME,dcAlpha5)
+		or CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''') between CONVERT(DATETIME,dcAlpha4) and CONVERT(DATETIME,dcAlpha4))'
+END
+ELSE IF(@Flag=1)-- PAID Leave in MP Formula
+BEGIN
+	SET @SQ='
+	SELECT B.dcCCNID51 as EmpSeqNo,D.NodeID as ComponentID,D.Name as LeaveType,
+		CONVERT(DATETIME,c.dcAlpha4) as FromDate,CONVERT(DATETIME,c.dcAlpha5) as ToDate,c.dcAlpha7 as NoOfDays,A.StatusID,Convert(DATETIME,DocDate) as DocDate,CONVERT(DATETIME,c.dcAlpha15) as RejoinDate,ISNULL(c.dcAlpha16,'''') as PostedFrom
+		FROM INV_DocDetails A WITH(NOLOCK)
+		JOIN COM_DocCCData B WITH(NOLOCK) ON B.InvDocDetailsID=A.InvDocDetailsID
+		JOIN COM_DocTextData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
+		JOIN COM_CC50052 D WITH(NOLOCK) ON D.NodeID=B.dcCCNID52 
+		join com_approvals App WITH(NOLOCK) ON App.CCNODEID=a.DocID and app.ApprovalID in (select top 1 ApprovalID from com_approvals A1 WITH(NOLOCK) where  a1.CCNODEID=a.DocID AND a1.CCID=a.CostCenterID AND a1.StatusID=369 AND CONVERT(DATETIME,a1.CreatedDate)>= CONVERT(DATETIME,'''+CONVERT(NVARCHAR,( CONVERT(NVARCHAR,@DontConsiderDocsDaysBasedonPostedDate) +'-'+ CONVERT(NVARCHAR(3),DATENAME(MONTH,@PayrollMonth))+'-'+ CONVERT(NVARCHAR,YEAR(@PayrollMonth)) ))+''') order by CONVERT(DATETIME,a1.CreatedDate) desc)  
+		WHERE C.tDocumentType=62 AND a.StatusID=369 AND  ISDATE(ISNULL(c.dcAlpha4,''''))=1 AND ISDATE(ISNULL(c.dcAlpha5,''''))=1  AND B.dcCCNID51 IN('+@EmpIDs+')'
+		 
+		if(Len(@ConsiderLOPBasedOn)>0)
+			SET @SQ= @SQ + ' AND B.dcCCNID52 NOT IN ('+@ConsiderLOPBasedOn+') '
+
+		SET @SQ= @SQ + ' AND (
+		CONVERT(DATETIME,dcAlpha4) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')
+		or CONVERT(DATETIME,dcAlpha5) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')
+		or CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') between CONVERT(DATETIME,dcAlpha4) and CONVERT(DATETIME,dcAlpha5)
+		or CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''') between CONVERT(DATETIME,dcAlpha4) and CONVERT(DATETIME,dcAlpha4))
+		
+		UNION
+		SELECT DISTINCT b.dcCCNID51 as EmpSeqNo,b.dcCCNID52 as VacationField,'''',CONVERT(DATETIME,d.dcAlpha2) as FromDate,CONVERT(DATETIME,d.dcAlpha3) as ToDate,d.dcAlpha4 as NoOfDays,A.StatusID,CONVERT(DateTime,DocDate) as DocDate ,CONVERT(DATETIME,d.dcAlpha1) as RejoinDate,''''
+	FROM INV_DocDetails a WITH(NOLOCK) 
+	JOIN COM_DocCCData b WITH(NOLOCK) ON b.INVDOCDETAILSID=a.INVDOCDETAILSID
+	JOIN COM_DocTextData d WITH(NOLOCK) ON d.INVDOCDETAILSID=a.INVDOCDETAILSID join com_approvals App WITH(NOLOCK) ON App.CCNODEID=a.DocID and app.ApprovalID in (select top 1 ApprovalID from com_approvals A1 WITH(NOLOCK) where  a1.CCNODEID=a.DocID AND a1.CCID=a.CostCenterID AND a1.StatusID=369 AND CONVERT(DATETIME,a1.CreatedDate)>= CONVERT(DATETIME,'''+CONVERT(NVARCHAR,( CONVERT(NVARCHAR,@DontConsiderDocsDaysBasedonPostedDate) +'-'+ CONVERT(NVARCHAR(3),DATENAME(MONTH,@PayrollMonth))+'-'+ CONVERT(NVARCHAR,YEAR(@PayrollMonth)) ))+''') order by CONVERT(DATETIME,a1.CreatedDate) desc)  
+	WHERE d.tCostCenterID=40072 and a.StatusID=369 AND ISNULL(d.dcAlpha17,'''')=''No'' AND b.dcCCNID51 IN('+@EmpIDs+') 
+	AND ISDATE(ISNULL(d.dcAlpha2,''''))=1 AND ISDATE(ISNULL(d.dcAlpha3,''''))=1 AND a.RefNodeID=0 
+	AND (
+		CONVERT(DATETIME,dcAlpha2) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')
+		or CONVERT(DATETIME,dcAlpha3) between CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') and CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''')
+		or CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollStart)+''') between CONVERT(DATETIME,dcAlpha2) and CONVERT(DATETIME,dcAlpha3)
+		or CONVERT(DATETIME,'''+CONVERT(NVARCHAR,@PayrollEnd)+''') between CONVERT(DATETIME,dcAlpha2) and CONVERT(DATETIME,dcAlpha3))
+	'
+END
 
 PRINT @SQ
 EXEC(@SQ)
@@ -247,5 +287,6 @@ BEGIN CATCH
 SET NOCOUNT OFF    
 RETURN -999     
 END CATCH
+
 
 GO

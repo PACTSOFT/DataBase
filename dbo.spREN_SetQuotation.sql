@@ -3,46 +3,42 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_SetQuotation]
-	@QuotationID [bigint],
+	@QuotationID [int],
 	@CostCenterID [int],
 	@Prefix [nvarchar](50),
-	@Number [bigint],
+	@Number [int],
 	@Date [datetime],
 	@StatusID [int],
-	@SelectedNodeID [bigint],
-	@PropertyID [bigint] = 0,
-	@UnitID [bigint] = 0,
+	@SelectedNodeID [int],
+	@PropertyID [int] = 0,
+	@UnitID [int] = 0,
 	@MultiUnitIds [nvarchar](max),
 	@multiName [nvarchar](max),
-	@TenantID [bigint] = 0,
-	@RentRecID [bigint] = 0,
-	@IncomeID [bigint] = 0,
+	@TenantID [int] = 0,
+	@RentRecID [int] = 0,
 	@Purpose [nvarchar](500) = NULL,
 	@StartDate [datetime],
 	@EndDate [datetime],
-	@TotalAmount [float],
-	@NonRecurAmount [float],
-	@RecurAmount [float],
 	@ContractXML [nvarchar](max) = NULL,
 	@PayTermsXML [nvarchar](max) = NULL,
-	@RoleID [bigint],
-	@ContractLocationID [bigint],
-	@ContractDivisionID [bigint],
-	@ContractCurrencyID [bigint],
+	@RoleID [int],
+	@ContractLocationID [int],
+	@ContractDivisionID [int],
 	@CustomFieldsQuery [nvarchar](max) = null,
 	@CustomCostCenterFieldsQuery [nvarchar](max) = null,
-	@TermsConditions [nvarchar](500) = NULL,
-	@SalesmanID [bigint],
-	@AccountantID [bigint],
-	@LandlordID [bigint],
+	@TermsConditions [nvarchar](max) = NULL,
 	@Narration [nvarchar](500),
 	@AttachmentsXML [nvarchar](max),
 	@ExtendTill [datetime],
 	@NotesXML [nvarchar](max),
+	@ExtraXML [nvarchar](max) = null,
 	@basedon [nvarchar](50),
 	@PostPDRecieptXML [nvarchar](max),
-	@WID [bigint],
-	@RecurDuration [int],
+	@WID [int],
+	@LinkedQuotationID [int],
+	@SysInfo [nvarchar](500) = '',
+	@AP [nvarchar](10) = '',
+	@LockDims [nvarchar](max) = '',
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
@@ -54,19 +50,58 @@ BEGIN TRANSACTION
 DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE NVARCHAR(100)        
 BEGIN TRY            
 SET NOCOUNT ON;         
-        
+    
+ 
 	DECLARE @Dt float,@XML xml,@CNT int,@i int, @level int,@maxLevel int
 	DECLARE @UpdateSql nvarchar(max),@AA nvarchar(max),@DocXML XML ,@DDXML nvarchar(max)   
-	DECLARE @lft bigint,@rgt bigint,@Selectedlft bigint,@Selectedrgt bigint,@Depth int,@ParentID bigint 
+	DECLARE @lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth int,@ParentID INT 
+	declare @tblExistingCNT INT,@AccValue nvarchar(100),@DocIDValue INT,@RcptCCID int,@DELETECCID int,@return_value int
+	DECLARE @AUDITSTATUS NVARCHAR(50) ,@typ int
+	SET @AUDITSTATUS= 'EDIT'    
 	
-	declare @ChildUnits table(UnitID BIGINT)  
+	declare @ChildUnits table(id int identity(1,1),UnitID INT)  
 	insert into @ChildUnits  
 	exec SPSplitString @MultiUnitIds,','
 	
-	iF(@UnitID=0 and exists(select * from @ChildUnits))
-		select @UnitID=UnitID from @ChildUnits
-	
-	if(@CostCenterID=129)
+	iF exists(select * from @ChildUnits)
+	BEGIN
+		
+		if(@CostCenterID=129 AND @StatusID<>430)
+		BEGIN
+			SELECT @I = 0,@CNT = COUNT(id) FROM @ChildUnits      
+     
+			WHILE(@I < @CNT)      
+			BEGIN      
+				SET @I =@I+1 
+				SELECT @UnitID=UnitID   FROM @ChildUnits WHERE  id = @I 
+
+				set @DDXML='if exists(SELECT QuotationID from REN_Quotation with(nolock)                      
+				WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
+				or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
+				or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
+	 			or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''   )             
+				AND UnitID = '+convert(nvarchar,@UnitID)+' and StatusID in(467,440,466) and costcenterid=129
+				and QuotationID<>'+convert(nvarchar,@QuotationID )+' and RefQuotation<>'+convert(nvarchar,@QuotationID )+')
+				RAISERROR(''-520'',16,1)'	
+				exec(@DDXML)
+				
+				set @DDXML='if exists(SELECT UnitID
+					FROM  (select a.RefContractID,a.UnitID,a.StatusID,a.contractid,a.startdate,
+					case when a.statusid in(480,481) and a.VacancyDate is not null then a.VacancyDate when  a.statusid in(428,465) then a.TerminationDate else a.enddate end enddate
+					from ren_contract a WITH(NOLOCK)) as t                      
+					WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
+					or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
+					or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
+	 				or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''   )             
+					AND UnitID = '+convert(nvarchar,@UnitID)+' and    StatusID <> 428   and    StatusID <> 451)
+				RAISERROR(''-520'',16,1)'	
+				exec(@DDXML)
+			END
+		END   
+		
+		select @UnitID=UnitID from @ChildUnits		
+	END	
+	else if(@CostCenterID=129 AND @StatusID<>430)
 	BEGIN
 		
 		set @DDXML='if exists(SELECT QuotationID from REN_Quotation with(nolock)                      
@@ -74,14 +109,15 @@ SET NOCOUNT ON;
 		or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
 		or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
 	 	or CONVERT(datetime, EndDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+'''   )             
-		AND UnitID = '+convert(nvarchar,@UnitID)+' and StatusID =467
+		AND UnitID = '+convert(nvarchar,@UnitID)+' and StatusID in(467,440,466) and costcenterid=129
 		and QuotationID<>'+convert(nvarchar,@QuotationID )+')
 		RAISERROR(''-520'',16,1)'	
 		exec(@DDXML)
 		
-		set @DDXML='if exists(SELECT ContractID, ContractPrefix, ContractDate,convert(datetime,StartDate) StartDate,                   
-		convert(datetime, EndDate) EndDate,  ContractNumber, StatusID                       
-		FROM REN_Contract with(nolock)                      
+		set @DDXML='if exists(SELECT UnitID
+					FROM  (select a.RefContractID,a.UnitID,a.StatusID,a.contractid,a.startdate,
+					case when a.statusid in(480,481) and a.VacancyDate is not null then a.VacancyDate when  a.statusid in(428,465) then a.TerminationDate else a.enddate end enddate
+					from ren_contract a WITH(NOLOCK)) as t                     
 		WHERE ( '''+convert(nvarchar,@StartDate)+'''   between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)      
 		or       '''+convert(nvarchar,@EndDate)+'''  between CONVERT(datetime, StartDate) and CONVERT(datetime, EndDate)
 		or	CONVERT(datetime, StartDate) between '''+convert(nvarchar,@StartDate)+''' and  '''+convert(nvarchar,@EndDate)+''' 
@@ -91,13 +127,29 @@ SET NOCOUNT ON;
 		exec(@DDXML)
 
 	END   
+	
+	
+	if(@LockDims is not null and @LockDims<>'')
+	BEGIN
+		set @DDXML=' if exists(select FromDate from ADM_DimensionWiseLockData c WITH(NOLOCK),COM_CCCCData b WITH(nolock) 
+		where '+convert(nvarchar,CONVERT(float,@Date))+' between c.FromDate and c.ToDate and c.isEnable=1 and b.CostCenterID='+convert(nvarchar,@CostCenterID)+' '+@LockDims
+		+') RAISERROR(''-125'',16,1) '
+		exec(@DDXML)
+	END
+	
+	if(@LinkedQuotationID>0)
+	BEGIN
+		update REN_Quotation 
+		set StatusID =467 
+		where QuotationID=@LinkedQuotationID
+	END
 	 
 	if(@ExtendTill='1/JAN/1900')
 		set @ExtendTill=null       
 
 	SET @Dt=convert(float,getdate())--Setting Current Date  
     
-    if(@WID>0 and @StatusID not in(469,468))   	
+    if(@WID>0 and @StatusID not in(430,469,468))   	
 	begin
 		set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
 		where WorkFlowID=@WID and  UserID =@UserID)
@@ -123,10 +175,11 @@ SET NOCOUNT ON;
 		END
 	END
          
-    DECLARE @SelectedIsGroup bit,@SNO BIGINT
+    DECLARE @SelectedIsGroup bit,@SNO INT
     
 	IF @QuotationID=0          
-	BEGIN         
+	BEGIN     
+		SET @AUDITSTATUS = 'ADD'     
 		SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth          
 		from REN_Quotation with(NOLOCK) where QuotationID=@SelectedNodeID          
 	           
@@ -177,13 +230,11 @@ SET NOCOUNT ON;
 		  ,[UnitID]        
 		  ,[TenantID]        
 		  ,[RentAccID]        
-		  ,[IncomeAccID]        
+		     
 		  ,[Purpose]        
 		  ,[StartDate]        
 		  ,[EndDate]   
-		  ,[TotalAmount]        
-		  ,[NonRecurAmount]        
-		  ,[RecurAmount]        
+		        
 		  ,[Depth]        
 		  ,[ParentID]        
 		  ,[lft]        
@@ -195,13 +246,12 @@ SET NOCOUNT ON;
 		  ,[CreatedDate]       
 		  ,[LocationID]      
 		  ,[DivisionID]      
-		  ,[CurrencyID]        
+		     
 		  ,[TermsConditions]    
-		  ,[SalesmanID]    
-		  ,[AccountantID]      
-		  ,[LandlordID]    
+		   
 		  ,Narration,BasedOn,CostCenterID,ExtendTill
-		  ,WorkFlowID,WorkFlowLevel,NoOfUnits,multiName,RefQuotation,RecurDuration)   
+		  ,WorkFlowID,WorkFlowLevel,NoOfUnits,multiName,RefQuotation,LinkedQuotationID
+		  ,SysInfo,AP)   
 	   VALUES        
 		(@Prefix,  @SNO,     
 		CONVERT(FLOAT,@Date),        
@@ -210,13 +260,11 @@ SET NOCOUNT ON;
 		@UnitID,        
 		@TenantID,        
 		@RentRecID,        
-		@IncomeID,        
+
 		@Purpose,        
 		CONVERT(FLOAT,@StartDate),        
 		CONVERT(FLOAT,@EndDate),       
-		@TotalAmount,        
-		@NonRecurAmount,        
-		@RecurAmount ,      
+	     
 		@Depth,      
 		@SelectedNodeID,      
 		@lft,      
@@ -228,22 +276,27 @@ SET NOCOUNT ON;
 		@Dt,      
 		@ContractLocationID,      
 		@ContractDivisionID,      
-		@ContractCurrencyID,      
+		    
 		@TermsConditions,    
-		@SalesmanID,    
-		@AccountantID,    
-		@LandlordID,    
 		@Narration,    
 		@basedon,@CostCenterID,CONVERT(FLOAT,@ExtendTill)
-		,@WID,@level,1,@multiName,0,@RecurDuration)        
+		,@WID,@level,1,@multiName,0,@LinkedQuotationID
+		,@SysInfo,@AP)        
 		IF @@ERROR<>0 BEGIN ROLLBACK TRANSACTION RETURN -101 END        
 			set @QuotationID=SCOPE_IDENTITY()        
          
 		INSERT INTO REN_QuotationExtended([QuotationID])        
 		VALUES(@QuotationID)        
-
-		INSERT INTO COM_CCCCDATA ([CostCenterID],[NodeID],[Guid],[CreatedBy],[CreatedDate])      
-		VALUES(@CostCenterID,@QuotationID,newid(),@UserName, @Dt)           
+		if(@CostCenterID=95)
+		BEGIN
+				INSERT INTO COM_CCCCDATA ([CostCenterID],[NodeID],[Guid],[CreatedBy],[CreatedDate])      
+				VALUES(103,@QuotationID,newid(),@UserName, @Dt)           
+		END
+		ELSE
+		BEGIN
+			INSERT INTO COM_CCCCDATA ([CostCenterID],[NodeID],[Guid],[CreatedBy],[CreatedDate])      
+			VALUES(@CostCenterID,@QuotationID,newid(),@UserName, @Dt)           
+		END	
 	END -- END CREATE        
 	ELSE --UPDATE
 	BEGIN      
@@ -257,7 +310,31 @@ SET NOCOUNT ON;
 			select @SNO=SNO from REN_Quotation with(nolock) WHERE QuotationID =  @QuotationID
 			set @Selectedrgt=@WID
 		END	
+		
+		if exists(select * from REN_Quotation WITH(NOLOCK) WHERE QuotationID =  @QuotationID and statusid=469)
+		BEGIN
+				set @DocIDValue=0
+				SELECT  @DELETECCID = CostcenterID ,@DocIDValue=DocID FROM REN_ContractDocMapping WITH(nolock)       				
+				WHERE CONTRACTID = @QuotationID and [Type]=101    
+				
+				if(@DocIDValue>0)
+				BEGIN
+					EXEC @return_value = [dbo].[spDOC_DeleteAccDocument]      
+					@CostCenterID = @DELETECCID,      
+					@DocPrefix = '',      
+					@DocNumber = '',  
+					@DOCID = @DocIDValue, 
+					@SysInfo =@SysInfo, 
+					@AP =@AP,      
+					@UserID = 1,      
+					@UserName = N'ADMIN',      
+					@LangID = 1,
+					@RoleID=1
 
+					DELETE FROM REN_ContractDocMapping WHERE CONTRACTID = @QuotationID  AND DOCID =  @DocIDValue
+				end
+		END
+		
 		UPDATE  REN_Quotation      
 		SET --[ContractPrefix] = @ContractPrefix,        
 		[Date] =  CONVERT(FLOAT,@Date)                
@@ -266,31 +343,28 @@ SET NOCOUNT ON;
 		,StatusID     =@StatusID
 		,[TenantID] = @TenantID      
 		,[RentAccID] = @RentRecID      
-		,[IncomeAccID] = @IncomeID      
+		 
 		,[Purpose] = @Purpose      
 		,[StartDate] = CONVERT(FLOAT,@StartDate)      
 		,[EndDate] = CONVERT(FLOAT,@EndDate)         
-		,[TotalAmount] = @TotalAmount      
-		,[NonRecurAmount] = @NonRecurAmount      
-		,[RecurAmount] = @RecurAmount      
+		   
 		,[CompanyGUID] = @CompanyGUID      
 		,[GUID] = @GUID      
 		,[ModifiedBy] = @UserName      
 		,[ModifiedDate] =@Dt 
 		,[LocationID] = @ContractLocationID      
 		,[DivisionID] =@ContractDivisionID      
-		,[CurrencyID] =@ContractCurrencyID      
+		 
 		,[TermsConditions] =@TermsConditions      
-		, [SalesmanID] =@SalesmanID    
-		,[AccountantID] =@AccountantID    
-		,[LandlordID] = @LandlordID    
+		 
 		,[Narration] = @Narration      
 		,BasedOn=@basedon 
-		,ExtendTill  =CONVERT(FLOAT,@ExtendTill)
+		
 		,WorkFlowID=@Selectedrgt,WorkFlowLevel=@level
 		,NoOfUnits=1
 		,multiName=@multiName
-		,RecurDuration=@RecurDuration
+		
+		,SysInfo=@SysInfo,AP=@AP
 		WHERE QuotationID =  @QuotationID      
 	END       
    
@@ -302,46 +376,67 @@ SET NOCOUNT ON;
 		DELETE FROM [REN_QuotationParticulars] WHERE QuotationID = @QuotationID        
 
 		INSERT INTO [REN_QuotationParticulars]        
-		([QuotationID]        
-		,[CCID]        
-		,[CCNodeID]        
-		,[CreditAccID]        
-		,[ChequeNo]        
-		,[ChequeDate]        
-		,[PayeeBank]        
-		,[DebitAccID]   
-		,[RentAmount]    
-		,[Discount]         
-		,[Amount]        
-		,[Sno]      
-		,[IsRecurr],VatPer,VatAmount,InclChkGen,Detailsxml,RecurInvoice,TaxableAmt
-		,Sqft,Rate)        
-
-		SELECT @QuotationID , X.value('@CCID','BIGINT'),         
-		X.value('@CCNodeID','BIGINT'),          
-		X.value('@CreditAccID','BIGINT'),         
-		X.value('@ChequeNo','NVARCHAR(200)'),        
-		CONVERT(float,X.value('@ChequeDate','Datetime')),        
-		X.value('@PayeeBank','nvarchar(500)'),        
-		X.value('@DebitAccID','BIGINT'),    
-		X.value('@RentAmount','float'),    
-		X.value('@Discount','float'),       
-		X.value('@Amount','float'),        
-		X.value('@SNO','int'),      
-		X.value('@IsRecurr','bit'), 
-		X.value('@VatPer','float'),
-		X.value('@VatAmount','float'), X.value('@InclChkGen','INT')     ,convert(nvarchar(max), X.query('XML'))
-		,X.value('@Recur','BIT')
-		,X.value('@TaxableAmt','float')
-		, X.value('@Sqft','float'),X.value('@Rate','float')
-		FROM @XML.nodes('/ContractXML/Rows/Row') as Data(X)          
+				([QuotationID]        
+				,[CCID]        
+				,[CCNodeID]        
+				,[CreditAccID]        
+				,[ChequeNo]        
+				,[ChequeDate]        
+				,[PayeeBank]        
+				,[DebitAccID]   
+				,[RentAmount]    
+				,[Discount]         
+				,[Amount]        
+				,[Sno]      
+				,[IsRecurr],Narration ,VatPer,VatAmount         
+				,Detailsxml,InclChkGen,VatType,TaxCategoryID
+				,RecurInvoice,TaxableAmt,Sqft,Rate,LocationID,SPType,DimNodeID,[CreatedBy],[CreatedDate],NetAmount
+				,UnitsXml)   
+		SELECT @QuotationID , X.value('@CCID','INT'),         
+				X.value('@CCNodeID','INT'),          
+				X.value('@CreditAccID','INT'),         
+				X.value('@ChequeNo','NVARCHAR(200)'),        
+				CONVERT(float,X.value('@ChequeDate','Datetime')),        
+				X.value('@PayeeBank','nvarchar(500)'),        
+				X.value('@DebitAccID','INT'),    
+				X.value('@RentAmount','float'),    
+				X.value('@Discount','float'),       
+				X.value('@Amount','float'),        
+				X.value('@SNO','int'),      
+				X.value('@IsRecurr','bit'),  X.value('@Narration','nvarchar(max)'), 
+				X.value('@VatPer','float'),
+				X.value('@VatAmount','float'),    
+				convert(nvarchar(max), X.query('XML'))  ,         
+				 X.value('@InclChkGen','INT')
+				, X.value('@VatType','Nvarchar(50)'),X.value('@TaxCategoryID','INT')
+				, X.value('@Recur','BIT'),X.value('@TaxableAmt','float')
+				, X.value('@Sqft','float'),X.value('@Rate','float'),        
+				X.value('@LocationID','INT'),X.value('@SPType','INT'),X.value('@DimNodeID','INT')
+				,@UserName,@Dt,X.value('@NetAmount','float') 
+				,convert(nvarchar(max), X.query('UnitsXML')) 
+		FROM @XML.nodes('/ContractXML/Rows/Row') as Data(X)      
+		
+		set @UpdateSql=''
+		select @UpdateSql=X.value('@UpdateQuery','Nvarchar(max)')from @XML.nodes('/ContractXML') as data(X)    
+		if(@UpdateSql!='' and @CostCenterID!=95)
+		BEGIN
+			set @UpdateSql='update [REN_QuotationParticulars] set '+@UpdateSql+'QuotationID=QuotationID 
+			from @XML.nodes(''/ContractXML/Rows/Row'') as data(X)     
+			where [QuotationID]='+convert(nvarchar(max),@QuotationID)+' and [SNO]=X.value(''@SNO'',''INT'')'
+			exec sp_executesql @UpdateSql,N'@XML xml',@XML
+		END 
+		   
 	END
   
   
-  	declare @tabPart table(id int identity(1,1),NodeID bigint,PartXML nvarchar(max))
+  	declare @tabPart table(id int identity(1,1),NodeID INT,PartXML nvarchar(max),typ int)
 	insert into @tabPart
-	select NodeID,Detailsxml from [REN_QuotationParticulars] with(nolock)        
+	select NodeID,Detailsxml,1 from [REN_QuotationParticulars] with(nolock)        
 	where [QuotationID] = @QuotationID and Detailsxml is not null
+	
+	insert into @tabPart
+	select NodeID,UnitsXml,2 from [REN_QuotationParticulars] WITH(NOLOCK)       
+	where [QuotationID] = @QuotationID and UnitsXml is not null and UnitsXml<>''	
 	
 	Delete from REN_ContractParticularsDetail where ContractID=@QuotationID and Costcenterid=@CostCenterID
 	
@@ -350,35 +445,63 @@ SET NOCOUNT ON;
 	WHILE(@I < @CNT)      
 	BEGIN      
 		SET @I =@I+1 
-		SELECT @DDXML = PartXML,@ParentID=NodeID   FROM @tabPart WHERE  ID = @I 
+		SELECT @DDXML = PartXML,@ParentID=NodeID,@typ=typ   FROM @tabPart WHERE  ID = @I 
 
 		SET @XML= @DDXML 
 		if(@DDXML like '%UnitsRow%')
-			INSERT INTO  REN_ContractParticularsDetail([ContractID],ParticularNodeID,FromDate,ToDate,Unit,Period,Amount,Rate,CostCenterID,Discount,ActAmount,Distribute)  
-			SELECT @QuotationID,@ParentID,Convert(float,X.value('@FromDate','Datetime')),        
+			INSERT INTO  REN_ContractParticularsDetail([ContractID],ParticularNodeID,Type,FromDate,ToDate,Unit,Period,Amount,Rate,CostCenterID,Discount,ActAmount,Distribute,Narration
+			,Fld1 ,Fld2 ,Fld3 ,Fld4 ,Fld5 ,Fld6 ,Fld7 ,Fld8 ,Fld9 ,Fld10)  
+			SELECT @QuotationID,@ParentID,@typ,Convert(float,X.value('@FromDate','Datetime')),        
 			Convert(float,X.value('@ToDate','Datetime')),        
-			X.value('@Unit','BIGINT'),        
-			X.value('@Period','BIGINT'),        
+			X.value('@Unit','INT'),        
+			X.value('@Period','INT'),        
 			X.value('@Amount','float'),
 			ISNULL(X.value('@Rate','float'),0),
 			@CostCenterID,
 			ISNULL(X.value('@Discount','float'),0),
 			ISNULL(X.value('@ActAmount','float'),0),
-			X.value('@Distribute','INT')
+			X.value('@Distribute','INT'),
+			X.value('@Narration','nvarchar(max)')
+			,X.value('@Fld1','nvarchar(MAX)')
+			,X.value('@Fld2','nvarchar(MAX)') ,X.value('@Fld3','nvarchar(MAX)') ,X.value('@Fld4','nvarchar(MAX)') ,X.value('@Fld5','nvarchar(MAX)') ,X.value('@Fld6','nvarchar(MAX)') ,X.value('@Fld7','nvarchar(MAX)') ,X.value('@Fld8','nvarchar(MAX)') ,X.value('@Fld9','nvarchar(MAX)') ,X.value('@Fld10','nvarchar(MAX)')			
 			FROM @XML.nodes('/XML/UnitsRow/Row') as Data(X) 
-		ELSE
-			INSERT INTO  REN_ContractParticularsDetail([ContractID],ParticularNodeID,FromDate,ToDate,Unit,Period,Amount,Rate,CostCenterID,Discount,ActAmount,Distribute)  
-			SELECT @QuotationID,@ParentID,Convert(float,X.value('@FromDate','Datetime')),        
+		ELSE if(@DDXML like '%UnitsXML%')
+			INSERT INTO  REN_ContractParticularsDetail([ContractID],ParticularNodeID,Type,FromDate,ToDate,Unit,Period,Amount,Rate,CostCenterID,Discount,ActAmount,Distribute,Narration
+			,Fld1 ,Fld2 ,Fld3 ,Fld4 ,Fld5 ,Fld6 ,Fld7 ,Fld8 ,Fld9 ,Fld10)  
+			SELECT @QuotationID,@ParentID,@typ,Convert(float,X.value('@FromDate','Datetime')),        
 			Convert(float,X.value('@ToDate','Datetime')),        
-			X.value('@Unit','BIGINT'),        
-			X.value('@Period','BIGINT'),        
+			X.value('@Unit','INT'),        
+			X.value('@Period','INT'),        
 			X.value('@Amount','float'),
 			ISNULL(X.value('@Rate','float'),0),
 			@CostCenterID,
 			ISNULL(X.value('@Discount','float'),0),
 			ISNULL(X.value('@ActAmount','float'),0),
-			X.value('@Distribute','INT')
-			FROM @XML.nodes('/XML/Row') as Data(X)   
+			X.value('@Distribute','INT'),
+			X.value('@Narration','nvarchar(max)')
+			,X.value('@Fld1','nvarchar(MAX)')
+			,X.value('@Fld2','nvarchar(MAX)') ,X.value('@Fld3','nvarchar(MAX)') ,X.value('@Fld4','nvarchar(MAX)') ,X.value('@Fld5','nvarchar(MAX)') ,X.value('@Fld6','nvarchar(MAX)') ,X.value('@Fld7','nvarchar(MAX)') ,X.value('@Fld8','nvarchar(MAX)') ,X.value('@Fld9','nvarchar(MAX)') ,X.value('@Fld10','nvarchar(MAX)')
+			
+			FROM @XML.nodes('/UnitsXML/Row') as Data(X) 
+		ELSE
+			INSERT INTO  REN_ContractParticularsDetail([ContractID],ParticularNodeID,Type,FromDate,ToDate,Unit,Period,Amount,Rate,CostCenterID,Discount,ActAmount,Distribute,Narration
+			,Fld1 ,Fld2 ,Fld3 ,Fld4 ,Fld5 ,Fld6 ,Fld7 ,Fld8 ,Fld9 ,Fld10)  
+			SELECT @QuotationID,@ParentID,@typ,Convert(float,X.value('@FromDate','Datetime')),        
+			Convert(float,X.value('@ToDate','Datetime')),        
+			X.value('@Unit','INT'),        
+			X.value('@Period','INT'),        
+			X.value('@Amount','float'),
+			ISNULL(X.value('@Rate','float'),0),
+			@CostCenterID,
+			ISNULL(X.value('@Discount','float'),0),
+			ISNULL(X.value('@ActAmount','float'),0),
+			X.value('@Distribute','INT'),
+			X.value('@Narration','nvarchar(max)')
+			,X.value('@Fld1','nvarchar(MAX)')
+			,X.value('@Fld2','nvarchar(MAX)') ,X.value('@Fld3','nvarchar(MAX)') ,X.value('@Fld4','nvarchar(MAX)') ,X.value('@Fld5','nvarchar(MAX)') ,X.value('@Fld6','nvarchar(MAX)') ,X.value('@Fld7','nvarchar(MAX)') ,X.value('@Fld8','nvarchar(MAX)') ,X.value('@Fld9','nvarchar(MAX)') ,X.value('@Fld10','nvarchar(MAX)')
+			
+			FROM @XML.nodes('/XML/Row') as Data(X)  
+			
 	END
 
 	IF(@PayTermsXML IS NOT NULL AND @PayTermsXML<>'')        
@@ -395,26 +518,51 @@ SET NOCOUNT ON;
 		,[DebitAccID]        
 		,[Amount]       
 		,[SNO]       
-		,[Narration],Period)        
+		,[Narration],Period,[CreatedBy],[CreatedDate],Particular,DimNodeID)        
 
 		SELECT @QuotationID  ,        
 		X.value('@ChequeNo','NVARCHAR(200)'),        
 		Convert(float,X.value('@ChequeDate','Datetime')),        
 		X.value('@CustomerBank','nvarchar(500)'),        
-		X.value('@DebitAccID','BIGINT'),        
+		X.value('@DebitAccID','INT'),        
 		X.value('@Amount','float'),        
 		X.value('@SNO','int'),      
-		X.value('@Narration','nvarchar(MAX)'), X.value('@Period','BIGINT')
-		FROM @XML.nodes('/PayTermXML/Rows/Row') as Data(X)          
+		X.value('@Narration','nvarchar(MAX)'), X.value('@Period','INT')
+		,@UserName,@Dt ,X.value('@Particular','INT'),X.value('@DimNodeID','INT')
+		FROM @XML.nodes('/PayTermXML/Rows/Row') as Data(X)  
+		
+		
+		set @UpdateSql=''
+		select @UpdateSql=X.value('@UpdateQuery','Nvarchar(max)')from @XML.nodes('/PayTermXML') as data(X)    
+		if(@UpdateSql!='' and @CostCenterID!=95)
+		BEGIN
+			set @UpdateSql='update [REN_QuotationPayTerms] set '+@UpdateSql+'QuotationID=QuotationID 
+			from @XML.nodes(''/PayTermXML/Rows/Row'') as data(X)     
+			where [QuotationID]='+convert(nvarchar(max),@QuotationID)+' and [SNO]=X.value(''@SNO'',''INT'')'
+			exec sp_executesql @UpdateSql,N'@XML xml',@XML
+		END          
 	END         
  
  
 	set @UpdateSql='update COM_CCCCDATA        
 	SET '+@CustomCostCenterFieldsQuery+'[ModifiedBy] ='''+ @UserName+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +' WHERE NodeID =        
-	'+convert(nvarchar,@QuotationID) + ' AND CostCenterID =' +convert(nvarchar,@CostCenterID)      
+	'+convert(nvarchar,@QuotationID) + ' AND CostCenterID =' 
+	if(@CostCenterID=95)
+		set @UpdateSql=@UpdateSql+'103'
+	ELSE	
+		set @UpdateSql=@UpdateSql+convert(nvarchar,@CostCenterID)      
 
 	exec(@UpdateSql)  
+
+	SET @XML= @ExtraXML          
 	
+	select @UpdateSql='update REN_Quotation SET '+X.value('@StFldsUQ','NVARCHAR(max)')
+	+' WHERE QuotationID ='+convert(nvarchar,@QuotationID)
+	FROM @XML.nodes('/XML') as Data(X)      
+          
+	exec(@UpdateSql) 
+	
+
 	delete from REN_Quotation where RefQuotation=@QuotationID
 	if(@MultiUnitIds is not null and @MultiUnitIds<>'' )
 	BEGIN         
@@ -474,12 +622,39 @@ SET NOCOUNT ON;
 			
 		UPDATE REN_Quotation SET NoOfUnits=(SELECT COUNT(*) FROM @ChildUnits) WHERE QuotationID=@QuotationID
 	END
-			
-	if(@CostCenterID=129)
+	
+	if(@LockDims is not null and @LockDims<>'')
 	BEGIN
-		declare @tblExisting TABLE (ID int identity(1,1),DOCID bigint)           
-		declare @tblExistingCNT bigint,@AccValue nvarchar(100),@DocIDValue bIGINT,@RcptCCID int,@DELETECCID int,@return_value int
-		declare @DocPrefix nvarchar(200)
+		set @UpdateSql=' if exists(select a.QuotationID from REN_Quotation a WITH(NOLOCK)
+		join COM_CCCCData b WITH(NOLOCK) on a.QuotationID=b.NodeID and a.CostCenterID=b.CostCenterID
+		join ADM_DimensionWiseLockData c WITH(NOLOCK) on a.Date between c.fromdate and c.todate and c.isEnable=1 
+		where a.CostCenterID='+convert(nvarchar,@CostCenterID)+' and a.QuotationID='+convert(nvarchar,@QuotationID)+' '+@LockDims
+		+') RAISERROR(''-125'',16,1) '
+		
+		EXEC sp_executesql @UpdateSql
+	END
+	
+	DECLARE @AuditTrial BIT        
+	SET @AuditTrial=0        
+	SELECT @AuditTrial= CONVERT(BIT,VALUE)  FROM [COM_COSTCENTERPreferences] with(nolock)     
+	WHERE CostCenterID=95  AND NAME='AllowAudit'   
+	IF (@AuditTrial=1 and @CostCenterID not in(95,104))      
+	BEGIN 	
+		--INSERT INTO HISTROY   
+		EXEC [spCOM_SaveHistory]  
+			@CostCenterID =@CostCenterID,    
+			@NodeID =@QuotationID,
+			@HistoryStatus =@AUDITSTATUS,
+			@UserName=@UserName,
+			@DT=@DT   
+	END
+			
+	if(@CostCenterID=129 and @StatusID<>430)
+	BEGIN
+		declare @tblExisting TABLE (ID int identity(1,1),DOCID INT)           		
+		declare @DocPrefix nvarchar(200),@ActXml nvarchar(max)         
+	
+		set @ActXml='<XML SysInfo="'+@sysinfo+'" AP="'+@AP+'" ></XML>'   
 		insert into @tblExisting     
 		select DOCID from  [REN_ContractDocMapping]    
 		where contractid=@QuotationID and Doctype =4 AND ContractCCID= 129    
@@ -533,7 +708,9 @@ SET NOCOUNT ON;
 					@CostCenterID = @DELETECCID,      
 					@DocPrefix = '',      
 					@DocNumber = '',  
-					@DOCID = @DocIDValue,      
+					@DOCID = @DocIDValue,
+				    @SysInfo =@SysInfo, 
+				    @AP =@AP,       
 					@UserID = 1,      
 					@UserName = N'ADMIN',      
 					@LangID = 1,
@@ -545,7 +722,7 @@ SET NOCOUNT ON;
 				end 
 				
 				set @DocPrefix=''
-				EXEC [sp_GetDocPrefix] '',@Date,@RcptCCID,@DocPrefix output,@QuotationID,0,0,129
+				EXEC [sp_GetDocPrefix] @AA,@Date,@RcptCCID,@DocPrefix output
 
 				EXEC @return_value = [dbo].[spDOC_SetTempAccDocument]      
 				   @CostCenterID = @RcptCCID,      
@@ -558,7 +735,7 @@ SET NOCOUNT ON;
 				   @InvDocXML = @AA,      
 				   @NotesXML = N'',      
 				   @AttachmentsXML = N'',      
-				   @ActivityXML  = N'',     
+				   @ActivityXML  = @ActXml,     
 				   @IsImport = 0,      
 				   @LocationID = @ContractLocationID,      
 				   @DivisionID = @ContractDivisionID,      
@@ -581,6 +758,26 @@ SET NOCOUNT ON;
 					update [REN_ContractDocMapping] set Sno=@i
 					where ContractCCID=129 and ContractID=@QuotationID and DocID=@DocIDValue
 				END
+				
+				if exists(select * from @ChildUnits)
+				BEGIN
+					select @Depth = Value from COM_CostCenterPreferences with(nolock)
+					where CostCenterID= 93  and  Name = 'LinkDocument'
+					
+					Exec @maxLevel=[dbo].[spREN_GetDimensionNodeID]
+							 @NodeID  =@UnitID,      
+							 @CostcenterID = 93,   
+							 @UserID =@UserID,      
+							 @LangID =@LangID 
+					
+					set @UpdateSql=' UPDATE a    
+					SET DCCCNID'+convert(nvarchar,(@Depth-50000))+'='+CONVERT(NVARCHAR,@maxLevel)+' 
+					from COM_DOCCCDATA a with(nolock) 
+					join ACC_DOCDETAILS b with(nolock) on a.AccDocDetailsID=b.AccDocDetailsID
+					where  b.DocID='+convert(nvarchar,@return_value)
+					exec(@UpdateSql)	 
+							 
+				END
 			end
 		END
 		
@@ -598,7 +795,9 @@ SET NOCOUNT ON;
 				@CostCenterID = @DELETECCID,      
 				@DocPrefix = '',      
 				@DocNumber = '',  
-				@DOCID = @DocIDValue,      
+				@DOCID = @DocIDValue, 
+				@SysInfo =@SysInfo, 
+				@AP =@AP,      
 				@UserID = 1,      
 				@UserName = N'ADMIN',      
 				@LangID = 1,
@@ -611,7 +810,7 @@ SET NOCOUNT ON;
 		if(@WID>0)
 		BEGIN	   
 			INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,[Date],Remarks,UserID,CompanyGUID,[GUID],CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)      
-			VALUES(@COSTCENTERID,@QuotationID,@StatusID,CONVERT(FLOAT,getdate()),'',@UserID,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
+			VALUES(@COSTCENTERID,@QuotationID,@StatusID,@DT,'',@UserID,@CompanyGUID,newid(),@UserName,@DT,isnull(@level,0),0)
 	 
 			if(@StatusID not in(467,468))
 			BEGIN
@@ -639,7 +838,11 @@ SET NOCOUNT ON;
 			END	
 		END	 
 	END
-	
+	ELSE if(@WID>0)
+	BEGIN	   
+			INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,[Date],Remarks,UserID,CompanyGUID,[GUID],CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)      
+			VALUES(@COSTCENTERID,@QuotationID,@StatusID,@DT,'',@UserID,@CompanyGUID,newid(),@UserName,@DT,isnull(@level,0),0)
+	END 
 	--Inserts Multiple Notes      
 	IF (@NotesXML IS NOT NULL AND @NotesXML <> '')      
 	BEGIN      
@@ -661,55 +864,22 @@ SET NOCOUNT ON;
 		ModifiedDate=@Dt      
 		FROM COM_Notes C WITH(nolock)      
 		INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X)        
-		ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID      
+		ON convert(INT,X.value('@NoteID','INT'))=C.NoteID      
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'      
 
 		--If Action is DELETE then delete Notes      
 		DELETE FROM COM_Notes      
-		WHERE NoteID IN(SELECT X.value('@NoteID','bigint')      
+		WHERE NoteID IN(SELECT X.value('@NoteID','INT')      
 		FROM @XML.nodes('/NotesXML/Row') as Data(X)      
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')      
 
 	END      
       
+     
 	--Inserts Multiple Attachments      
 	IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')      
-	BEGIN      
-		SET @XML=@AttachmentsXML      
+			exec [spCOM_SetAttachments] @QuotationID,@CostCenterID,@AttachmentsXML,@UserName,@Dt     
 
-		INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,    
-		FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,      
-		GUID,CreatedBy,CreatedDate)      
-		SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(50)'),      
-		X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),@CostCenterID,@CostCenterID,@QuotationID,      
-		X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt      
-		FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)        
-		WHERE X.value('@Action','NVARCHAR(10)')='NEW'      
-
-		--If Action is MODIFY then update Attachments      
-		UPDATE COM_Files      
-		SET FilePath=X.value('@FilePath','NVARCHAR(500)'),      
-		ActualFileName=X.value('@ActualFileName','NVARCHAR(50)'),      
-		RelativeFileName=X.value('@RelativeFileName','NVARCHAR(50)'),      
-		FileExtension=X.value('@FileExtension','NVARCHAR(50)'),      
-		FileDescription=X.value('@FileDescription','NVARCHAR(500)'),      
-		IsProductImage=X.value('@IsProductImage','bit'),            
-		GUID=X.value('@GUID','NVARCHAR(50)'),      
-		ModifiedBy=@UserName,      
-		ModifiedDate=@Dt      
-		FROM COM_Files C WITH(nolock)       
-		INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)        
-		ON convert(bigint,X.value('@AttachmentID','bigint'))=C.FileID      
-		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'      
-
-		--If Action is DELETE then delete Attachments      
-		DELETE FROM COM_Files      
-		WHERE FileID IN(SELECT X.value('@AttachmentID','bigint')      
-		FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)      
-		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')      
-	END      
-      
-      
              
 	if(@CustomFieldsQuery<>'')
 	BEGIN
@@ -721,6 +891,24 @@ SET NOCOUNT ON;
 		exec(@UpdateSql)      
 	END     
         
+    --Insert Notifications    
+	DECLARE @ActionType INT    
+	IF @AUDITSTATUS='ADD'    
+		SET @ActionType=1    
+	ELSE    
+		SET @ActionType=3     
+    
+      --validate Data External function
+	DECLARE @tempCCCode NVARCHAR(200)
+	set @tempCCCode=''
+	select @tempCCCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=9
+	if(@tempCCCode<>'')
+	begin
+		exec @tempCCCode @CostCenterID,@QuotationID,@UserID,@LangID
+	end   
+      
+	EXEC spCOM_SetNotifEvent @ActionType,103,@QuotationID,@CompanyGUID,@UserName,@UserID,@RoleID  
+	
 COMMIT TRANSACTION
 --rollback TRANSACTION
          

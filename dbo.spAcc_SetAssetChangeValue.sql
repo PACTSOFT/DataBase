@@ -3,19 +3,19 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spAcc_SetAssetChangeValue]
-	@AssetID [bigint],
+	@AssetID [int],
 	@Type [int],
-	@ChangeValue [bigint],
-	@AssetNetValue [bigint],
+	@ChangeValue [int],
+	@AssetNetValue [int],
 	@ChangeDate [datetime],
 	@Remarks [nvarchar](200) = null,
 	@AssetDepreciationXML [nvarchar](max) = null,
 	@ChangeValueXML [nvarchar](max) = null,
 	@HistoryXML [nvarchar](max) = null,
-	@LocationID [bigint] = null,
+	@LocationID [int] = null,
 	@IsIncreaseAssetValue [bit],
 	@PostingXML [nvarchar](max) = null,
-	@ChangeValueTypeID [bigint],
+	@ChangeValueTypeID [int],
 	@CompanyGUID [varchar](50),
 	@GUID [varchar](50),
 	@CreatedBy [nvarchar](50),
@@ -27,9 +27,8 @@ BEGIN TRANSACTION
 BEGIN TRY          
 SET NOCOUNT ON;        
         
-    DECLARE @Dt FLOAT,@DTTime float, @lft bigint,@rgt bigint,@TempGuid nvarchar(50),@Selectedlft bigint,@Selectedrgt bigint,@HasAccess bit
-		,@DeprStartValue float,@DocXml nvarchar(max) ,  @return_value INT,  @PrefValue NVARCHAR(500),@Dimesion bigint, @SelectedNodeID int , @XML XML,
-		@DtXML xml,@DepXML XML,@Prefix nvarchar(200) 
+    DECLARE @Dt FLOAT,@DTTime float,@DeprStartValue float,@DocXml nvarchar(max) ,  @return_value INT,  
+    @PrefValue NVARCHAR(500), @XML XML,@DepXML XML,@Prefix nvarchar(200) 
           
 	Set @DTTime=convert(float,getdate())
 	Set @DT=floor(@DTTime)
@@ -68,7 +67,7 @@ SET NOCOUNT ON;
 				X.value('@AccDep','FLOAT') ,   X.value('@NetValue','FLOAT') ,@DeprStartValue ,NULL,NULL,NULL,ISNULL(X.value('@StatusID','INT'), 0),           
 				@CreatedBy,@DTTime,X.value('@ActDepAmt','FLOAT')
 			FROM @DepXML.nodes('/XML/Row') as Data(X)
-			where x.value('@ScheduleID','bigint') is null 
+			where x.value('@ScheduleID','INT') is null 
 
 			--select * from ACC_AssetDepSchedule where assetid=@AssetID
 		end
@@ -80,8 +79,8 @@ SET NOCOUNT ON;
 				 set DepAmount=X.value('@DepAmt','FLOAT'),
 					 AccDepreciation=X.value('@AccDep','FLOAT'),
 					 AssetNetValue=X.value('@NetValue','FLOAT')
-				from ACC_AssetDepSchedule A inner join @DepXML.nodes('/XML/Row') as data(x) on A.DPScheduleID=x.value('@ScheduleID','bigint')  
-				where x.value('@ScheduleID','bigint') is not null    
+				from ACC_AssetDepSchedule A inner join @DepXML.nodes('/XML/Row') as data(x) on A.DPScheduleID=x.value('@ScheduleID','INT')  
+				where x.value('@ScheduleID','INT') is not null    
 			END
 			ELSE
 			BEGIN
@@ -115,8 +114,8 @@ SET NOCOUNT ON;
 		AssetOldValue,ChangeValue,AssetNewValue,          
 		LocationID,GUID,CreatedBy,CreatedDate)          
 		SELECT @AssetID,X.value('@ChangeType','int'),X.value('@ChangeName','NVARCHAR(50)'),          
-		X.value('@StatusID','bigint'),convert(float,X.value('@ChangeDate','datetime')),X.value('@AssetOldValue','float'),          
-		X.value('@ChangeValue','nvarchar(50)'),X.value('@AssetNewValue','float'),X.value('@LocationID','bigint'),          
+		X.value('@StatusID','INT'),convert(float,X.value('@ChangeDate','datetime')),X.value('@AssetOldValue','float'),          
+		X.value('@ChangeValue','nvarchar(50)'),X.value('@AssetNewValue','float'),X.value('@LocationID','INT'),          
 		newid(),@CreatedBy,@DTTime          
 		FROM @XML.nodes('/ChangeValueXML/Row') as Data(X) 
 
@@ -138,7 +137,7 @@ SET NOCOUNT ON;
 			update Acc_Assets set AssetNetValue=@AssetNetValue+@ChangeValue where AssetId=@AssetID
 		end
 		
-		select * FROM ACC_AssetChanges WHERE AssetID=@AssetID
+		select * FROM ACC_AssetChanges with(nolock) WHERE AssetID=@AssetID
     END    
           
 	/*IF (@HistoryXML IS NOT NULL AND @HistoryXML <> '')          
@@ -150,23 +149,23 @@ SET NOCOUNT ON;
 
 		 --If Action is NEW then insert new Changes        
 		 INSERT INTO ACC_AssetsHistory(HistoryTypeID,AssetManagementID,[Date],Vender,VendorID,NextServiceDate,Remarks,Amount,DebitAccount,CreditAccount,PostJV,GUID,CreatedBy,CreatedDate)          
-		 SELECT X.value('@HistoryType','bigint'),@AssetID,convert(float,X.value('@Date','datetime')) ,X.value('@Vendor','NVARCHAR(50)'),X.value('@VendorID','bigint'),       
+		 SELECT X.value('@HistoryType','INT'),@AssetID,convert(float,X.value('@Date','datetime')) ,X.value('@Vendor','NVARCHAR(50)'),X.value('@VendorID','INT'),       
 		 convert(float,X.value('@NextStartDate','datetime')),X.value('@Remarks','NVARCHAR(500)') ,X.value('@Amount','Float'),          
-		 X.value('@DebitAccount','bigint'),X.value('@CreditAccount','bigint'),X.value('@PostJV','bigint'),          
+		 X.value('@DebitAccount','INT'),X.value('@CreditAccount','INT'),X.value('@PostJV','INT'),          
 		 newid(),@CreatedBy,@DTTime          
 		 FROM @XML.nodes('/XML/MaintenanceGrid/Rows') as Data(X)         
 	            
 		 INSERT INTO ACC_AssetsHistory(HistoryTypeID,AssetManagementID,Vender,VendorID,PolicyType,PolicyNumber,StartDate,EndDate,Coverage,GUID,CreatedBy,CreatedDate)          
-		 SELECT X.value('@HistoryType','bigint'),@AssetID,X.value('@Vendor','NVARCHAR(50)'),X.value('@VendorID','bigint'),       
-		 X.value('@PolicyType','bigint'),X.value('@PolicyNumber','NVARCHAR(50)'),convert(float,X.value('@StartDate','datetime')),  
+		 SELECT X.value('@HistoryType','INT'),@AssetID,X.value('@Vendor','NVARCHAR(50)'),X.value('@VendorID','INT'),       
+		 X.value('@PolicyType','INT'),X.value('@PolicyNumber','NVARCHAR(50)'),convert(float,X.value('@StartDate','datetime')),  
 		 convert(float,X.value('@EndDate','datetime')),X.value('@Coverage','NVARCHAR(50)'),          
 		 newid(),@CreatedBy,@DTTime          
 		 FROM @XML.nodes('/XML/InsuranceGrid/Rows') as Data(X)     
 	       
 		 INSERT INTO ACC_AssetsHistory(HistoryTypeID,AssetManagementID,[Date],Amount,CurrentValue,Remarks,DebitAccount,CreditAccount,GainAccount,LossAccount,GUID,CreatedBy,CreatedDate)          
-		 SELECT X.value('@HistoryType','bigint'),@AssetID,convert(float,X.value('@Date','datetime')),X.value('@Amount','Float'),X.value('@CurrentValue','Float'),     
-		 X.value('@Remarks','NVARCHAR(500)'), X.value('@DebitAccount','bigint'),X.value('@CreditAccount','bigint'),  
-		 X.value('@GainAccount','bigint'),X.value('@LossAccount','bigint'),newid(),@CreatedBy,@DTTime          
+		 SELECT X.value('@HistoryType','INT'),@AssetID,convert(float,X.value('@Date','datetime')),X.value('@Amount','Float'),X.value('@CurrentValue','Float'),     
+		 X.value('@Remarks','NVARCHAR(500)'), X.value('@DebitAccount','INT'),X.value('@CreditAccount','INT'),  
+		 X.value('@GainAccount','INT'),X.value('@LossAccount','INT'),newid(),@CreatedBy,@DTTime          
 		 FROM @XML.nodes('/XML/DisposeGrid/Rows') as Data(X)     
     END*/
     
@@ -197,7 +196,7 @@ SET NOCOUNT ON;
 			@DocID = 0,
 			@DocPrefix = @Prefix,
 			@DocNumber = N'',
-			@DocDate = @DT,
+			@DocDate = @DT_INT,
 			@DueDate =NULL,
 			@BillNo = NULL,
 			@InvDocXML = @DocXml,
@@ -238,5 +237,5 @@ BEGIN CATCH
  ROLLBACK TRANSACTION        
  SET NOCOUNT OFF          
  RETURN -999           
-END CATCH 
+END CATCH
 GO

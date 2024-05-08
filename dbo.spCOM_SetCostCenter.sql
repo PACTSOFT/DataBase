@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetCostCenter]
-	@NodeID [bigint],
-	@SelectedNodeID [bigint],
+	@NodeID [int],
+	@SelectedNodeID [int],
 	@IsGroup [bit],
 	@Code [nvarchar](max) = NULL,
 	@Name [nvarchar](max),
@@ -30,16 +30,17 @@ CREATE PROCEDURE [dbo].[spCOM_SetCostCenter]
 	@UserName [nvarchar](50),
 	@WID [int] = 0,
 	@RoleID [int] = 0,
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1,
 	@CodePrefix [nvarchar](200) = null,
-	@CodeNumber [bigint] = 0,
+	@CodeNumber [int] = 0,
 	@GroupSeqNoLength [int] = 0,
 	@JobsProductXML [nvarchar](max) = NULL,
 	@DimMappingXML [nvarchar](max) = null,
 	@HistoryXML [nvarchar](max) = null,
 	@StatusXML [nvarchar](max) = null,
 	@DocXML [nvarchar](max) = null,
+	@CalendarXML [nvarchar](max) = null,
 	@IsOffline [bit] = 0,
 	@CheckLink [bit] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -52,8 +53,9 @@ SET NOCOUNT ON;
   @SQL NVARCHAR(max),@XML XML,@IsDuplicateNameAllowed bit,@IsDuplicateCodeAllowed BIT,@HistoryStatus NVARCHAR(50)
   DECLARE @tempCode NVARCHAR(200),@DUPLICATECODE NVARCHAR(max),@DUPNODENO INT,@IsIgnoreSpace bit 
   declare @isparentcode bit, @CSQL nvarchar(max), @CSQL1 nvarchar(max)
-  declare @cnt int,@CODENo int, @HasRecord bigint ,@return_value int
-
+  declare @cnt int,@CODENo int, @HasRecord INT ,@return_value int
+  DECLARE @PrefValue NVARCHAR(500),@Dimesion INT,@RefSelectedNodeID INT,@CCStatID INT,@LinkDim_NodeID int
+    Declare @level int,@maxLevel int
 	set @Name=RTRIM(LTRIM(@Name))
 
 	IF @NodeID=0  
@@ -109,7 +111,7 @@ SET NOCOUNT ON;
   SELECT @IsDuplicateNameAllowed=convert(bit,Value) FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE Name='DuplicateNameAllowed' AND CostCenterID=@CostCenterId  
   SELECT @IsIgnoreSpace=convert(bit,Value) FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE Name='IgnoreSpaces' AND CostCenterID=@CostCenterId  
   select @isparentcode=IsParentCodeInherited from COM_CostCenterCodeDef WITH(NOLOCK) where CostCenterID=@CostCenterID
-	
+  select @PrefValue = Value from COM_CostCenterPreferences WITH(nolock) where CostCenterID=@CostCenterID and  Name = 'LinkDimension'  
   --To get costcenter table name  
   SELECT Top 1 @Table=SysTableName FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@CostCenterId  
    --GENERATE CODE  
@@ -213,6 +215,44 @@ SET NOCOUNT ON;
   END  
   SET @Dt=CONVERT(FLOAT,GETDATE())--Setting Current Date    
  
+ --IF(@CostCenterID>50000 AND @CostCenterID<=50008)
+  IF(@CostCenterID>50000)
+	BEGIN
+		 Declare @CStatusID int 
+		 set @SQL='select @CStatusID=StatusID from '+@Table+' with(nolock) where NodeID='+convert(nvarchar,@NodeID)
+		 EXEC sp_executesql @SQL, N'@CStatusID int OUTPUT',@CStatusID OUTPUT	
+		 if(@WID>0 and @NodeID>0)	 
+					  begin
+						set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+						where WorkFlowID=@WID and  UserID =@UserID)
+
+						if(@level is null )
+							set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
+							where WorkFlowID=@WID and  RoleID =@RoleID)
+
+						if(@level is null ) 
+							set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+							where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
+
+						if(@level is null )
+							set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
+							where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
+							where RoleID =@RoleID))
+
+						select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
+						select @level,@maxLevel
+						if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
+						begin 
+		 					set @StatusID=1001 
+						end	
+						else if(@level is not null and  @maxLevel is not null and @level<@maxLevel and @CStatusID in (1003))--rejected status time
+						begin	
+		 					set @StatusID=1001 
+						end	
+		 
+		 
+					end
+	END
   IF @NodeID=0 --------START INSERT RECORD-----------  
   BEGIN--CREATE COST CENTER--   
     
@@ -234,7 +274,7 @@ SET NOCOUNT ON;
    IF @Code IS NULL OR @Code=''
    BEGIN
 --		SET @Code=convert(nvarchar,IDENT_CURRENT('dbo.'+@Table)+1)
-		declare @I bigint
+		declare @I INT
 		set @I=IDENT_CURRENT('dbo.'+@Table)+1
 		SET @Code=convert(nvarchar,@I)
 		--DUPLICATE CODE CHECK  
@@ -260,7 +300,7 @@ SET NOCOUNT ON;
 	set @SelectedNodeID=1
 
    --To Set Left,Right And Depth of Record    
-   SET @SQL='DECLARE @SelectedNodeID BIGINT,@IsGroup BIT,@lft BIGINT,@rgt BIGINT,@Selectedlft BIGINT,@Selectedrgt BIGINT,@Depth INT,@ParentID BIGINT, @SelectedIsGroup BIT'    
+   SET @SQL='DECLARE @SelectedNodeID INT,@IsGroup BIT,@lft INT,@rgt INT,@Selectedlft INT,@Selectedrgt INT,@Depth INT,@ParentID INT, @SelectedIsGroup BIT'    
    SET @SQL=@SQL+' SELECT @IsGroup='+convert(NVARCHAR,@IsGroup)+', @SelectedNodeID='+convert(NVARCHAR,@SelectedNodeID)    
    SET @SQL=@SQL+' SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=ParentID,@Depth=Depth    
    from '+@Table+' with(NOLOCK) where NodeID=@SelectedNodeID AND NodeID<>0'    
@@ -300,24 +340,97 @@ SET NOCOUNT ON;
    
    if(@CodePrefix is null or @CodePrefix = '')
     set @CodePrefix=''
-   
+    --Start Map Dimension		
+	IF(@NodeID=0  AND @PrefValue is not null and @PrefValue<>'')  
+	BEGIN  
+			set @Dimesion=0  
+			BEGIN try  
+				select @Dimesion=convert(INT,@PrefValue)  
+			end try  
+			BEGIN catch  
+				set @Dimesion=0   
+			end catch  
+			if(@Dimesion>0)  
+			BEGIN 
+				SELECT @RefSelectedNodeID=RefDimensionNodeID FROM COM_DocBridge WITH(NOLOCK)
+				WHERE CostCenterID=@CostCenterID AND RefDimensionID=@Dimesion AND NodeID=@SelectedNodeID 
+				SET @RefSelectedNodeID=ISNULL(@RefSelectedNodeID,@SelectedNodeID)
+				
+				select @CCStatID = statusid from com_status WITH(NOLOCK) where costcenterid=@Dimesion and status = 'Active'
+				EXEC @LinkDim_NodeID = [dbo].[spCOM_SetCostCenter]
+				@NodeID = 0,@SelectedNodeID = @RefSelectedNodeID,@IsGroup = @IsGroup,
+				@Code = @CODE,
+				@Name = @NAME,
+				@AliasName=@NAME,
+				@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatID,
+				@CustomFieldsQuery=NULL,@AddressXML=NULL,@AttachmentsXML=NULL,
+				@CustomCostCenterFieldsQuery=@CustomCostCenterFieldsQuery,@ContactsXML=NULL,@NotesXML=NULL,
+				@CostCenterID = @Dimesion,@CompanyGUID=@COMPANYGUID,@GUID='',
+				@UserName=@UserName,@RoleID=1,@UserID=1,@CheckLink = 0
+
+			END  
+	END
+	--End Map Dimension
    --if @IsOffline=0
    --begin
-		-- Insert statements for procedure here    
+		-- Insert statements for procedure here  
+		
+	if(@WID>0)
+		begin
+			set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+			where WorkFlowID=@WID and  UserID =@UserID)
+
+			if(@level is null )
+				set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
+				where WorkFlowID=@WID and  RoleID =@RoleID)
+
+			if(@level is null ) 
+				set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+				where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
+
+			if(@level is null )
+				set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
+				where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
+				where RoleID =@RoleID))
+
+			select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
+			
+			if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
+			begin			
+				set @StatusID=1001
+			END
+		END
+
+
 		SET @SQL=@SQL+' INSERT INTO '+@Table+
 		'  (StatusID,[Code],[Name],AliasName,  
       [Depth],[ParentID],[lft],[rgt],    
       [IsGroup],CreditDays,CreditLimit,DebitDays, DebitLimit, PurchaseAccount,SalesAccount,  
-      [CompanyGUID],[GUID],[CreatedBy],[CreatedDate],[CodePrefix],[CodeNumber],GroupSeqNoLength
-      )    
+      [CompanyGUID],[GUID],[CreatedBy],[CreatedDate],[CodePrefix],[CodeNumber],GroupSeqNoLength'
+       
+	  IF(@CostCenterID>50000)
+	  BEGIN
+		SET @SQL=@SQL+' ,WorkFlowID,WorkFlowLevel'		
+	  END
+      
+      SET @SQL=@SQL+' )    
      VALUES('+convert(NVARCHAR,@StatusID)+',N'''+@Code+''',@Name,N'''+replace(@AliasName,'''','''''')+''',  
       @Depth,@ParentID,@lft,@rgt,     
       @IsGroup,'+CONVERT(VARCHAR,@CreditDays)+','+CONVERT(VARCHAR,@CreditLimit)+','+CONVERT(VARCHAR,@DebitDays)+','+CONVERT(VARCHAR,@DebitLimit)+','+CONVERT(VARCHAR,@PurchaseAccount)+','+CONVERT(VARCHAR,@SalesAccount)+',  
-      '''+@CompanyGUID+''',newid(),'''+@UserName+''',convert(float,getdate()),'''+@CodePrefix+''','+CONVERT(VARCHAR,@CodeNumber)+', '+CONVERT(VARCHAR,@GroupSeqNoLength)+')    
+      '''+@CompanyGUID+''',newid(),'''+@UserName+''',convert(float,getdate()),'''+@CodePrefix+''','+CONVERT(VARCHAR,@CodeNumber)+', '+CONVERT(VARCHAR,@GroupSeqNoLength)+''
+      
+     -- IF(@CostCenterID>50000 AND @CostCenterID<=50008)
+	   IF(@CostCenterID>50000)
+	  BEGIN
+		SET @SQL=@SQL+' , '+CONVERT(VARCHAR,@WID)+', '+ISNULL(CONVERT(VARCHAR,@level),0)+''		
+	  END
+	  
+      SET @SQL=@SQL+')    
      SET @NodeID=SCOPE_IDENTITY()'--To get inserted record primary key  
 
+	 PRINT @SQL
 		EXEC sp_executesql @SQL, N'@NodeID INT OUTPUT,@Name nvarchar(max),@AliasName nvarchar(max)', @NodeID OUTPUT,@Name,@AliasName
-
+		
    /*end
    else
    begin
@@ -390,7 +503,7 @@ SET NOCOUNT ON;
 			set @ccnumber=@ProductName-50000
 				set @CustomCostCenterFieldsQuery=@CustomCostCenterFieldsQuery+'CCNID'+convert(nvarchar,@ccnumber)+'='''+convert(nvarchar,@NodeID)+''' ,' 
 				--				print @CustomCostCenterFieldsQuery
-			declare @ProductID bigint
+			declare @ProductID INT
 			EXEC	@ProductID = [dbo].[spINV_SetProduct]
 			@ProductID = 0,
 			@ProductCode = @Name,
@@ -405,7 +518,6 @@ SET NOCOUNT ON;
 			@IsGroup = 0,
 			@CustomFieldsQuery ='',
 			@CustomCostCenterFieldsQuery = @CustomCostCenterFieldsQuery,
-			@ProductVehicleXML = '',
 			@ContactsXML = N'',
 			@NotesXML = N'',
 			@AttachmentsXML = N'',
@@ -454,8 +566,19 @@ SET NOCOUNT ON;
 		END
 		
 	END 
-
-
+    --Start Link Dimension Mapping
+	IF(@PrefValue is not null and @PrefValue<>'')  
+	BEGIN
+		INSERT INTO COM_DocBridge (CostCenterID, NodeID,InvDocID, AccDocID, RefDimensionID  , RefDimensionNodeID ,  
+									CompanyGUID, guid, Createdby, CreatedDate,Abbreviation)
+		values(@CostCenterID, @NodeID,0,0,@Dimesion,@LinkDim_NodeID,'',newid(),@UserName, @dt,@Table) 
+	END
+	if(@WID>0)
+	BEGIN	 
+		INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)     
+		VALUES(@CostCenterID,@NodeID,@StatusID,CONVERT(FLOAT,getdate()),'',@UserID,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
+	end
+	--End Link Dimension Mapping
   END--------END INSERT RECORD-----------  
   ELSE--------START UPDATE RECORD-----------  
   BEGIN     
@@ -492,49 +615,65 @@ SET NOCOUNT ON;
    AliasName=N'''+replace(@AliasName,'''','''''')+''',StatusId='+convert(NVARCHAR,@StatusID)+',GUID=newid(),ModifiedBy='''+@UserName+''',  CodePrefix='''+@CodePrefix+''', 
    CodeNumber='+CONVERT(NVARCHAR,@CodeNumber)+',
    GroupSeqNoLength='+CONVERT(NVARCHAR,@GroupSeqNoLength)+',
-   ModifiedDate=@ModDate WHERE NodeID='+convert(NVARCHAR,@NodeID)+''  
- 
-	EXEC sp_executesql @ExtendedColsXML,N'@ModDate float,@Name nvarchar(max)',@Dt,@Name
+   ModifiedDate=@ModDate '
+   
+   IF(@CostCenterID>50000)    
+   BEGIN
+		SET @ExtendedColsXML=@ExtendedColsXML+' ,WorkFlowLevel='+ ISNULL(CONVERT(VARCHAR,@level),0)+''		
+   END
+   
+   SET @ExtendedColsXML=@ExtendedColsXML+' WHERE NodeID='+convert(NVARCHAR,@NodeID)+''  
+   print @ExtendedColsXML
+   EXEC sp_executesql @ExtendedColsXML,N'@ModDate float,@Name nvarchar(max)',@Dt,@Name
+	
+	
     
    	select @ProductName =convert(int, isnull(value,0)) from com_costcenterpreferences where costcenterid=3 and name ='ProductName'
 	if(@ProductName >50000)  
 	BEGIN
 		if(@ProductName=@CostCenterId)
 		begin
-	  		set @ccnumber=@ProductName-50000
+			set @ccnumber=@ProductName-50000
 			declare @ProductSQL nvarchar(max)
 			set @ProductSQL='update inv_product set productname='''+@Name +'''
 			where productid in (select NodeID from COM_CCCCData WITH(NOLOCK) where CostCenterID=3 
 			and ccnid'+CONVERT(nvarchar,@ccnumber)+'='+Convert(nvarchar,@NodeID)+')' 
-			EXEC (@ProductSQL)
+			EXEC sp_executesql @ProductSQL
+
 			declare @tempCC nvarchar(max)
 			set @tempCC=@CustomCostCenterFieldsQuery+'CCNID'+convert(nvarchar,@ccnumber)+'='''+convert(nvarchar,@NodeID)+''' ,' 
-		
+
 			set @ProductSQL=''
-			 set @ProductSQL='update COM_CCCCData  
-			 SET '+@tempCC+' [ModifiedBy] ='''+ @UserName+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +'
-			  WHERE CostCenterID=3 and CCNID'+convert(nvarchar,@ccnumber)+'='+convert(NVARCHAR,@NodeID)  +''  
-			exec(@ProductSQL)  
-			 set @ProductSQL=''
-			
+			set @ProductSQL='update COM_CCCCData  
+			SET '+@tempCC+' [ModifiedBy] ='''+ @UserName+''',[ModifiedDate] =' + convert(nvarchar,@Dt) +'
+			WHERE CostCenterID=3 and CCNID'+convert(nvarchar,@ccnumber)+'='+convert(NVARCHAR,@NodeID)  +''  
+			EXEC sp_executesql @ProductSQL  
+
+			set @ProductSQL=''
 			set @ProductSQL='Update inv_product set Categoryid= (SELECT CCNID6 
-			 from com_ccccdata WITH(NOLOCK) where 
-			 costcenterid=3 and Nodeid in  (select TOP 1 NodeID from COM_CCCCData WITH(NOLOCK)
-			 where CostCenterID=3 and ccnid'+CONVERT(nvarchar,@ccnumber)+'='+Convert(nvarchar,@NodeID)+')) WHERE 
+			from com_ccccdata WITH(NOLOCK) where 
+			costcenterid=3 and Nodeid in  (select TOP 1 NodeID from COM_CCCCData WITH(NOLOCK)
+			where CostCenterID=3 and ccnid'+CONVERT(nvarchar,@ccnumber)+'='+Convert(nvarchar,@NodeID)+')) WHERE 
 			PRODUCTID IN  (select NodeID from COM_CCCCData WITH(NOLOCK)
-			 where CostCenterID=3 and ccnid'+CONVERT(nvarchar,@ccnumber)+'='+Convert(nvarchar,@NodeID)+')'	
-			PRINT (@ProductSQL)
-			 exec(@ProductSQL)    
-			CREATE TABLE #TEMP(PID BIGINT)
-			INSERT INTO #TEMP 
-			SELECT NODEID FROM COM_CCCCData WITH(NOLOCK) WHERE COSTCENTERID=3 AND CCNID29=@NodeID 
+			where CostCenterID=3 and ccnid'+CONVERT(nvarchar,@ccnumber)+'='+Convert(nvarchar,@NodeID)+')'	
+			EXEC sp_executesql @ProductSQL
+			     
+			CREATE TABLE #TEMP(PID INT)
+			set @ProductSQL=''
+			set @ProductSQL='INSERT INTO #TEMP 
+			SELECT NODEID FROM COM_CCCCData WITH(NOLOCK) WHERE COSTCENTERID=3 AND CCNID'+convert(nvarchar,@ccnumber)+'='+convert(NVARCHAR,@NodeID)
+			EXEC sp_executesql @ProductSQL
+			
 			if (@AttachmentsXML is not null and @AttachmentsXML<>'')
 			BEGIN
 				 SET @XML=@AttachmentsXML   
 				 IF EXISTS (SELECT X.value('@IsProductImage','bit') FROM @XML.nodes('/AttachmentsXML/Row') as Data(X) WHERE X.value('@IsProductImage','bit')=1)
 				 BEGIN   
-						DELETE FROM COM_FILES WHERE COSTCENTERID=3 AND 
-						FEATUREPK IN (SELECT NODEID FROM COM_CCCCData WITH(NOLOCK) WHERE COSTCENTERID=3 AND CCNID29=@NodeID) and IsProductImage=1
+						set @ProductSQL=''
+						set @ProductSQL='DELETE FROM COM_FILES WHERE COSTCENTERID=3 AND 
+						FEATUREPK IN (SELECT NODEID FROM COM_CCCCData WITH(NOLOCK) WHERE COSTCENTERID=3 AND CCNID'+convert(nvarchar,@ccnumber)+'='+convert(NVARCHAR,@NodeID)+') and IsProductImage=1'
+						EXEC sp_executesql @ProductSQL
+						
 						INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,  
 						   FileExtension,FileDescription,IsProductImage,FeatureID,CostCenterID,FeaturePK,  
 						   GUID,CreatedBy,CreatedDate,IsDefaultImage)  
@@ -559,8 +698,8 @@ SET NOCOUNT ON;
   END --------END UPDATE RECORD-----------  
     
    --Dimension History Data
-  IF (@HistoryXML IS NOT NULL AND @HistoryXML <> '')    
-	EXEC spCOM_SetHistory @CostCenterID,@NodeID,@HistoryXML,@UserName 
+ -- IF (@HistoryXML IS NOT NULL AND @HistoryXML <> '')    
+	--EXEC spCOM_SetHistory @CostCenterID,@NodeID,@HistoryXML,@UserName 
   
    -- , BEFORE MODIFIEDBY  REQUIRES A NULL CHECK OF @PrimaryContactQuery 
   IF(@PrimaryContactQuery IS NOT NULL AND @PrimaryContactQuery<>'')
@@ -580,7 +719,7 @@ SET NOCOUNT ON;
   END  
   
   --CHECK WORKFLOW
-  EXEC spCOM_CheckCostCentetWF @CostCenterID,@NodeID,@WID,@RoleID,@UserID,@UserName,@StatusID output
+  --EXEC spCOM_CheckCostCentetWF @CostCenterID,@NodeID,@WID,@RoleID,@UserID,@UserName,@StatusID output
   
   -- Update Custom Cost Center Fields  
   IF(@CustomCostCenterFieldsQuery IS NOT NULL AND @CustomCostCenterFieldsQuery <> '')  
@@ -593,18 +732,47 @@ SET NOCOUNT ON;
    
    exec sp_executesql @UpdateSql,N'@ModDate float',@Dt
  END
-  
+
   	--Duplicate Check
 	exec [spCOM_CheckUniqueCostCenter] @CostCenterID=@CostCenterID,@NodeID=@NodeID,@LangID=@LangID
   
   --Series Check
-  declare @retSeries bigint
+  declare @retSeries INT
   EXEC @retSeries=spCOM_ValidateCodeSeries @CostCenterID,@NodeID,@LangId
   if @retSeries>0
   begin
 	ROLLBACK TRANSACTION
 	SET NOCOUNT OFF  
 	RETURN -999
+  end
+
+  if exists (select Value from COM_CostCenterPreferences with(nolock) where Name='CreateUserOnDim' and CostCenterID=@CostCenterID and Value='True')
+  begin
+	set @SQL='select @tempCode=UserNameAlpha from '+@Table+' with(nolock) where NodeID='+convert(nvarchar,@NodeID)
+	EXEC sp_executesql @SQL, N'@tempCode nvarchar(max) OUTPUT',@tempCode OUTPUT
+	if (@tempCode is not null and @tempCode<>'')
+	BEGIN		--RAISERROR('EMPTY USER NAME',16,1)  
+		declare @FeatureID int,@TableName nvarchar(50)
+		declare @TblDims as Table(ID int identity(1,1), FeatureID int,Name nvarchar(100),TblName nvarchar(100))
+
+		insert into @TblDims
+		select FeatureID,Name,TableName from ADM_Features with(nolock) where FeatureID IN (select CostCenterID from COM_CostCenterPreferences with(nolock) where Name='CreateUserOnDim' and Value='True') order by FeatureID
+
+		select @i=1,@Cnt=count(*) from @TblDims
+		while(@i<=@Cnt)
+		begin
+			select @FeatureID=FeatureID,@TableName=TblName from @TblDims where ID=@i
+			set @i=@i+1
+			set @DUPNODENO=0
+			IF @CostCenterID=@FeatureID
+				set @SQL='select @DUPNODENO=count(*) from '+@TableName+' with(nolock) where NodeID!='+convert(nvarchar,@NodeID)+' and UserNameAlpha='''+@tempCode+''''
+			else
+				set @SQL='select @DUPNODENO=count(*) from '+@TableName+' with(nolock) where UserNameAlpha='''+@tempCode+''''
+			EXEC sp_executesql @SQL, N'@DUPNODENO INT OUTPUT',@DUPNODENO OUTPUT
+			IF @DUPNODENO=1
+				RAISERROR('DUPLICATE USER NAME',16,1)  
+		end
+	END	
   end
   
   --Inserts Multiple Contacts   
@@ -651,12 +819,12 @@ SET NOCOUNT ON;
 		ModifiedDate=@Dt  
 		FROM COM_Notes C WITH(NOLOCK)  
 		INNER JOIN @XML.nodes('/NotesXML/Row') as Data(X)    
-		ON convert(bigint,X.value('@NoteID','bigint'))=C.NoteID  
+		ON convert(INT,X.value('@NoteID','INT'))=C.NoteID  
 		WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'  
   
 		--If Action is DELETE then delete Notes  
 		DELETE FROM COM_Notes  
-		WHERE NoteID IN(SELECT X.value('@NoteID','bigint')  
+		WHERE NoteID IN(SELECT X.value('@NoteID','INT')  
 		FROM @XML.nodes('/NotesXML/Row') as Data(X)  
 		WHERE X.value('@Action','NVARCHAR(10)')='DELETE')  
   
@@ -665,87 +833,131 @@ SET NOCOUNT ON;
   IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')
 	exec [spCOM_SetAttachments] @NodeID,@CostCenterID,@AttachmentsXML,@UserName,@Dt
 
-  IF (@JobsProductXML IS NOT NULL AND @JobsProductXML <> '')  
-  BEGIN  
-	declare @JXML xml
-	SET @JXML=@JobsProductXML  
-	
-	declare  @tab table (id int identity(1,1),StageID bigint,BOMID bigint,DimID bigint,ProductID bigint)
-	insert into @tab
-	SELECT s.StageID,X.value('@BOMID','bigint'),X.value('@DimID','bigint'),X.value('@ProductID','bigint')
-	FROM @JXML.nodes('/XML/Row') as Data(X) 
-	left join PRD_BOMStages s with(NOLOCK) on X.value('@StageID','bigint')=s.StageNodeID and s.BOMID=X.value('@BOMID','bigint')
-	
-	if exists (select StageID,BOMID,DimID,ProductID from @tab
-			group by StageID,BOMID,DimID,ProductID
-			having count(*)>1)
-	begin
-		RAISERROR('-129',16,1)
-	end
-	else
-	begin	 
-		delete from PRD_JobOuputProducts where CostCenterID=@CostCenterID and NodeID=@NodeID
-	   
-		INSERT INTO [PRD_JobOuputProducts]
-		([CostCenterID],[NodeID],[StageID],[BomID],[ProductID],[Qty],[UOMID],StatusID,DimID,Remarks
-		,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],IsBom) 
-		SELECT @CostCenterID, @NodeID,s.StageID,X.value('@BOMID','bigint'),
-		X.value('@ProductID','bigint'),  X.value('@Qty','float'),X.value('@UOMID','bigint'),
-		X.value('@StatusID','bigint'),isnull(X.value('@DimID','bigint'),1),X.value('@Remarks','nvarchar(max)'),
-		@CompanyGUID, newid(),@UserName,@Dt,X.value('@IsBom','bit')
+  IF EXISTS (SELECT * FROM SYS.TABLES WITH(NOLOCK) WHERE NAME='PRD_JobOuputProducts')
+  BEGIN
+	  IF(@JobsProductXML IS NOT NULL AND @JobsProductXML <> '')  
+	  BEGIN  
+		declare @JXML xml
+		SET @JXML=@JobsProductXML  
+		
+		declare  @tab table (id int identity(1,1),StageID INT,BOMID INT,DimID INT,ProductID INT)
+		insert into @tab
+		SELECT s.StageID,X.value('@BOMID','INT'),X.value('@DimID','INT'),X.value('@ProductID','INT')
 		FROM @JXML.nodes('/XML/Row') as Data(X) 
-		left join PRD_BOMStages s with(NOLOCK) on X.value('@StageID','bigint')=s.StageNodeID and s.BOMID=X.value('@BOMID','bigint')
-	end
-  END  
-  else
-  begin
-	if exists (select CostCenterID from PRD_JobOuputProducts WITH(NOLOCK) where CostCenterID=@CostCenterID and NodeID=@NodeID)
-		delete from PRD_JobOuputProducts where CostCenterID=@CostCenterID and NodeID=@NodeID 
-  end
+		left join PRD_BOMStages s with(NOLOCK) on X.value('@StageID','INT')=s.StageNodeID and s.BOMID=X.value('@BOMID','INT')
+		
+		if exists (select StageID,BOMID,DimID,ProductID from @tab
+				group by StageID,BOMID,DimID,ProductID
+				having count(*)>1)
+		begin
+			RAISERROR('-129',16,1)
+		end
+		else
+		begin	 
+			delete from PRD_JobOuputProducts where CostCenterID=@CostCenterID and NodeID=@NodeID
+		   
+			INSERT INTO [PRD_JobOuputProducts]
+			([CostCenterID],[NodeID],[StageID],[BomID],[ProductID],[Qty],[UOMID],StatusID,DimID,Remarks
+			,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],IsBom) 
+			SELECT @CostCenterID,@NodeID,s.StageID,X.value('@BOMID','INT'),
+			X.value('@ProductID','INT'),  X.value('@Qty','float'),X.value('@UOMID','INT'),
+			X.value('@StatusID','INT'),isnull(X.value('@DimID','INT'),1),X.value('@Remarks','nvarchar(max)'),
+			@CompanyGUID, newid(),@UserName,@Dt,X.value('@IsBom','bit')
+			FROM @JXML.nodes('/XML/Row') as Data(X) 
+			left join PRD_BOMStages s with(NOLOCK) on X.value('@StageID','INT')=s.StageNodeID and s.BOMID=X.value('@BOMID','INT')
+		end
+	  END  
+	  else
+	  begin
+		if exists (select CostCenterID from PRD_JobOuputProducts WITH(NOLOCK) 
+					where CostCenterID=@CostCenterID and NodeID=@NodeID)
+			delete from PRD_JobOuputProducts where CostCenterID=@CostCenterID
+			and NodeID=@NodeID
+			
+	  end
+ END
+  
+  if EXISTS (SELECT * FROM SYS.TABLES WITH(NOLOCK) WHERE NAME='PRD_CCCalendarMap') AND (@CalendarXML IS NOT NULL AND @CalendarXML<>'')
+  BEGIN
+		DECLARE @CXML XML,@CrBy NVARCHAR(50),@CrDt FLOAT
+		SET @CXML=@CalendarXML
+
+		IF EXISTS(Select ID From PRD_CCCalendarMap WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND CCNodeID=@NodeID)
+		BEGIN
+			SELECT @CrBy=CreatedBy,@CrDt=CreatedDate From PRD_CCCalendarMap WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND CCNodeID=@NodeID
+			DELETE a FROM PRD_CCCalendarMap a WITH(NOLOCK) WHERE CostCenterID=@CostCenterID AND CCNodeID=@NodeID
+		END
+		ELSE
+		BEGIN
+			SET @CrBy=@UserName SET @CrDt=@Dt
+		END
+
+		INSERT INTO PRD_CCCalendarMap(CostCenterID, CCNodeID, SNo, FromDate, ToDate, CalendarProfileID, GUID, CreatedBy, CreatedDate, ModifiedBy, ModifiedDate)
+		SELECT @CostCenterID,@NodeID,X.value('@SNo','INT'),CONVERT(FLOAT,X.value('@FromDate','DATETIME')),CONVERT(FLOAT,X.value('@ToDate','DATETIME')),X.value('@CalendarID','INT'),newid(),@CrBy,@CrDt,@UserName,@Dt
+		FROM @CXML.nodes('/Rows/Row') as Data(X) 
+  END
   
   
   -- ADDED CODE ON DEC 28 BY MUSTAFEEZ   
-	IF @CostCenterID = 50002
-    BEGIN
+  if(@CostCenterRoleXML IS NOT NULL AND @CostCenterRoleXML<>'')
+  BEGIN
+   IF @CostCenterID = 50002
+   BEGIN
 		IF(@CostCenterRoleXML <> '' AND @CostCenterRoleXML IS NOT NULL)  
 		BEGIN  
 			EXEC [spCOM_SetCCCCMap] 50002,@NodeID,@CostCenterRoleXML,@UserName,@LangID
 		END 
-    END 
+   END 
    ELSE IF  @CostCenterID<>50002   -- ADDED CODE ON JUN 28 BY Hafeez 
    BEGIN  
 		EXEC [spCOM_SetCCCCMap] @CostCenterID,@NodeID,@CostCenterRoleXML,@UserName,@LangID
    END
-    
+  END 
    
 	--CREATE/EDIT LINK DIMENSION
-	declare @LinkDimCC nvarchar(max),@iLinkDimCC int
+	declare @LinkDimCC nvarchar(max),@iLinkDimCC int,@DimGroup bit,@projDim int,@projpldim int
+	set @projpldim=0
+	set @projDim=0
+	SELECT @projpldim=isnull([Value],0) FROM Adm_globalpreferences with(nolock) 
+	WHERE [Name]='ProjPlanDim' and ISNUMERIC(value)=1
+	
+	SELECT @projDim=isnull([Value],0) FROM Adm_globalpreferences with(nolock) 
+	WHERE [Name]='ProjectManagementDimension' and ISNUMERIC(value)=1
+	
+	set @DimGroup=0
 	SELECT @LinkDimCC=[Value] FROM com_costcenterpreferences with(nolock) WHERE CostCenterID=@CostCenterID and [Name]='LinkDimension'
-	if(ISNUMERIC(@LinkDimCC)=1)
+	
+	if(@projpldim>0 and @projDim>0 and @CostCenterID=@projpldim)
+	BEGIN
+		set @iLinkDimCC=@projDim
+		set @DimGroup=1
+	END	
+	ELSE if(ISNUMERIC(@LinkDimCC)=1)
 		set @iLinkDimCC=CONVERT(int,@LinkDimCC)
 	else
 		set @iLinkDimCC=0
 	
-	if (@IsGroup=0 and @LinkDimCC>50000 and @iLinkDimCC!=@CostCenterID)
+	
+	if (@IsGroup=0 and @iLinkDimCC>50000 and @iLinkDimCC!=@CostCenterID)
 	begin
-		declare @LinkDimNodeID INT,@CCStatusID bigint
-		declare @LinkDimCode nvarchar(max),@LinkDimAutoGen nvarchar(10),@CaseNumber nvarchar(500),@CaseID bigint
+		declare @LinkDimNodeID INT,@CCStatusID INT
+		declare @LinkDimCode nvarchar(max),@LinkDimAutoGen nvarchar(10),@CaseNumber nvarchar(500),@CaseID INT
 		
 		select @LinkDimNodeID=RefDimensionNodeID from com_docbridge with(nolock) 
 		WHERE CostCenterID=@CostCenterID AND NodeID=@NodeID AND RefDimensionID=@iLinkDimCC
-		
+		 
 		if(@LinkDimNodeID is null or (@LinkDimNodeID<=0 and @LinkDimNodeID>-10000) or @LinkDimNodeID=1)
 		BEGIN
 		
-			set @CCStatusID=(select top 1 statusid from com_status with(nolock) where costcenterid=@LinkDimCC and status = 'Active')
+			set @CCStatusID=(select top 1 statusid from com_status with(nolock) where costcenterid=@iLinkDimCC and status = 'Active')
 				
-			SELECT @LinkDimAutoGen=Value FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE Name='CodeAutoGen' AND CostCenterID=@LinkDimCC     
+			SELECT @LinkDimAutoGen=Value FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE Name='CodeAutoGen' AND CostCenterID=@iLinkDimCC     
 			if(@LinkDimAutoGen='True')
 			BEGIN
-					declare @Codetemp table (prefix nvarchar(100),number bigint, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
+					declare @Codetemp table (prefix nvarchar(100),number INT, suffix nvarchar(100), code nvarchar(200), IsManualcode bit)
 					
 					insert into @Codetemp
-					EXEC [spCOM_GetCodeData] @LinkDimCC,1,'' ,null,0,0 
+					EXEC [spCOM_GetCodeData] @iLinkDimCC,1,'' ,null,0,0 
 					
 					select @LinkDimCode=code,@CaseNumber= prefix, @CaseID=number from @Codetemp
 			END
@@ -762,29 +974,52 @@ SET NOCOUNT ON;
 			SELECT @Addr = CASE WHEN @Value LIKE '%2%' THEN @AddressXML ELSE '' END
 			SELECT @Note = CASE WHEN @Value LIKE '%3%' THEN @NotesXML ELSE '' END
 			SELECT @Attach = CASE WHEN @Value LIKE '%4%' THEN @AttachmentsXML ELSE '' END
+			
+			if(@CCStatusID is null)
+				set @CCStatusID=1
+			
 			EXEC @return_value = [dbo].[spCOM_SetCostCenter]
-			@NodeID = 0,@SelectedNodeID = 1,@IsGroup = 0,
+			@NodeID = 0,@SelectedNodeID = 1,@IsGroup = @DimGroup,
 			@Code = @LinkDimCode,
 			@Name = @Name,
 			@AliasName=@AliasName,
 			@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
 			@CustomFieldsQuery=NULL,@AddressXML=@Addr,@AttachmentsXML=@Attach,
 			@CustomCostCenterFieldsQuery=NULL,@ContactsXML=@Contact,@NotesXML=@Note,
-			@CostCenterID = @LinkDimCC,@CompanyGUID=@COMPANYGUID,@GUID='',@UserName='admin',@RoleID=1,@UserID=1,
+			@CostCenterID = @iLinkDimCC,@CompanyGUID=@COMPANYGUID,@GUID='',@UserName='admin',@RoleID=1,@UserID=1,
 			@CodePrefix=@CaseNumber,@CodeNumber=@CaseID,
 			@CheckLink = 0,@IsOffline=@IsOffline
 			
 			--set @return_value=0	
 			declare @Gid nvarchar(50), @NodeidXML nvarchar(max)					
-			select @Table=Tablename from adm_features with(nolock) where featureid=@LinkDimCC
+			select @Table=Tablename from adm_features with(nolock) where featureid=@iLinkDimCC
 			set @NodeidXML='set @Gid= (select GUID from '+convert(nvarchar,@Table)+' WITH(NOLOCK) where NodeID='+convert(nvarchar,@LinkDimNodeID)+')'
 
 			exec sp_executesql @NodeidXML,N'@Gid nvarchar(50) output' , @Gid OUTPUT 
 			
 			-- Link Dimension Mapping
 			INSERT INTO COM_DocBridge(CostCenterID,NodeID,InvDocID,AccDocID,RefDimensionID,RefDimensionNodeID,CompanyGUID,guid,Createdby,CreatedDate,Abbreviation)
-			values(@CostCenterID,@NodeID,0,0,@LinkDimCC,@return_value,'',newid(),@UserName, @dt,'CostCenter')
+			values(@CostCenterID,@NodeID,0,0,@iLinkDimCC,@return_value,'',newid(),@UserName, @dt,'CostCenter')
 						
+		END
+		ELSE IF(@LinkDimNodeID > 0)
+		BEGIN
+			--DELETE FROM COM_Address WHERE FeatureID=@iLinkDimCC AND FeaturePK=@LinkDimNodeID
+			SELECT @Value=Value FROM COM_CostCenterPreferences WHERE Name='CopyDimensionData' AND CostCenterID=@CostCenterID
+			SELECT @Addr = CASE WHEN @Value LIKE '%2%' THEN @AddressXML ELSE '' END
+			--SET @Addr=REPLACE(@Addr,'MODIFY','NEW')
+			--SELECT @LinkDimNodeID,@iLinkDimCC,@Addr
+			EXEC @return_value = [dbo].[spCOM_SetCostCenter]
+			@NodeID = @LinkDimNodeID,@SelectedNodeID = 1,@IsGroup = @DimGroup,
+			@Code = @LinkDimCode,
+			@Name = @Name,
+			@AliasName=@AliasName,
+			@PurchaseAccount=0,@SalesAccount=0,@StatusID=@CCStatusID,
+			@CustomFieldsQuery=NULL,@AddressXML=@Addr,@AttachmentsXML=@Attach,
+			@CustomCostCenterFieldsQuery=NULL,@ContactsXML=@Contact,@NotesXML=@Note,
+			@CostCenterID = @iLinkDimCC,@CompanyGUID=@COMPANYGUID,@GUID='',@UserName='admin',@RoleID=1,@UserID=1,
+			@CodePrefix=@CaseNumber,@CodeNumber=@CaseID,
+			@CheckLink = 0,@IsOffline=@IsOffline
 		END
 		ELSE 
 			SET @return_value=@LinkDimNodeID
@@ -794,28 +1029,39 @@ SET NOCOUNT ON;
 		
 			DECLARE @CCMapSql nvarchar(max)
 			set @CCMapSql='update COM_CCCCDATA  
-			SET CCNID'+convert(nvarchar,(@LinkDimCC-50000))+'='+CONVERT(NVARCHAR,@return_value)+'  
+			SET CCNID'+convert(nvarchar,(@iLinkDimCC-50000))+'='+CONVERT(NVARCHAR,@return_value)+'  
 			WHERE CostCenterID='+convert(nvarchar,@CostCenterID) +' and NODEID='+convert(NVARCHAR,@NodeID)  
 			EXEC (@CCMapSql)
+			
+			if (@iLinkDimCC=@projDim and @projpldim=@CostCenterID)
+			BEGIN
+				set @CCMapSql='update COM_CCCCDATA  
+				SET CCNID'+convert(nvarchar,(@CostCenterID-50000))+'='+CONVERT(NVARCHAR,@NodeID)+'  
+				WHERE CostCenterID='+convert(nvarchar,@iLinkDimCC) +' and NODEID='+convert(NVARCHAR,@return_value)  
+				EXEC (@CCMapSql)
+			END
 			
 			Exec [spDOC_SetLinkDimension]
 				@InvDocDetailsID=@NodeID, 
 				@Costcenterid=@CostCenterID,         
-				@DimCCID=@LinkDimCC,
+				@DimCCID=@iLinkDimCC,
 				@DimNodeID=@return_value,
 				@UserID=@UserID,    
 				@LangID=@LangID  
 		end	
 			
 	end
-		
+	
     --Insert Notifications
 	EXEC spCOM_SetNotifEvent @ActionType,@CostCenterID,@NodeID,@CompanyGUID,@UserName,@UserID,-1
 	
 	--Insert Grade in Assigned leaves
 	IF(@CostCenterID=50053)
-		EXEC spPAY_InsertPayrollCostCenter @CostCenterID,@NodeID,@UserID,@LangID
-
+	BEGIN
+	    SET @SQL='EXEC spPAY_InsertPayrollCostCenter '+CONVERT(NVARCHAR,@CostCenterID)+','+CONVERT(NVARCHAR,@NodeID)+','+
+	    CONVERT(NVARCHAR,@UserID)+','+CONVERT(NVARCHAR,@LangID)
+	    EXEC(@SQL)
+    END
 	
 	IF(@CostCenterID=50073)
 	BEGIN
@@ -841,8 +1087,8 @@ SET NOCOUNT ON;
 			
 			SET @DocXML=REPLACE(@DocXML,'DIM73NodeID',convert(nvarchar,@NodeID))
 
-			DECLARE @TEMPxml NVARCHAR(MAX),@XML1 XML,@varxml xml,@AUTOCCID bigint,
-				@ddxml nvarchar(max),@Prefix nvarchar(200),@DocDate DATETIME,@ddID bigint
+			DECLARE @TEMPxml NVARCHAR(MAX),@XML1 XML,@varxml xml,@AUTOCCID INT,
+				@ddxml nvarchar(max),@Prefix nvarchar(200),@DocDate DATETIME,@ddID INT
 		
 			SET @DocDate=GETDATE()
 			set @TEMPxml=''
@@ -865,7 +1111,7 @@ SET NOCOUNT ON;
 			EXEC [sp_GetDocPrefix] @ddxml,@DocDate,@AUTOCCID,@Prefix output,@NodeID,0,0
 			set @ddID=0
 			
-			SELECT @ddID=X.value('@DocID','bigint')
+			SELECT @ddID=X.value('@DocID','INT')
 			from @varxml.nodes('/GeneralTimingsXML') as Data(X)
 			
 			EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]      
@@ -913,7 +1159,7 @@ SET NOCOUNT ON;
 			EXEC [sp_GetDocPrefix] @ddxml,@DocDate,@AUTOCCID,@Prefix output,@NodeID,0,0
 			set @ddID=0
 			
-			SELECT @ddID=X.value('@DocID','bigint')
+			SELECT @ddID=X.value('@DocID','INT')
 			from @varxml.nodes('/HoursDefChartXML') as Data(X)
 			
 			EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]      
@@ -946,8 +1192,15 @@ SET NOCOUNT ON;
 
 		END
 	END
-
-
+	
+	  --validate Data External function
+	DECLARE @tempCCCode NVARCHAR(200)
+	set @tempCCCode=''
+	select @tempCCCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=9
+	if(@tempCCCode<>'')
+	begin
+		exec @tempCCCode @CostCenterID,@NodeID,@UserID,@LangID
+	end
 
 	COMMIT TRANSACTION
 	--ROLLBACK TRANSACTION
@@ -961,6 +1214,55 @@ SET NOCOUNT ON;
 		if @return_value!=1
 			set @ExtendedColsXML=' With Audit Trial Error'
 	end
+
+		--INSERT History COM_CCCCDataHistory
+		if exists(SELECT Value FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE CostCenterID=@CostCenterId and Name='AuditTrial' and Value='True')
+		BEGIN
+			declare @CommonCols nvarchar(max),@HistoryCols nvarchar(max)='',@HistoryColsInsert nvarchar(max)='',@CC nvarchar(max),@HistoryID BIGINT
+			
+			SELECT @HistoryID=ISNULL(MAX(NodeHistoryID)+1,1) FROM COM_CCCCDataHistory WITH(NOLOCK)
+
+			SELECT @CommonCols=STUFF((
+			select ','+CH.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			JOIN (select a.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			where b.name='COM_CCCCDataHistory') AS CH ON CH.name=a.name
+			where b.name='COM_CCCCData' FOR XML PATH('')),1,1,'')
+			, @HistoryCols=STUFF((
+			select ','+a.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			LEFT JOIN (select a.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			where b.name='COM_CCCCData') AS CH ON CH.name=a.name
+			where b.name='COM_CCCCDataHistory' AND CH.name IS NULL AND a.name LIKE 'CCNID%' FOR XML PATH('')),1,1,'')
+			, @HistoryColsInsert=STUFF((
+			select ','+'1' from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			LEFT JOIN (select a.name from sys.columns a
+			join sys.tables b on a.object_id=b.object_id
+			where b.name='COM_CCCCData') AS CH ON CH.name=a.name
+			where b.name='COM_CCCCDataHistory' AND CH.name IS NULL AND a.name LIKE 'CCNID%' GROUP BY a.name FOR XML PATH('')),1,1,'')
+			
+			IF(@HistoryCols IS NULL)
+			BEGIN
+				set @CC=' INSERT INTO [COM_CCCCDataHistory](NodeHistoryID,'+@CommonCols+')
+				select  '+convert(nvarchar,@HistoryID)+','+@CommonCols
+						
+				set @CC=@CC+' FROM [COM_CCCCData] WITH(NOLOCK)
+				WHERE  NodeID='+convert(nvarchar,@NodeID) + ' AND CostCenterID='+convert(nvarchar,@CostCenterID)
+			END
+			ELSE
+			BEGIN
+				set @CC=' INSERT INTO [COM_CCCCDataHistory](NodeHistoryID,'+@CommonCols+','+ISNULL(@HistoryCols,'')+')
+				select  '+convert(nvarchar,@HistoryID)+','+@CommonCols+','+ISNULL(@HistoryColsInsert,'')
+						
+				set @CC=@CC+' FROM [COM_CCCCData] WITH(NOLOCK)
+				WHERE  NodeID='+convert(nvarchar,@NodeID) + ' AND CostCenterID='+convert(nvarchar,@CostCenterID)
+			END
+			--PRINT @CC
+			exec sp_executesql @CC
+		END
 
 	SET NOCOUNT OFF;
 
@@ -1005,7 +1307,5 @@ if(@return_value=-999)
 	ROLLBACK TRANSACTION  
 	SET NOCOUNT OFF    
 	RETURN -999     
-END CATCH  
-
-
+END CATCH
 GO

@@ -15,15 +15,13 @@ BEGIN TRANSACTION
 BEGIN TRY     
 SET NOCOUNT ON  
 
-		CREATE TABLE #Transaction (ID INT IDENTITY(1,1) PRIMARY KEY,DocID INT,totValue FLOAT,cgstValue FLOAT,sgstValue FLOAT,igstValue FLOAT,cessValue FLOAT,
-		stateCessValue FLOAT,totDiscount FLOAT,totOtherCharges FLOAT,roundOffAmout FLOAT,totInvValue FLOAT,totInvValueFc FLOAT)
-
 		CREATE TABLE #GSTMapping (ID INT IDENTITY(1,1) PRIMARY KEY,SysColumnName NVARCHAR(32),GSTColumnName NVARCHAR(32),SysTableName NVARCHAR(32),IsCalc BIT,DataType NVARCHAR(32),ValueType NVARCHAR(16),Reference INT,DefColumnName NVARCHAR(MAX))
 		
-		DECLARE @I INT,@ICNT INT,@SysColumnName NVARCHAR(32),@GSTColumnName NVARCHAR(32),@IsCalc BIT,@SysTableName NVARCHAR(32),@DataType NVARCHAR(32),@ValueType NVARCHAR(16)
-		,@TransTabColumns NVARCHAR(MAX),@TransColumns NVARCHAR(MAX),@Columns NVARCHAR(MAX),@JOIN NVARCHAR(MAX),@Reference INT,@SQL NVARCHAR(MAX),@DefColumnName NVARCHAR(MAX)
-
+		CREATE TABLE #MultiField (ID INT IDENTITY(1,1) PRIMARY KEY,DefColumnName NVARCHAR(MAX))
+		CREATE TABLE #MultiFieldReason (ID INT IDENTITY(1,1) PRIMARY KEY,DefColumnName NVARCHAR(MAX))
 		
+		DECLARE @I INT,@ICNT INT,@J INT,@JCNT INT,@SysColumnName NVARCHAR(32),@GSTColumnName NVARCHAR(32),@IsCalc BIT,@SysTableName NVARCHAR(32),@DataType NVARCHAR(32),@ValueType NVARCHAR(16)
+		,@TransTabColumns NVARCHAR(MAX),@TransColumns NVARCHAR(MAX),@Columns NVARCHAR(MAX),@JOIN NVARCHAR(MAX),@Reference INT,@SQL NVARCHAR(MAX),@DefColumnName NVARCHAR(MAX)
 
 		DECLARE @CCData TABLE (ID INT IDENTITY(1,1) PRIMARY KEY,Reference INT,NodeID INT)
 		
@@ -166,7 +164,7 @@ SET NOCOUNT ON
 		UNION 
 		SELECT DISTINCT GM.SysColumnName,GM.GSTColumnName,NULL,GM.IsCalc,'FLOAT',GM.ValueType,GM.Reference,GM.DefColumnName
 		FROM INV_GSTMapping GM WITH(NOLOCK)
-		WHERE GM.CostCenterID=@CostCenterID AND GM.GSTType=@GSTType AND ValueType NOT IN ('Seller','Buyer') AND GM.SysColumnName='MULTIPLEFIELDS'
+		WHERE GM.CostCenterID=@CostCenterID AND GM.GSTType=@GSTType AND ValueType NOT IN ('Seller','Buyer') AND (GM.SysColumnName='MULTIPLEFIELDS' OR GM.SysColumnName='MULTIPLEFIELDS_Reason')
 
 		SELECT @I=1,@ICNT=COUNT(*),@TransTabColumns='',@TransColumns='',@Columns='',@JOIN='' FROM #GSTMapping WITH(NOLOCK)
 
@@ -195,6 +193,57 @@ SET NOCOUNT ON
 					END
 				END
 			END
+			ELSE IF(@SysColumnName='MULTIPLEFIELDS_Reason')
+			BEGIN
+				IF @DefColumnName IS NOT NULL AND @DefColumnName<>''
+				BEGIN
+					
+					TRUNCATE TABLE #MultiField
+					INSERT INTO #MultiField
+					EXEC SPSplitString @DefColumnName,',' 
+					
+					SELECT @J=1,@JCNT=COUNT(*) FROM #MultiField WITH(NOLOCK)
+					WHILE @J<=@JCNT
+					BEGIN
+					
+						SELECT @DefColumnName=DefColumnName FROM #MultiField WITH(NOLOCK) WHERE ID=@J
+					
+						TRUNCATE TABLE #MultiFieldReason
+						INSERT INTO #MultiFieldReason
+						EXEC SPSplitString @DefColumnName,'~'
+						
+						
+						IF(@ValueType='Transaction')
+						BEGIN
+							SET @TransTabColumns=@TransTabColumns+','+@GSTColumnName
+							IF (@IsCalc=1)
+								SET @TransColumns=@TransColumns+',SUM(ISNULL(DND.'+REPLACE(REPLACE(@DefColumnName,',',',0)+ISNULL(DND.'),'dcNum','dcCalcNum')+',0)) '+@GSTColumnName
+							ELSE
+								SET @TransColumns=@TransColumns+',SUM(ISNULL(DND.'+REPLACE(@DefColumnName,',',',0)+ISNULL(DND.')+',0)) '+@GSTColumnName
+						END
+						ELSE
+						BEGIN
+							IF (@IsCalc=1)
+								SELECT @Columns=@Columns+',ISNULL(DND.'+REPLACE(DefColumnName,'dcNum','dcCalcNum')+',0) '
+								FROM #MultiFieldReason WITH(NOLOCK) WHERE ID=1
+							ELSE
+								SELECT @Columns=@Columns+',ISNULL(DND.'+DefColumnName+',0) ' 
+								FROM #MultiFieldReason WITH(NOLOCK) WHERE ID=1
+							SELECT @Columns=@Columns+@GSTColumnName+'_'+CONVERT(NVARCHAR,@J)
+							SELECT @Columns=@Columns+','''+DefColumnName+''' '+@GSTColumnName+'_Code_'+CONVERT(NVARCHAR,@J) 
+							FROM #MultiFieldReason WITH(NOLOCK) WHERE ID=2
+							SELECT @Columns=@Columns+','''+DefColumnName+''' '+@GSTColumnName+'_Name_'+CONVERT(NVARCHAR,@J) 
+							FROM #MultiFieldReason WITH(NOLOCK) WHERE ID=3
+								
+							SET @Columns=@Columns+',CU'+CONVERT(NVARCHAR,@I)+'_'+CONVERT(NVARCHAR,@J)+'.Symbol '+@GSTColumnName+'_Curr_'+CONVERT(NVARCHAR,@J)
+							SELECT @JOIN=@JOIN+' JOIN COM_Currency CU'+CONVERT(NVARCHAR,@I)+'_'+CONVERT(NVARCHAR,@J)+' WITH(NOLOCK) ON CU'+CONVERT(NVARCHAR,@I)+'_'+CONVERT(NVARCHAR,@J)+'.CurrencyID=ISNULL(DND.'+REPLACE(DefColumnName,'dcNum','dcCurrID')+',1)'
+	FROM #MultiFieldReason WITH(NOLOCK) WHERE ID=1				
+						END
+					
+						SET @J=@J+1
+					END 
+				END
+			END
 			ELSE IF(@SysColumnName LIKE 'dcNum%')
 			BEGIN
 				IF(@ValueType='Transaction')
@@ -219,6 +268,13 @@ SET NOCOUNT ON
 			ELSE IF(@SysColumnName LIKE 'dcCCNID%' AND @SysTableName IS NOT NULL AND @SysTableName<>'')
 			BEGIN
 				SET @Columns=@Columns+',CASE WHEN CC'+CONVERT(NVARCHAR,@I)+'.NodeID>1 THEN CC'+CONVERT(NVARCHAR,@I)+ (CASE WHEN @IsCalc=1 THEN '.Name ' ELSE '.Code ' END)+'ELSE '''' END ' +@GSTColumnName
+				
+				IF @GSTColumnName='VATCategory'
+				BEGIN
+					SET @Columns=@Columns+',CASE WHEN CC'+CONVERT(NVARCHAR,@I)+'.NodeID>1 THEN CC'+CONVERT(NVARCHAR,@I)+ (CASE WHEN @IsCalc=0 THEN '.Name ' ELSE '.Code ' END)+'ELSE '''' END ' +@GSTColumnName+'_Code'
+					SET @Columns=@Columns+',CASE WHEN CC'+CONVERT(NVARCHAR,@I)+'.NodeID>1 THEN CC'+CONVERT(NVARCHAR,@I)+'.AliasName ELSE '''' END ' +@GSTColumnName+'_Reason'				
+				END
+					
 				SET @JOIN=@JOIN+' JOIN '+@SysTableName+' CC'+CONVERT(NVARCHAR,@I)+' WITH(NOLOCK) ON CC'+CONVERT(NVARCHAR,@I)+'.NodeID=DCD.'+@SysColumnName
 			END
 			ELSE IF(@SysColumnName LIKE 'dcAlpha%')
@@ -250,18 +306,6 @@ SET NOCOUNT ON
 			SET @I=@I+1
 		END
 
-		--SET @SQL='INSERT INTO #Transaction (DocID'
-		--SET @SQL=@SQL+@TransTabColumns
-		--SET @SQL=@SQL+')	
-		--SELECT '+CONVERT(NVARCHAR,@DocID)
-		--SET @SQL=@SQL+@TransColumns
-		--SET @SQL=@SQL+' FROM INV_DocDetails IDD WITH(NOLOCK)
-		--JOIN COM_DocNumData DND WITH(NOLOCK) ON DND.InvDocDetailsID=IDD.InvDocDetailsID
-		--JOIN COM_DocCCData DCD WITH(NOLOCK) ON DCD.InvDocDetailsID=IDD.InvDocDetailsID
-		--WHERE IDD.DocID='+CONVERT(NVARCHAR,@DocID)+' AND (IDD.IsQtyFreeOffer=0 OR IDD.ParentSchemeID IS NULL)'
-		--PRINT @SQL
-		--EXEC(@SQL)
-		
 		DECLARE @DocumentType INT
 		SET @SQL='SELECT '
 		
@@ -299,8 +343,7 @@ SET NOCOUNT ON
 		,(CASE WHEN IDD.VoucherType=-1 OR IDD.DocumentType=6 THEN BA.CountrySubentityCode ELSE SA.CountrySubentityCode END) CountrySubentityCode_Buyer
 		,(CASE WHEN IDD.VoucherType=-1 OR IDD.DocumentType=6 THEN BA.VATNumber ELSE SA.VATNumber END) VATNumber_Buyer
 		,(CASE WHEN IDD.VoucherType=-1 OR IDD.DocumentType=6 THEN BA.RegistrationName ELSE SA.RegistrationName END) RegistrationName_Buyer
-		
-		,TR.* '
+		'
 		SET @SQL=@SQL+@Columns
 		SET @SQL=@SQL+' FROM INV_DocDetails IDD WITH(NOLOCK)
 			JOIN COM_DocID DID WITH(NOLOCK) ON DID.ID=IDD.DocID
@@ -310,21 +353,22 @@ SET NOCOUNT ON
 			JOIN COM_DocCCData DCD WITH(NOLOCK) ON DCD.InvDocDetailsID=IDD.InvDocDetailsID
 			JOIN COM_DocTextData DTD WITH(NOLOCK) ON DTD.InvDocDetailsID=IDD.InvDocDetailsID 
 			JOIN INV_Product PR WITH(NOLOCK) ON PR.ProductID=IDD.ProductID 
-			LEFT JOIN #Transaction TR WITH(NOLOCK) ON TR.DocID=IDD.DocID
 			JOIN #AddDeatils SA WITH(NOLOCK) ON SA.DocID=IDD.DocID AND SA.AddType=1
 			JOIN #AddDeatils BA WITH(NOLOCK) ON BA.DocID=IDD.DocID AND BA.AddType=2 '
 		SET @SQL=@SQL+@JOIN
 		SET @SQL=@SQL+' WHERE IDD.DocID='+CONVERT(NVARCHAR,@DocID)+' AND (IDD.IsQtyFreeOffer=0 OR IDD.ParentSchemeID IS NULL)'
 
 		PRINT @SQL
+		PRINT SUBSTRING(@SQL,4001,4000)
 		EXEC (@SQL)
 		
 		SELECT DISTINCT LIDD.VoucherNo,CONVERT(DATETIME,LIDD.DocDate) IssueDate FROM INV_DocDetails IDD WITH(NOLOCK)
 		JOIN INV_DocDetails LIDD WITH(NOLOCK) ON IDD.LinkedInvDocDetailsID=LIDD.InvDocDetailsID
 		WHERE IDD.DocID=@DocID
 		
+		DROP TABLE #MultiField
+		DROP TABLE #MultiFieldReason
 		DROP TABLE #GSTMapping
-		DROP TABLE #Transaction
 		DROP TABLE #AddDeatils
 
 COMMIT TRANSACTION    

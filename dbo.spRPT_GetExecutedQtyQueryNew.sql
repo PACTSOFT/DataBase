@@ -89,17 +89,17 @@ SET NOCOUNT ON
 				,(SELECT SysColumnName FROM ADM_CostCenterDef with(nolock) WHERE CostCenterColID=[CostCenterColIDBase])
 				,(SELECT SysColumnName FROM ADM_CostCenterDef with(nolock) WHERE CostCenterColID=[CostCenterColIDLinked])			
 			FROM COM_DocumentLinkDef with(nolock)
-			WHERE CostCenterIDLinked=@Document AND IsQtyExecuted=1
-			
-			--select * from @TblMaps
+			WHERE CostCenterIDLinked=@Document AND IsQtyExecuted=1 and CostCenterIDBase>40000 and CostCenterIDBase<50000
+
 			
 			SELECT @J=MIN(ID), @CNTDOCS = MAX(ID) FROM @TblMaps	
+
 			IF @CNTDOCS > 0
 			BEGIN	
 				WHILE(@J<=@CNTDOCS)
 				BEGIN
  					SELECT @CostCenterID=Document,@ColumnName=ColumnName,@lINKColumnName=LinkColumn FROM @TblMaps WHERE ID=@J
-					
+
 					IF @lINKColumnName LIKE 'dcNum%'
 						SET @Query=@Query+' WHEN INV.costcenterid='+CONVERT(NVARCHAR,@Document)+' THEN NUM.'+@lINKColumnName
 					ELSE
@@ -154,7 +154,7 @@ SET NOCOUNT ON
 		ELSE
 			SET @Query='INV.Quantity'
 		
-		IF @SubQry=''
+		IF isnull(@SubQry,'')=''
 			SET @SubQry='select 1 qty'
 			
 		SET @SubQry='case when INV.LinkStatusID=445 then '+@Query+' else (SELECT ISNULL(SUM(Qty),0) FROM ('+@SubQry+') AS T) end '
@@ -240,5 +240,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

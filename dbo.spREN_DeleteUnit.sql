@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spREN_DeleteUnit]
-	@UnitID [bigint] = 0,
-	@UserID [bigint] = 1,
+	@UnitID [int] = 0,
+	@UserID [int] = 1,
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -13,7 +13,7 @@ BEGIN TRANSACTION
 BEGIN TRY    
 SET NOCOUNT ON;    
   
-	DECLARE @HasAccess bit,@lft bigint,@rgt bigint,@Width bigint  
+	DECLARE @HasAccess bit,@lft INT,@rgt INT,@Width INT,@UserName NVARCHAR(64)  
 
 	--SP Required Parameters Check  
 	if(@UnitID=0)  
@@ -39,13 +39,24 @@ SET NOCOUNT ON;
 	SELECT @lft = lft, @rgt = rgt, @Width = rgt - lft + 1  
 	FROM REN_UNITS WITH(NOLOCK) WHERE UNITID=@UnitID    
 
-	declare @tempUnit table(id int identity(1,1), UNITID bigint)  
+	declare @tempUnit table(id int identity(1,1), UNITID INT)  
 
 	insert into @tempUnit  
 	select UNITID from REN_UNITS WITH(NOLOCK) WHERE lft >= @lft AND rgt <= @rgt  
 
+
+	--ondelete External function
+	IF (@UnitID>0)
+	BEGIN
+		DECLARE @tablename NVARCHAR(200)
+		set @tablename=''
+		select @tablename=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=93 and Mode=8
+		if(@tablename<>'')
+			exec @tablename 93,@UnitID,'',@UserID,@LangID	
+	END	
+		
 	declare @i int, @cnt int  
-	DECLARE @CCNodeID bigint, @CCDimesion bigint   
+	DECLARE @CCNodeID INT, @CCDimesion INT   
 	select @i=1,@cnt=count(*) from @tempUnit  
 	 
 	while @i<=@cnt  
@@ -62,7 +73,7 @@ SET NOCOUNT ON;
 			  
 			select @CCNodeID,@CCDimesion
 			-- select @NodeID, @Dimesion  
-			declare @return_value bigint  
+			declare @return_value INT  
 			EXEC @return_value = [dbo].[spCOM_DeleteCostCenter]  
 			@CostCenterID = @CCDimesion,  
 			@NodeID = @CCNodeID,  
@@ -76,29 +87,44 @@ SET NOCOUNT ON;
 		end  
 		set @i=@i+1  
 	end  
-  
-    INSERT INTO [REN_UnitsHistory]
-	([UnitID],[PropertyID],[Code],[Name],[Status],[CCID],[NodeID],[RentableArea],[BuildUpArea],[FloorLookUpID],[ViewLookUpID]
-	,[NoOfBathrooms],[NoOfParkings],[ElectricityCode],[ElectricityKW],[Rent],[RentTypeID],[DiscountPercentage],[DiscountAmount]
-	,[AnnualRent],[MonthlyRent],[RentPerSQFT],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]
-	,[ModifiedBy],[ModifiedDate],[TermsConditions],[SalesmanID],[AccountantID],[LandlordID],[UnitStatus],[RentalIncomeAccountID],[RentalReceivableAccountID]
-	,[AdvanceRentAccountID],[BankAccount],[BankLoanAccount],[CCNodeID],[LinkCCID],[RentalAccount],[RentPayableAccount],[AdvanceRentPaid]
-	,[LocationID],[BasedOn],[ContractID],[PenaltyAccountID],[AdvanceReceivableAccountID],[HistoryStatus])
-	select [UnitID],[PropertyID],[Code],[Name],[Status],[CCID],[NodeID],[RentableArea],[BuildUpArea],[FloorLookUpID],[ViewLookUpID]
-	,[NoOfBathrooms],[NoOfParkings],[ElectricityCode],[ElectricityKW],[Rent],[RentTypeID],[DiscountPercentage],[DiscountAmount]
-	,[AnnualRent],[MonthlyRent],[RentPerSQFT],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CompanyGUID],[GUID],[CreatedBy],[CreatedDate]
-	,[ModifiedBy],[ModifiedDate],[TermsConditions],[SalesmanID],[AccountantID],[LandlordID],[UnitStatus],[RentalIncomeAccountID],[RentalReceivableAccountID]
-	,[AdvanceRentAccountID],[BankAccount],[BankLoanAccount],[CCNodeID],[LinkCCID],[RentalAccount],[RentPayableAccount],[AdvanceRentPaid]
-	,[LocationID],[BasedOn],[ContractID],[PenaltyAccountID],[AdvanceReceivableAccountID],'Deleted'
-	from ren_units with(nolock)  WHERE lft >= @lft AND rgt <= @rgt  
+	
+	SELECT @UserName=USERNAME FROM ADM_USERS WITH(NOLOCK) WHERE UserID=@UserID
+	
+    select @i=1,@cnt=count(*) from @tempUnit
+	while @i<=@cnt
+	begin
+		select @CCNodeID=UNITID from @tempUnit where id=@i
+		
+		--INSERT INTO HISTROY   
+		EXEC [spCOM_SaveHistory]  
+			@CostCenterID =93,    
+			@NodeID =@CCNodeID,
+			@HistoryStatus ='Deleted',
+			@UserName=@UserName
+		
+		set @i=@i+1
+	end
 
-	-- --Insert into Units history  Extended  
-	--insert into REN_UnitsExtendedHistory  
-	--select *,'Deleted' from REN_UnitsExtended WHERE unitid in
-	-- (select UnitID REN_UNITS WHERE lft >= @lft AND rgt <= @rgt  )
 
-	delete from REN_UnitsExtended where UNITID IN (SELECT UNITID  FROM REN_UNITS with(nolock) WHERE lft >= @lft AND rgt <= @rgt)  
-	delete from com_ccccdata where costcenterid=93 and NodeID IN (SELECT UNITID  FROM REN_UNITS with(nolock) WHERE lft >= @lft AND rgt <= @rgt)  
+	delete from REN_UnitsExtended where UNITID IN (select UNITID from @tempUnit) 
+	delete from com_ccccdata where costcenterid=93 and NodeID IN (select UNITID from @tempUnit)  
+	
+	delete from REN_Particulars where PropertyID in   
+	(SELECT PropertyID FROM REN_UNITS WITH(NOLOCK) WHERE UNITID IN (select UNITID from @tempUnit)) and UnitID IN (select UNITID from @tempUnit)
+	
+	delete FROM COM_Notes  
+	WHERE FeatureID = 93 AND FeaturePK IN (select UNITID from @tempUnit) 
+	
+	delete FROM COM_Files 
+	WHERE FeatureID = 93 AND FeaturePK IN (select UNITID from @tempUnit) 
+	
+	DELETE FROM Ren_UnitRate 
+	WHERE UnitID IN (select UNITID from @tempUnit) 
+	
+	--Delete From CRM_Cases where CASEID=@CASEID  
+	Delete from com_docbridge WHERE CostCenterID = 93 AND NodeID IN (select UNITID from @tempUnit)
+   
+   	Delete from COM_HistoryDetails WHERE CostCenterID = 93 AND NodeID IN (select UNITID from @tempUnit) 
 	
 	--Delete from main table  
 	DELETE FROM REN_UNITS WHERE lft >= @lft AND rgt <= @rgt  
@@ -106,15 +132,7 @@ SET NOCOUNT ON;
 	--Update left and right extent to set the tree  
 	UPDATE REN_UNITS SET rgt = rgt - @Width WHERE rgt > @rgt;  
 	UPDATE REN_UNITS SET lft = lft - @Width WHERE lft > @rgt;  
-
-	delete from REN_Particulars where PropertyID=  
-	(SELECT PropertyID FROM REN_UNITS WITH(NOLOCK) WHERE UNITID=@UnitID) and UnitID=@UnitID  
-
-	--Delete From CRM_Cases where CASEID=@CASEID  
-	Delete from com_docbridge WHERE CostCenterID = 93 AND NodeID = @UnitID  
-   
-   	Delete from COM_HistoryDetails WHERE CostCenterID = 93 AND NodeID = @UnitID  
- 
+	
 COMMIT TRANSACTION  
 SET NOCOUNT OFF;    
 SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)   
@@ -143,7 +161,5 @@ if(@return_value=-999)
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH  
-  
-  
+END CATCH
 GO

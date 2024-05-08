@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spACC_PostDeprJVFromDashBoard]
-	@COSTCENTERID [bigint],
+	@COSTCENTERID [int],
 	@JVXML [nvarchar](max),
 	@Post [bit],
 	@CompanyGUID [nvarchar](50),
@@ -18,14 +18,14 @@ BEGIN TRANSACTION
 DECLARE @QUERYTEST NVARCHAR(100)  , @IROWNO NVARCHAR(100) , @TYPE NVARCHAR(100)    
 BEGIN TRY        
 SET NOCOUNT ON;
-DECLARE   @XML XML ,@DXML XML , @CNT INT , @ICNT INT , @DocXml nvarchar(max) , @return_value BIGINT ,@DT datetime,@DT_INT INT,@Vendor bigint,@PN nvarchar(50)
-DECLARE @DEPID BIGINT ,@VOUCHERNO NVARCHAR(200) ,@DocDate float ,@STATUSID INT  , @AssetNetValue FLOAT, @ScheduleID BIGINT,@DoXML xml,@AssetOldValue Float
-DECLARE @LineXML NVARCHAR(MAX),@AssetID bigint ,@Prefix nvarchar(200),@DeprPostDate nvarchar(50),@CCQUERY nvarchar(max)
-declare @DepAmount float,@Locationid bigint,@LocationDimID bigint,@AssDimNodeID bigint,@AssDimID bigint
-declare @TblHist as table(ID int identity(1,1),HDays int,HNodeID bigint,HFromDate float,HToDate float)
+DECLARE   @XML XML ,@DXML XML , @CNT INT , @ICNT INT , @DocXml nvarchar(max) , @return_value INT ,@DT datetime,@DT_INT INT,@Vendor INT,@PN nvarchar(50)
+DECLARE @DEPID INT ,@VOUCHERNO NVARCHAR(200) ,@DocDate float ,@STATUSID INT  , @AssetNetValue FLOAT, @ScheduleID INT,@DoXML xml,@AssetOldValue Float
+DECLARE @LineXML NVARCHAR(MAX),@AssetID INT ,@Prefix nvarchar(200),@DeprPostDate nvarchar(50),@CCQUERY nvarchar(max)
+declare @DepAmount float,@Locationid INT,@LocationDimID INT,@AssDimNodeID INT,@AssDimID INT
+declare @TblHist as table(ID int identity(1,1),HDays int,HNodeID INT,HFromDate float,HToDate float)
 declare @Hi int,@HCnt int,@Decimals int,@PostAccounting bit,@PostDate datetime
-declare @tblListJVPost as Table(ID int identity(1,1),DepID bigint,AssetID bigint,Dt DateTime)      
-
+declare @tblListJVPost as Table(ID int identity(1,1),DepID INT,AssetID INT,Dt DateTime)      
+set @return_value=0
 select @Decimals=Value from ADM_GlobalPreferences with(nolock) where Name='DecimalsinAmount'
 
 IF(@Post = 1)
@@ -39,7 +39,7 @@ BEGIN
 		 set @PostAccounting=isnull((select 1 from com_costcenterpreferences with(nolock) where CostCenterID=72 and Name='PostAccountingWhileTransfer' and value='True'),0)
 
 		 INSERT INTO @tblListJVPost
-		 SELECT X.value('@DepID', 'bigint'),X.value('@AssetID', 'bigint'),X.value('@Dt', 'datetime')
+		 SELECT X.value('@DepID', 'INT'),X.value('@AssetID', 'INT'),X.value('@Dt', 'datetime')
 		 from @XML.nodes('/JVXML/ROWS/DepreciationID') as Data(X)  
 		 
 		 SELECT @CNT=COUNT(ID) FROM @tblListJVPost  
@@ -59,7 +59,7 @@ BEGIN
 				continue;
 			
 			declare @dbl float,@dblCum float,@DeprStartDate int,@DeprEndDate int
-				,@DrAcc bigint,@CrAcc bigint,@HDays int,@HNodeID bigint,@TotDays int,@HLine int,@HFromDate float,@HToDate float
+				,@DrAcc INT,@CrAcc INT,@HDays int,@HNodeID INT,@TotDays int,@HLine int,@HFromDate float,@HToDate float
 			
 			select @DepAmount=D.DepAmount,@DeprStartDate=D.DeprStartDate,@DeprEndDate=D.DeprEndDate
 			,@DrAcc=Ass.DeprExpenseACCID,@CrAcc=Ass.AccumDeprACCID
@@ -225,9 +225,9 @@ BEGIN
 						
 						set @DXML=@DocXml
 						insert into ACC_AssetDeprDocDetails(DPScheduleID,Amount,DocSeqNo)
-						SELECT X.value('@TDEPRIDT', 'bigint'),X.value('@Amount', 'float'),X.value('@DocSeqNo', 'int')
+						SELECT X.value('@TDEPRIDT', 'INT'),X.value('@Amount', 'float'),X.value('@DocSeqNo', 'int')
 						from @DXML.nodes('/DocumentXML/Row/Transactions') as Data(X)
-						where X.value('@TDEPRIDT', 'bigint') is not null
+						where X.value('@TDEPRIDT', 'INT') is not null
 						 
 						SELECT @AssetNetValue = AssetNetValue FROM ACC_AssetDepSchedule with(nolock) WHERE DPScheduleID = @DEPID and AssetID = @AssetID
 					
@@ -258,6 +258,7 @@ BEGIN
 						 insert into ACC_AssetChanges(AssetID,ChangeType,ChangeName,StatusID,ChangeDate,AssetOldValue,ChangeValue,AssetNewValue,LocationID,GUID,CreatedBy,CreatedDate)
 						 values(@AssetID,7,'Depreciation Dashboard Post',1,@DT_INT,@AssetOldValue,@DepAmount,@AssetNetValue,NULL,newid(),'ADMIN',convert(float,@DT))
 				  END
+				  
 			  END 
 	 END 
 END
@@ -265,13 +266,13 @@ ELSE
 BEGIN  
    IF(@JVXML is not null and @JVXML<>'')    
    BEGIN    
-    DECLARE @DOCID BIGINT,@DELDocPrefix nvarchar(50),@DELDocNumber nvarchar(500)
+    DECLARE @DOCID INT,@DELDocPrefix nvarchar(50),@DELDocNumber nvarchar(500)
     select @DeprPostDate=Value from com_costcenterpreferences with(nolock) where costcenterid=72 and Name='AssetUnpostDepr'
    
     SET @XML=@JVXML     
    
     INSERT INTO @tblListJVPost(DepID,AssetID) 
-	SELECT X.value('@DepID', 'bigint'),X.value('@AssetID', 'bigint')
+	SELECT X.value('@DepID', 'INT'),X.value('@AssetID', 'INT')
 	from @XML.nodes('/JVXML/DepreciationID') as Data(X) 
   
     SELECT @CNT = COUNT(ID) FROM @tblListJVPost    
@@ -341,59 +342,6 @@ print(@DocXml)
 '
 
 EXEC sp_executesql @SqlCC, N'@DT_INT INT OUTPUT, @DocXml nvarchar(max) OUTPUT',@DT_INT OUTPUT,@DocXml OUTPUT
-
-			/***
-			select @DT_INT=DocDate,@DocXml=@DocXml+'<Row> <Transactions DocSeqNo="'+convert(nvarchar,DocSeqNo)+'"  DocDetailsID="0" DebitAccount="'+convert(nvarchar,D.CreditAccount)+'" CreditAccount="'+convert(nvarchar,D.DebitAccount)+'" 
- Amount="'+convert(nvarchar,D.Amount)+'" AmtFc="'+convert(nvarchar,D.AmountFC)+'" CurrencyID="1" ExchangeRate="1" LineNarration="Depreciation Un-Posting" CommonNarration=" Depreciation Un-Posting"  >
-</Transactions><Numeric /><Alpha/><EXTRAXML/>
-<CostCenters Query="dcccnid1='+convert(nvarchar,dcccnid1)+',dcccnid2='+convert(nvarchar,dcccnid2)+',dcccnid3='+convert(nvarchar,dcccnid3)+',dcccnid4='+convert(nvarchar,dcccnid4)+',dcccnid5='+convert(nvarchar,dcccnid5)
-+',dcccnid6='+convert(nvarchar,dcccnid6)+',dcccnid7='+convert(nvarchar,dcccnid7)+',dcccnid8='+convert(nvarchar,dcccnid8)+',dcccnid9='+convert(nvarchar,dcccnid9)+',dcccnid10='+convert(nvarchar,dcccnid10)
-+case when dcccnid11>1 then ',dcccnid11='+convert(nvarchar,dcccnid11) else '' end
-+case when dcccnid12>1 then ',dcccnid12='+convert(nvarchar,dcccnid12) else '' end
-+case when dcccnid13>1 then ',dcccnid13='+convert(nvarchar,dcccnid13) else '' end
-+case when dcccnid14>1 then ',dcccnid14='+convert(nvarchar,dcccnid14) else '' end
-+case when dcccnid15>1 then ',dcccnid15='+convert(nvarchar,dcccnid15) else '' end
-+case when dcccnid16>1 then ',dcccnid16='+convert(nvarchar,dcccnid16) else '' end
-+case when dcccnid17>1 then ',dcccnid17='+convert(nvarchar,dcccnid17) else '' end
-+case when dcccnid18>1 then ',dcccnid18='+convert(nvarchar,dcccnid18) else '' end
-+case when dcccnid19>1 then ',dcccnid19='+convert(nvarchar,dcccnid19) else '' end
-+case when dcccnid20>1 then ',dcccnid20='+convert(nvarchar,dcccnid20) else '' end
-+case when dcccnid21>1 then ',dcccnid21='+convert(nvarchar,dcccnid21) else '' end
-+case when dcccnid22>1 then ',dcccnid22='+convert(nvarchar,dcccnid22) else '' end
-+case when dcccnid23>1 then ',dcccnid23='+convert(nvarchar,dcccnid23) else '' end
-+case when dcccnid24>1 then ',dcccnid24='+convert(nvarchar,dcccnid24) else '' end
-+case when dcccnid25>1 then ',dcccnid25='+convert(nvarchar,dcccnid25) else '' end
-+case when dcccnid26>1 then ',dcccnid26='+convert(nvarchar,dcccnid26) else '' end
-+case when dcccnid27>1 then ',dcccnid27='+convert(nvarchar,dcccnid27) else '' end
-+case when dcccnid28>1 then ',dcccnid28='+convert(nvarchar,dcccnid28) else '' end
-+case when dcccnid29>1 then ',dcccnid29='+convert(nvarchar,dcccnid29) else '' end
-+case when dcccnid30>1 then ',dcccnid30='+convert(nvarchar,dcccnid30) else '' end
-+case when dcccnid31>1 then ',dcccnid31='+convert(nvarchar,dcccnid31) else '' end
-+case when dcccnid32>1 then ',dcccnid32='+convert(nvarchar,dcccnid32) else '' end
-+case when dcccnid33>1 then ',dcccnid33='+convert(nvarchar,dcccnid33) else '' end
-+case when dcccnid34>1 then ',dcccnid34='+convert(nvarchar,dcccnid34) else '' end
-+case when dcccnid35>1 then ',dcccnid35='+convert(nvarchar,dcccnid35) else '' end
-+case when dcccnid36>1 then ',dcccnid36='+convert(nvarchar,dcccnid36) else '' end
-+case when dcccnid37>1 then ',dcccnid37='+convert(nvarchar,dcccnid37) else '' end
-+case when dcccnid38>1 then ',dcccnid38='+convert(nvarchar,dcccnid38) else '' end
-+case when dcccnid39>1 then ',dcccnid39='+convert(nvarchar,dcccnid39) else '' end
-+case when dcccnid40>1 then ',dcccnid40='+convert(nvarchar,dcccnid40) else '' end
-+case when dcccnid41>1 then ',dcccnid41='+convert(nvarchar,dcccnid41) else '' end
-+case when dcccnid42>1 then ',dcccnid42='+convert(nvarchar,dcccnid42) else '' end
-+case when dcccnid43>1 then ',dcccnid43='+convert(nvarchar,dcccnid43) else '' end
-+case when dcccnid44>1 then ',dcccnid44='+convert(nvarchar,dcccnid44) else '' end
-+case when dcccnid45>1 then ',dcccnid45='+convert(nvarchar,dcccnid45) else '' end
-+case when dcccnid46>1 then ',dcccnid46='+convert(nvarchar,dcccnid46) else '' end
-+case when dcccnid47>1 then ',dcccnid47='+convert(nvarchar,dcccnid47) else '' end
-+case when dcccnid48>1 then ',dcccnid48='+convert(nvarchar,dcccnid48) else '' end
-+case when dcccnid49>1 then ',dcccnid49='+convert(nvarchar,dcccnid49) else '' end
-+case when dcccnid50>1 then ',dcccnid50='+convert(nvarchar,dcccnid50) else '' end
-+',"/></Row>'
-			from ACC_DocDetails D with(nolock) inner join COM_DocCCDATA DCC with(nolock) on D.AccDocDetailsID=DCC.AccDocDetailsID
-			where DocID=@DOCID
-			order by DocSeqNo
-			***/
-			
 
 			set @DocXml=@DocXml+'</DocumentXML>'
 			
@@ -481,7 +429,11 @@ else
 SET NOCOUNT OFF;  
 RETURN @return_value
 END TRY        
-BEGIN CATCH        
+BEGIN CATCH   
+
+	if(@return_value<0)
+		return @return_value
+					     
 IF ERROR_NUMBER()=50000    
  BEGIN    
  SELECT ErrorMessage,ErrorNumber FROM COM_ErrorMessages WITH(nolock)     
@@ -507,6 +459,5 @@ COM_ErrorMessages WITH(nolock)
  ROLLBACK TRANSACTION      
  SET NOCOUNT OFF        
  RETURN -999         
-END CATCH   
-
+END CATCH
 GO

@@ -13,7 +13,7 @@ BEGIN TRANSACTION
 BEGIN TRY      
 
 	SET NOCOUNT ON;
-	DECLARE @ColumnName nvarchar(200),@strQry nvarchar(max),@strUQry nvarchar(max),@strEQry nvarchar(max),@strDQry nvarchar(max)
+	DECLARE @ColumnName nvarchar(200),@strQry nvarchar(max),@strUQry nvarchar(max),@strEQry nvarchar(max),@strDQry nvarchar(max),@strAAQry nvarchar(max)
 	Declare @dcNum nvarchar(100),@dcCalcNum nvarchar(100),@dcCurrID nvarchar(100),@dcExchRT nvarchar(100),@dcCalcNumFC nvarchar(100)
 	Declare @RC int,@i int,@J INT,@R INT,@CostCenterID INT,@MAXSNO INT,@K INT,@TRC INT,@X INT,@COUNT INT,@PAYROLLDATE DATETIME,@TYPEID INT
 	IF(@Flag=0)--PAYROLL DOCUMENTS
@@ -69,7 +69,7 @@ BEGIN TRY
 			IF(@strQry<>'')
 			BEGIN
 				print (@strQry)
-				EXEC(@strQry)
+				EXEC sp_executesql @strQry
 			END
 		SET @J=@J+1
 		END
@@ -95,6 +95,7 @@ SELECT * FROM @TAB1
 			SET @strEQry=''
 			SET @strDQry=''
 			SET @ColumnName=''
+			SET @strAAQry=''
 			SET @X=1
 				WHILE(@X<=@MAXSNO)
 				BEGIN
@@ -113,6 +114,13 @@ SELECT * FROM @TAB1
 								SET @strEQry=@strEQry+' ALTER TABLE PAY_EmpPay_History ADD '+ Convert(varchar,@ColumnName)+' float not null default(0) '
 							END
 						END
+						IF NOT EXISTS(SELECT NAME FROM sys.columns WHERE name =@ColumnName AND OBJECT_ID=OBJECT_ID(N'PAY_EmpMonthlyArrAdjDetails'))
+						BEGIN
+							IF((SELECT COUNT(*) FROM COM_CC50054 WITH(NOLOCK) WHERE SNO=@X AND TYPE=1 AND CONVERT(DATETIME,PAYROLLDATE)=CONVERT(DATETIME,@PAYROLLDATE))>0)
+							BEGIN
+								SET @strAAQry=@strAAQry+' ALTER TABLE PAY_EmpMonthlyArrAdjDetails ADD '+ Convert(varchar,@ColumnName)+' float not null default(0) '
+							END
+						END
 					END
 					--ADD EMPPAY EARNING COLUMNS
 
@@ -127,6 +135,13 @@ SELECT * FROM @TAB1
 							BEGIN
 								SET @strDQry=@strDQry+' ALTER TABLE PAY_EmpPay ADD '+ Convert(varchar,@ColumnName)+' float not null default(0) '
 								SET @strDQry=@strDQry+' ALTER TABLE PAY_EmpPay_History ADD '+ Convert(varchar,@ColumnName)+' float not null default(0) '
+							END
+						END
+						IF NOT EXISTS(SELECT NAME FROM sys.columns WHERE name =@ColumnName AND OBJECT_ID=OBJECT_ID(N'PAY_EmpMonthlyArrAdjDetails'))
+						BEGIN
+							IF((SELECT COUNT(*) FROM COM_CC50054 WITH(NOLOCK) WHERE SNO=@X AND TYPE=2 AND CONVERT(DATETIME,PAYROLLDATE)=@PAYROLLDATE)>0)
+							BEGIN
+								SET @strAAQry=@strAAQry+' ALTER TABLE PAY_EmpMonthlyArrAdjDetails ADD '+ Convert(varchar,@ColumnName)+' float not null default(0) '
 							END
 						END
 					END
@@ -163,19 +178,24 @@ SELECT * FROM @TAB1
 				IF(@strQry<>'')
 				BEGIN
 					print (@strQry)
-					EXEC(@strQry)
+					EXEC sp_executesql @strQry
 					PRINT (@strUQry)
-					EXEC (@strUQry)
+					EXEC sp_executesql @strUQry
 				END
 				IF(@strEQry<>'')
 				BEGIN
 				print (@strEQry)
-					EXEC(@strEQry)
+					EXEC sp_executesql @strEQry
 				END
 				IF(@strDQry<>'')
 				BEGIN
 				--print (@strDQry)
-					EXEC(@strDQry)
+					EXEC sp_executesql @strDQry
+				END
+				IF(@strAAQry<>'')
+				BEGIN
+				print (@strAAQry)
+					EXEC sp_executesql @strAAQry
 				END
 		SET @K=@K+1
 		END
@@ -196,5 +216,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH   
+END CATCH
 GO

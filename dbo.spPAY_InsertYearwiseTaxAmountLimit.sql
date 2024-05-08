@@ -5,6 +5,7 @@ GO
 CREATE PROCEDURE [dbo].[spPAY_InsertYearwiseTaxAmountLimit]
 	@Year [int],
 	@TaxAmountLimitXML [nvarchar](max),
+	@Regime [nvarchar](20),
 	@CreatedBy [nvarchar](50) = NULL,
 	@UserID [int] = 1,
 	@LangID [int] = 1
@@ -12,13 +13,22 @@ WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION
 Begin Try
-DECLARE @XML xml
+DECLARE @XML xml,@Hasaccesss BIT,@RoleID INT
 
-DELETE FROM PAY_YearwiseTaxAmountLimit WHERE Year=@Year
+--User access check for EMPLOYEE  
+SELECT @RoleID=R.ROLEID FROM ADM_USERROLEMAP R WITH(NOLOCK),ADM_USERS U WITH(NOLOCK) WHERE R.USERID=U.USERID AND U.USERID=@UserID
+SET @Hasaccesss=dbo.fnCOM_HasAccess(@RoleID,263,1)  
+IF @Hasaccesss=0  
+BEGIN  
+	RAISERROR('-105',16,1)  
+END
+	
+
+DELETE FROM PAY_YearwiseTaxAmountLimit WHERE Year=@Year and regime=@Regime
 
 SET @XML=@TaxAmountLimitXML
-INSERT INTO PAY_YearwiseTaxAmountLimit(Year,ComponentID,AmountLimit,CreatedBy,CreatedDate,ModifiedDate)
-SELECT  @Year,A.value('@ComponentID','int'),A.value('@AmountLimit','nvarchar(50)'),@CreatedBy,getdate(),getdate()
+INSERT INTO PAY_YearwiseTaxAmountLimit(Year,ComponentID,AmountLimit,CreatedBy,CreatedDate,ModifiedDate,Regime)
+SELECT  @Year,A.value('@ComponentID','int'),A.value('@AmountLimit','nvarchar(50)'),@CreatedBy,getdate(),getdate(),@Regime
 FROM @XML.nodes('Rows/row') as Data(A)	
 
 COMMIT TRANSACTION

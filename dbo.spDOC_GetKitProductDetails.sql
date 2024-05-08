@@ -3,9 +3,9 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetKitProductDetails]
-	@CCID [bigint],
-	@LinkedCCID [bigint],
-	@DynamicInvDocDetailsID [bigint],
+	@CCID [int],
+	@LinkedCCID [int],
+	@DynamicInvDocDetailsID [int],
 	@UserID [int] = 0,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -15,8 +15,8 @@ BEGIN TRY
 
 	--Declaration Section    
 	DECLARE @Tolerance nvarchar(50),@HasAccess bit,@CostCenterID int,@ColumnName nvarchar(50),@lINKColumnName nvarchar(50),
-	@ColHeader nvarchar(200) ,@DocumentLinkDefID BIGINT    
-	DECLARE @Query nvarchar(max),@LinkCostCenterID int,@ColID bigint,@lINKColID bigint,@PrefValue nvarchar(50),@ProductColName  nvarchar(50)       
+	@ColHeader nvarchar(200) ,@DocumentLinkDefID INT    
+	DECLARE @Query nvarchar(max),@LinkCostCenterID int,@ColID INT,@lINKColID INT,@PrefValue nvarchar(50),@ProductColName  nvarchar(50)       
    
 	--SP Required Parameters Check    
 	IF (@DocumentLinkDefID <1)    
@@ -28,7 +28,7 @@ BEGIN TRY
 	where CostCenterIDBase=@CCID  and CostCenterIDLinked=@LinkedCCID
 	  
 	--Create temporary table     
-	declare @tblList TABLE(ID int identity(1,1),DocDetailsID bigint,Val float,PercentValue FLOAT)      
+	declare @tblList TABLE(ID int identity(1,1),DocDetailsID INT,Val float,PercentValue FLOAT)      
 
 	SELECT @CostCenterID=[CostCenterIDBase]    
 	  ,@ColID=[CostCenterColIDBase]    
@@ -51,7 +51,7 @@ BEGIN TRY
 	where CostCenterID=@LinkCostCenterID and PrefName='AllowMultipleLinking'      
 	   
 	set @Tolerance=''
-	select @Tolerance=PrefValue from COM_DocumentPreferences        
+	select @Tolerance=PrefValue from COM_DocumentPreferences WITH(NOLOCK)        
 	where CostCenterID=@CCID and PrefName='Enabletolerance'          
 
 	set @Query=''
@@ -143,14 +143,13 @@ BEGIN TRY
 	join @tblList c on a.InvDocDetailsID=c.DocDetailsID    
 	where a.statusid=369    
 	   
-	select @ProductColName=SysColumnName from ADM_COSTCENTERDEF 
+	select @ProductColName=SysColumnName from ADM_COSTCENTERDEF WITH(NOLOCK) 
 	where COSTCENTERID=@LinkCostCenterID and SysColumnName like 'dcalpha%' and ColumnCostCenterID=3
 
 	  
 	SELECT c.Val ,@lINKColumnName,@ColHeader,@lINKColumnName,@ProductColName ProductColName,A.InvDocDetailsID AS DocDetailsID,A.[AccDocDetailsID],a.VoucherNO      
 		 ,a.[DocID]      
-		 ,a.[CostCenterID]      
-		 ,a.[DocumentTypeID]      
+		 ,a.[CostCenterID]        
 		 ,a.[DocumentType]      
 		 ,a.[VersionNo]      
 		 ,a.[DocAbbr]      
@@ -180,9 +179,7 @@ BEGIN TRY
 		 ,a.[Gross], a.[GrossFC]     
 		 ,a.[StockValue]  ,a.[StockValueFC]     
 		 ,a.[CurrencyID]      
-		 ,a.[ExchangeRate]      
-		 ,a.[CompanyGUID]      
-		 ,a.[GUID]      
+		 ,a.[ExchangeRate]   
 		 ,a.[CreatedBy]      
 		 ,a.[CreatedDate],UOMConversion,UOMConvertedQty, Cr.AccountName as CreditAcc, Dr.AccountName as DebitAcc,a.DynamicInvDocDetailsID,a.ReserveQuantity  FROM		[INV_DocDetails] a with(nolock)      
 	join dbo.INV_Product p with(nolock) on  a.ProductID=p.ProductID  

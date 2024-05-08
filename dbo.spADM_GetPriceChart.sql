@@ -4,9 +4,9 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetPriceChart]
 	@Type [int],
-	@PriceChartID [bigint],
+	@PriceChartID [int],
 	@Param [nvarchar](max),
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -19,7 +19,7 @@ SET NOCOUNT ON;
 	IF @Type=0 /*TO GET SCREEN DETAILS*/
 	BEGIN
 		SELECT FEATUREID ID,NAME FROM ADM_FEATURES WITH(NOLOCK) 
-		WHERE (FEATUREID>50000 OR FEATUREID=2 OR FEATUREID=3 OR FEATUREID=12 or FEATUREID=61) and IsEnabled=1
+		WHERE (FEATUREID>50000 OR FEATUREID=2 OR FEATUREID=3 OR FEATUREID=12) and IsEnabled=1
 
 		SELECT * FROM COM_CCPricesDefn WITH(NOLOCK) WHERE ProfileID=@PriceChartID
 		
@@ -73,12 +73,6 @@ SET NOCOUNT ON;
 				set @Join=@Join+' left join COM_Currency C with(nolock) on C.CurrencyID=T.CurrencyID'
 				set @SQL=@SQL+',C.Name Currency'
 			end
-			else if(@CCID=61)
-			begin
-				set @Join=@Join+' left join '+@TblName+' V with(nolock) on '
-				set @Join=@Join+' V.VehicleID=T.VehicleID'
-				set @SQL=@SQL+',V.Make+''-''+V.MOdel+''-''+V.Variant+''-(''+convert(nvarchar,V.startYear)+''-''+ case when (V.EndYear= ''0'') then convert(nvarchar,Datepart(YEAR,GETDATE()))+'')'' else convert(nvarchar,V.endYear)+'')'' end Vehicle'
-			end
 			else
 			begin
 				set @Join=@Join+' left join '+@TblName+' D'+convert(nvarchar,(@CCID-50000))+' with(nolock) on '
@@ -106,8 +100,7 @@ SET NOCOUNT ON;
 		
 		SET @SQL=@SQL+' ORDER BY ProductName,WEF DESC'
 		
-		PRINT(@SQL)
-		EXEC(@SQL)
+		Exec sp_executesql @SQL     
 	END	
 	ELSE IF @Type=4 /*TO GET CUSTOMIZATION INFO*/
 	BEGIN
@@ -120,7 +113,9 @@ SET NOCOUNT ON;
 		select SysColumnName,(SELECT TOP 1 ResourceData FROM COM_LanguageResources with(nolock) WHERE LanguageID=@LangID AND ResourceID=C.ResourceID) ResourceData 
 		FROM ADM_CostCenterDef C with(nolock)
 		WHERE CostCenterID=3 AND (SysColumnName LIKE 'PurchaseRate%' OR SysColumnName LIKE 'SellingRate%' 
-		OR SysColumnName LIKE 'ReorderLevel%' OR SysColumnName LIKE 'ReorderQty')
+		OR SysColumnName LIKE 'ReorderLevel%' OR SysColumnName LIKE 'ReorderQty'
+		OR SysColumnName LIKE 'MaxInventoryLevel%' OR SysColumnName LIKE 'ReorderMinOrderQty%'	OR SysColumnName LIKE 'ReorderMaxOrderQty%'
+		)
 		ORDER BY SysColumnName
 		
 		SELECT [Value],Name FROM ADM_GlobalPreferences with(nolock) WHERE [Name] in ('Price Chart Default CC','Price Chart Widths')
@@ -149,8 +144,7 @@ SET NOCOUNT ON;
 		JOIN COM_LanguageResources LR with(nolock) ON LR.LanguageID='+CONVERT(NVARCHAR,@LangID)+' AND LR.ResourceID=C.ResourceID
 		WHERE C.CostCenterID=3 AND C.ColumnCostCenterID>50000 and C.IsColumnInUse=1
 		ORDER BY SysColumnName'
-		print  @SQL
-		EXEC (@SQL)
+		Exec sp_executesql @SQL     
 		
 	END
 	ELSE IF @Type=5 /*TO DELETE PROFILE*/
@@ -171,26 +165,43 @@ SET NOCOUNT ON;
 	ELSE IF @Type=6 /*TO GET DEFAULT PROFILE*/
 	BEGIN
 		DECLARE @CC NVARCHAR(100)
-		DECLARE @TblCCD AS TABLE(ID INT IDENTITY(1,1),CC INT)
+		CREATE TABLE #TblCCD(ID INT IDENTITY(1,1),CC INT)
 		
 		SELECT @CC=[Value] FROM ADM_GlobalPreferences with(nolock) WHERE [Name]='Price Chart Default CC'
 		
 		SELECT @CC DefaultCC
 		
-		INSERT INTO @TblCCD(CC)
+		INSERT INTO #TblCCD(CC)
 		EXEC SPSplitString @CC,','
 
 	--	select * from @TblCCD
 		SET @GroupBy='P.UOMID'
 		SET @Join='P.UOMID=T.UOMID'
 		
-		DECLARE @WHERE NVARCHAR(MAX),@OrderBY NVARCHAR(MAX),@COUNT INT
-		SET @I=50000       
-		SET @COUNT=50050
+		DECLARE @WHERE NVARCHAR(MAX),@OrderBY NVARCHAR(MAX),@COUNT INT,@J INT
+		
 		SET @WHERE='P.WEF<='+CONVERT(NVARCHAR,CONVERT(FLOAT,getdate()))+' and ProductID='+CONVERT(NVARCHAR,@PriceChartID)
-		WHILE(@I<@COUNT)
+		
+		IF (select count(*) from #TblCCD WHERE CC=2)=0
+			SET @WHERE=@WHERE+' AND AccountID=1'
+		ELSE
 		BEGIN
-			SET @I=@I+1			
+			SET @GroupBy=@GroupBy+',AccountID'
+			SET @Join=@Join+' AND P.AccountID=T.AccountID'
+		END
+		
+		TRUNCATE TABLE #TblCCD
+		
+		INSERT INTO #TblCCD
+		select CONVERT(INT,REPLACE(name,'CCNID',''))
+		from sys.columns WITH(NOLOCK)
+		where object_id=object_id('COM_CCPrices') and name LIKE 'ccnid%'
+		
+		SELECT @J=1,@COUNT=COUNT(*) FROM #TblCCD WITH(NOLOCK)
+		
+		WHILE(@J<@COUNT)
+		BEGIN
+			SELECT @I=CC FROM #TblCCD WITH(NOLOCK) WHERE ID=@J		
 			IF PATINDEX('%'+CONVERT(NVARCHAR,@I)+'%',@CC)=0
 				SET @WHERE=@WHERE+' AND CCNID'+convert(nvarchar,@I-50000)+'=1'
 			ELSE
@@ -198,16 +209,11 @@ SET NOCOUNT ON;
 				SET @GroupBy=@GroupBy+',P.CCNID'+convert(nvarchar,@I-50000)
 				SET @Join=@Join+' AND P.CCNID'+convert(nvarchar,@I-50000)+'=T.CCNID'+convert(nvarchar,@I-50000)
 			END
+			SET @J=@J+1	
 		END
 		
-		IF (select count(*) from @TblCCD WHERE CC=2)=0
-			SET @WHERE=@WHERE+' AND AccountID=1'
-		ELSE
-		BEGIN
-			SET @GroupBy=@GroupBy+',AccountID'
-			SET @Join=@Join+' AND P.AccountID=T.AccountID'
-		END
-
+		
+		DROP TABLE #TblCCD	
 		--SET @SQL='SELECT * FROM COM_CCPrices P WHERE '+@WHERE
 		--EXEC(@SQL)
 		
@@ -219,8 +225,7 @@ SET NOCOUNT ON;
 		FROM COM_CCPrices P with(nolock) WHERE PriceCCID IN( SELECT MAX(PriceCCID) FROM COM_CCPrices P with(nolock),
 		(SELECT MAX(WEF) WEF,'+@GroupBy+' FROM COM_CCPrices P with(nolock) WHERE '+@WHERE+' GROUP BY '+@GroupBy+') T
 					WHERE '+@Join+' AND '+@WHERE+' GROUP BY '+@GroupBy+')'
-		print(@SQL)
-		EXEC(@SQL)
+		Exec sp_executesql @SQL     
 			
 	END
 	ELSE IF @Type=7 /* ACTIVE/INACTIVE */
@@ -235,7 +240,7 @@ SET NOCOUNT ON;
 	END
 	ELSE IF @Type=8 /* GET PRICE CHART DATA */
 	BEGIN
-		DECLARE @isGrp BIT,@NODEID bigint,@UOMID int,@XML xml,@PCType int
+		DECLARE @isGrp BIT,@NODEID INT,@UOMID int,@XML xml,@PCType int
 		declare @PTCC table(id 	int identity(1,1),CCID int,isgrp bit,tblname nvarchar(200))		
 		insert into @PTCC
 		SELECT [CostCenterID],[IsGroupExists],b.TableName
@@ -250,9 +255,9 @@ SET NOCOUNT ON;
 		set @UOMID=substring(@Param,1,@UOMID-1)		
 		--select @UOMID,@PCType,@XML
 		
-		DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId BIGINT)        
+		DECLARE @tblCC AS TABLE(ID int identity(1,1),CostCenterID int,NodeId INT)        
 	   INSERT INTO @tblCC(CostCenterID,NodeId)        
-	   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','BIGINT')        
+	   SELECT X.value('@CostCenterID','int'),X.value('@NODEID','INT')        
 	   FROM @XML.nodes('/XML/Row') as Data(X)   
 		
 		set @WHERE=''
@@ -285,7 +290,7 @@ SET NOCOUNT ON;
 					BEGIN
 						set @SQL='Select @NID='+REPLACE(@CC,'=','')+' from com_CCCCData WITH(NOLOCK) 
 						where CostcenterID=3 and NOdeID='+convert(nvarchar,@ProductID)
-						EXEC sp_executesql @SQL, N'@NID BIGINT OUTPUT', @NID OUTPUT  
+						EXEC sp_executesql @SQL, N'@NID INT OUTPUT', @NID OUTPUT  
 						if(@NID>1)
 						 insert into @tblCC(CostCenterID,NodeId)values(@CcID,@NID)
 					END
@@ -341,8 +346,7 @@ SET NOCOUNT ON;
 		
 		select * from inv_product with(nolock) where ProductID=@PriceChartID
 		
-	   --print @SQL
-	   exec(@SQL)  
+	   Exec sp_executesql @SQL     
 	   
    END
 	
@@ -364,5 +368,5 @@ BEGIN CATCH
 --ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

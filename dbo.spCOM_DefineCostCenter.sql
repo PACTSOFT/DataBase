@@ -8,7 +8,7 @@ CREATE PROCEDURE [dbo].[spCOM_DefineCostCenter]
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [bigint],
+	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -17,7 +17,7 @@ BEGIN TRANSACTION
 BEGIN TRY    
 SET NOCOUNT ON    
 		--Declaration Section  
-		DECLARE @SQL NVARCHAR(MAX),@HasAccess BIT,@Table NVARCHAR(50),@CreatedDt FLOAT,@RESOURCEMAX BIGINT
+		DECLARE @SQL NVARCHAR(MAX),@HasAccess BIT,@Table NVARCHAR(50),@CreatedDt FLOAT,@RESOURCEMAX INT
 		DECLARE @ActiveStatusId INT,@GridViewID INT,@CodeColID INT,@NameColID INT
 
 		--SP Required Parameters Check  
@@ -46,15 +46,15 @@ SET NOCOUNT ON
 			SET @Table='COM_CC'+CONVERT(NVARCHAR,@CostCenterId)
 			
 			SET @SQL='CREATE TABLE '+@Table+'(    
-			[NodeID] [bigint] IDENTITY(1,1) NOT NULL,
+			[NodeID] [INT] IDENTITY(1,1) NOT NULL,
 			Code NVARCHAR(500),
 			Name NVARCHAR(500), 
 			AliasName NVARCHAR(500),   
 			[StatusID] [INT] NOT NULL,    
 			[Depth] [INT] NOT NULL,    
-			[ParentID] [bigint] NOT NULL,    
-			[lft] [bigint] NOT NULL,    
-			[rgt] [bigint] NOT NULL,    
+			[ParentID] [INT] NOT NULL,    
+			[lft] [INT] NOT NULL,    
+			[rgt] [INT] NOT NULL,    
 			[IsGroup] [BIT] NOT NULL,
 			[CreditDays] [int] NOT NULL,
 			[CreditLimit] [float] NOT NULL,
@@ -214,15 +214,11 @@ SET NOCOUNT ON
 			SET @NameColID=SCOPE_IDENTITY()   
 	
 
-
-
-
-
 			EXEC	[spCOM_SetInsertResourceData] 'AliasName','AliasName',@CostCenterName,@UserName,1,@RESOURCEMAX output
 			--Insert Name column definition TO ADM_CostCenterDef TABLE.  
 			INSERT INTO ADM_CostCenterDef(CostCenterID,CostCenterName,SysTableName,UserColumnName,SysColumnName,UserColumnType,ResourceID,ColumnOrder,IsCostCenterUserDefined,IsColumnUserDefined,ColumnCostCenterID,IsMandatory,IsEditable,CompanyGUID,GUID,CreatedBy,CreatedDate)    
 			VALUES(@CostCenterId,@CostCenterName,@Table,'AliasName','AliasName','TEXT',@RESOURCEMAX,0,0,0,0,0,0,@CompanyGUID,NEWID(),@UserName,@CreatedDt)    
-			SET @NameColID=SCOPE_IDENTITY()   
+			--SET @NameColID=SCOPE_IDENTITY()   
 
 
 
@@ -271,6 +267,43 @@ SET NOCOUNT ON
 			 
 			INSERT INTO ADM_GridViewColumns(GridViewID,CostCenterColID,ColumnOrder,ColumnWidth,CreatedBy,CreatedDate)    
 			VALUES(@GridViewID,@NameColID,1,200,@UserName,@CreatedDt)  
+			
+			 INSERT INTO [ADM_GridView]    
+			([CostCenterID]    
+			,[FeatureID]    
+			,[ViewName] 
+			,[RoleID]    
+			,[UserID]    
+			,[IsViewRoleDefault]    
+			,[IsViewUserDefault]    
+			,[IsUserDefined]    
+			,[CompanyGUID]    
+			,[GUID]     
+			,[CreatedBy]    
+			,[CreatedDate],ChunkCount, DefaultColID , DefaultFilterID)    
+		 VALUES (98,@CostCenterId,'Default view',1,1,1,1,0,'admin'
+			,newid(),'admin',22,1000 ,-1, 5)    
+       
+		set @GridViewID=SCOPE_IDENTITY()--Getting GridViewID 
+			 
+			 INSERT INTO [ADM_GridViewColumns]    
+			([GridViewID],CostCenterColID,[ColumnFilter],[ColumnOrder]    
+			,[ColumnWidth],[Description] ,[IsCode]   ,[CreatedBy]    ,[CreatedDate],ColumnType)  
+			values(@GridViewID,@namecolid,'',0,200,'',0,'admin',22,1)
+			INSERT INTO [ADM_GridViewColumns]    
+			([GridViewID],CostCenterColID,[ColumnFilter],[ColumnOrder]    
+			,[ColumnWidth],[Description] ,[IsCode]   ,[CreatedBy]    ,[CreatedDate],ColumnType)  
+			values(@GridViewID,@codecolid,'',0,200,'',0,'admin',22,1)
+		    
+			INSERT INTO [ADM_GridViewColumns]    
+			([GridViewID],CostCenterColID,[ColumnFilter],[ColumnOrder]    
+			,[ColumnWidth],[Description] ,[IsCode]   ,[CreatedBy]    ,[CreatedDate],ColumnType)  
+			values(@GridViewID,@namecolid,'',0,200,'',0,'admin',22,2)
+			INSERT INTO [ADM_GridViewColumns]    
+			([GridViewID],CostCenterColID,[ColumnFilter],[ColumnOrder]    
+			,[ColumnWidth],[Description] ,[IsCode]   ,[CreatedBy]    ,[CreatedDate],ColumnType)  
+			values(@GridViewID,@codecolid,'',0,200,'',0,'admin',22,2)
+
 
 			--Insert costcenter listview definition  
 			INSERT INTO ADM_ListView(FeatureID,CostCenterID,ListViewName,ListViewTypeID,UserID,RoleID,IsUserDefined,GUID,CreatedBy,CreatedDate)    
@@ -342,21 +375,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH      
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+END CATCH
 GO

@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spINV_GetSubstitueGroups]
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -17,10 +17,12 @@ SET NOCOUNT ON;
 			SELECT DISTINCT productid,productname
 			FROM INV_Product S WITH(NOLOCK) where isgroup=1
 			
-			SELECT DISTINCT SubstituteGroupID,SubstituteGroupName FROM INV_ProductSubstitutes WITH(NOLOCK) 
-			SELECT SubstituteGroupID,SubstituteGroupName,P.PRODUCTNAME,P.PRODUCTID,P.ProductCode FROM INV_ProductSubstitutes S WITH(NOLOCK) 
-			LEFT JOIN INV_PRODUCT P ON P.PRODUCTID=S.PRODUCTID
-			 
+			SELECT DISTINCT SubstituteGroupID,SubstituteGroupName 
+			FROM INV_ProductSubstitutes WITH(NOLOCK) 
+			
+			SELECT SubstituteGroupID,SubstituteGroupName,P.PRODUCTNAME,P.PRODUCTID,P.ProductCode,ISNULL(S.SNo,0) SNo
+			FROM INV_ProductSubstitutes S WITH(NOLOCK) 
+			LEFT JOIN INV_PRODUCT P WITH(NOLOCK) ON P.PRODUCTID=S.PRODUCTID
 		END
 COMMIT TRANSACTION
 SET NOCOUNT OFF;  
@@ -40,6 +42,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
-
+END CATCH
 GO

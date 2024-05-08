@@ -3,8 +3,8 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_GetCostCenterPreferences]
-	@CostCenterID [bigint] = 0,
-	@UserID [bigint],
+	@CostCenterID [int] = 0,
+	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -34,14 +34,14 @@ SET NOCOUNT ON
 		if exists (select Value from adm_globalpreferences with(nolock) where Name='EnableLocationWise' and Value='True') 
 			and exists (select Value from adm_globalpreferences with(nolock) where Name='LWFinalization' and Value='True')
 			SELECT FinancialYearsID, CONVERT(DATETIME,FY.FromDate) FromDate_Key,CONVERT(DATETIME,FY.ToDate) ToDate_Key
-			,FY.AccountID Account_Key,A.AccountName Account,FY.LocationID Location_Key,L.Name Location
+			,CONVERT(BIGINT,FY.AccountID) Account_Key,A.AccountName Account,CONVERT(BIGINT,FY.LocationID) Location_Key,L.Name Location
 			,InvClose,AccCloseXML,InvCloseXML
 			FROM ADM_FinancialYears FY WITH(NOLOCK)
 			left join ACC_Accounts A with(nolock) on A.AccountID=FY.AccountID
 			left join COM_Location L with(nolock) on L.NodeID=FY.LocationID
 			order by FY.FromDate
 		else
-			SELECT FinancialYearsID, CONVERT(DATETIME,FY.FromDate) FromDate_Key,CONVERT(DATETIME,FY.ToDate) ToDate_Key, FY.AccountID Account_Key,(SELECT Top 1 AccountName 
+			SELECT FinancialYearsID, CONVERT(DATETIME,FY.FromDate) FromDate_Key,CONVERT(DATETIME,FY.ToDate) ToDate_Key, CONVERT(BIGINT,FY.AccountID) Account_Key,(SELECT Top 1 AccountName 
 			FROM ACC_Accounts with(nolock) WHERE AccountID=FY.AccountID) Account,InvClose,AccCloseXML,InvCloseXML
 			FROM ADM_FinancialYears FY WITH(NOLOCK)
 			order by FY.FromDate
@@ -70,18 +70,19 @@ SET NOCOUNT ON
 	  
 		--CHANGE FEATUREID FROM 50050 TO 50051
 		select * from adm_features with(nolock)
-		where (featureid between 50000 and 50051 or Featureid in (2,3,106,86,89,73,83,65,92,95,7))  and IsEnabled=1 order by NAME
+		where (featureid>50000 or Featureid in (2,3,106,86,89,73,83,65,92,93,94,95,7,76))  and IsEnabled=1 order by NAME
 
 		select CostCenterID,DocumentName,IsInventory,DocumentType from ADM_DocumentTypes with(nolock) 
 		order by DocumentName
 		
 			
 		SELECT FEATUREID,Name,TableName FROM ADM_FEATURES WITH(NOLOCK) WHERE IsEnabled=1 AND ALLOWCUSTOMIZATION=1 AND 
-		((FEATUREID > 50000 AND FEATUREID <= 50050) OR FEATUREID IN (2,3,51,57,58,61,59,300,65,71,76,72,80,84,81,86,83,88,
+		(FEATUREID > 50000 OR FEATUREID IN (2,3,300,65,71,76,72,80,84,81,86,83,88,
 		78,73,89,82,16,92,93,101,103,95,94,113,104))
 		order by Name
 		
-		select a.CostCenterColID,b.ResourceData,Cformula,SysColumnName,UserDefaultValue,IsMandatory,Decimal from ADM_CostCenterDef a  WITH(NOLOCK)
+		select a.CostCenterColID,b.ResourceData,Cformula,SysColumnName,UserDefaultValue,IsMandatory,Decimal,LocalReference,LinkData
+		from ADM_CostCenterDef a  WITH(NOLOCK)
 		join COM_LanguageResources b WITH(NOLOCK) on a.ResourceID=b.ResourceID
 		where CostCenterID=403 and b.LanguageID=@LangID and IsColumnInUse=1
 		
@@ -98,14 +99,19 @@ SET NOCOUNT ON
 			
 		if exists (select dimin from ADM_CrossDimension with(nolock)) and @tbname is not null and @tbname<>''
 		begin
-			set @SQL='select dIn.Name DimIn,cd.DimIn DimIn_Key,
-			dFor.Name DimFor,cd.DimFor DimFor_Key,
+			set @CONTQry=''
+			select @CONTQry=@CONTQry+',convert(bigint,cd.'+name+')'+name+'_Key' from sys.columns
+			where object_id=object_id('ADM_CrossDimension')
+			and name like 'Dcccnid%'
+			
+			set @SQL='select row_number() over (order by CrossDimensionID) sno,dIn.Name DimIn,convert(bigint,cd.DimIn) DimIn_Key,
+			dFor.Name DimFor,convert(bigint,cd.DimFor) DimFor_Key,
 			cd.Document,case when cd.document=1 then ''Receipt'' when cd.document=2 then ''Payment'' 
 			when cd.document=3 then  ''StockTransfer'' else dt.DocumentName end Document_Key,
 			dr.AccountName DrAccount,
-			cd.draccount DrAccount_Key,
-			 cr.AccountName  CrAccount ,cd.Craccount CrAccount_Key from 
-			ADM_CrossDimension cd with(nolock)
+			convert(bigint,cd.draccount) DrAccount_Key,
+			 cr.AccountName  CrAccount ,convert(bigint,cd.Craccount) CrAccount_Key'+@CONTQry+'
+			 from ADM_CrossDimension cd with(nolock)
 			join '+ @tbname+' dIn with(nolock) on cd.DimIn=dIn.Nodeid
 			join '+ @tbname+' dFor with(nolock) on cd.DimfOR=dFor.Nodeid
 			left join ADM_DocumentTypes dt with(nolock) on dt.CostCenterID=cd.document
@@ -115,27 +121,34 @@ SET NOCOUNT ON
 			exec (@SQL)
 		end
 		ELSE
-			select '' DimIn,cd.DimFor DimIn_Key,'' DimFor,cd.DimFor DimFor_Key,cd.Document,'Receipt' Document_Key,
-			'' DrAccount,cd.draccount DrAccount_Key,''  CrAccount ,cd.Craccount CrAccount_Key from 
+			select '' DimIn,convert(bigint,cd.DimFor) DimIn_Key,'' DimFor,convert(bigint,cd.DimFor) DimFor_Key,cd.Document,'Receipt' Document_Key,
+			'' DrAccount,convert(bigint,cd.draccount) DrAccount_Key,''  CrAccount ,convert(bigint,cd.Craccount) CrAccount_Key from 
 			ADM_CrossDimension cd with(nolock) where 1<>1		
 			
-		SELECT RegisterID RegisterID_Key,RightPanelWidth,RowSize,TouchScreen,ButtonHeight Height,ButtonWidth Width,
+		SELECT convert(bigint,RegisterID) RegisterID_Key,RightPanelWidth,RowSize,TouchScreen,ButtonHeight Height,ButtonWidth Width,
 		CASE WHEN PaymentModes IS NOT NULL THEN '...' ELSE '' END  PaymentMode,PaymentModes,LevelProfile,ActionHeight,ActionWidth 
 		FROM [ADM_RegisterPreferences] WITH(NOLOCK)
 		
 		select distinct ProfileID,ProfileName from ADM_POSLevelsProfiles WITH(NOLOCK)
 		
+		--14
 		select StatusID,Status from com_status with(nolock) where costcenterid = 50051
 		
 		--15
-		SELECT a.GradeID,CONVERT(DATETIME,a.PayrollDate) as PayrollDate, a.Type,a.SNo,a.ComponentID,b.Name as ComponentName
-		FROM COM_CC50054 a WITH(NOLOCK)
-		JOIN COM_CC50052 b WITH(NOLOCK) on b.NodeID=a.ComponentID
-		WHERE  GradeID=1 
-		AND PayrollDate=(SELECT MAX(PayrollDate) FROM COM_CC50054 WITH(NOLOCK) WHERE GradeID=1)
-		
+		IF EXISTS (SELECT * FROM SYS.TABLES WITH(NOLOCK) WHERE NAME IN ('COM_CC50052','COM_CC50054'))
+		BEGIN
+			SELECT a.GradeID,CONVERT(DATETIME,a.PayrollDate) as PayrollDate, a.Type,a.SNo,a.ComponentID,b.Name as ComponentName
+			FROM COM_CC50054 a WITH(NOLOCK)
+			JOIN COM_CC50052 b WITH(NOLOCK) on b.NodeID=a.ComponentID
+			WHERE  GradeID=1 
+			AND PayrollDate=(SELECT MAX(PayrollDate) FROM COM_CC50054 WITH(NOLOCK) WHERE GradeID=1)
+		END
+		ELSE
+			SELECT 1 WHERE 1<>1
+			
 		--16
-		Select FeatureID,Name from ADM_Features where IsEnabled=1 AND ((FeatureID>50000 AND FeatureID<=50050) OR FeatureID IN (50051,50053,50069,50073))
+		Select FeatureID,Name from ADM_Features 
+		where IsEnabled=1 AND FeatureID>50000
 		ORDER BY Name
 
 		--17
@@ -144,34 +157,23 @@ SET NOCOUNT ON
 		WHERE CostCenterId=50051 AND IscolumnInUse=1 AND SysColumnName LIKE 'CCNID%' 
 		ORDER BY UserColumnName
 		
-	END      
-	ELSE IF @CostCenterID=59      
-	BEGIN      
-		--Getting COMMON Preferences.      
-		SELECT  l.ResourceData [Text],ISNULL([Value],DefaultValue) Value,P.Name [DBText],ProbableValues       
-		FROM COM_CostCenterPreferences P WITH(NOLOCK)         
-		LEFT JOIN COM_LanguageResources L ON L.ResourceID=P.ResourceID and LanguageID=@LangID      
-		WHERE P.CostCenterID=@CostCenterID      
-		  
-		SELECT D.DocumentTypeID,D.IsUserDefined,D.CostCenterID,D.DocumentType,D.DocumentAbbr,D.DocumentName,D.IsUserDefined,L.ResourceData, D.IsInventory      
-		FROM ADM_DocumentTypes D WITH(NOLOCK)      
-		INNER JOIN ADM_RibbonView R with(nolock) ON R.FeatureID=D.CostCenterID      
-		LEFT JOIN COM_LanguageResources L with(nolock) ON L.ResourceID=R.FeatureActionResourceID AND L.LanguageID=@LangID       
-		--WHERE D.IsUserDefined=0        
-		ORDER BY D.DocumentType,D.IsUserDefined Asc  
+		--18
+		SELECT CONVERT(DATETIME,BL.FromDate) FromDate_Key,CONVERT(DATETIME,BL.ToDate) ToDate_Key, BL.isEnable,CONVERT(BIGINT,BL.AccountID) Account_Key ,A.AccountName Account
+		FROM ADM_BRSLockedDates BL WITH(NOLOCK) 
+		left join ACC_Accounts A with(nolock) on A.AccountID=BL.AccountID
+		order by BL.FromDate
+		
+		--19
+		SELECT D.SysColumnName,D.CostCenterColID,R.ResourceData,D.CostCenterID  
+		FROM ADM_COSTCENTERDEF D with(nolock)
+		LEFT JOIN COM_LANGUAGERESOURCES R with(nolock) ON R.ResourceID=D.ResourceID and R.languageid=@LangID
+		WHERE D.CostCenterID>50002 AND 
+		(IsColumnUserDefined=0 or IsColumnInUse=1)
 
-		SELECT p.[RoleID]
-		  ,p.[Percentage]
-		  ,p.[LocationID]
-		  ,r.Name as RoleName 
-		  ,l.Name as Location 
-		FROM [SVC_TicketDiscPreferences] p with(nolock)
-		left join ADM_PRoles r with(nolock) on p.RoleID=r.RoleID
-		left join com_location l with(nolock) on p.LocationID=l.NodeID
-
-		select * from SVC_PriceMargin with(nolock)
-   
+		--20
+		SELECT * FROM ADM_PenaltyDoc PD WITH(NOLOCK)  WHERE CostCenterID=10
 	END      
+	      
 	ELSE IF @CostCenterID=43      
 	BEGIN      
 		SELECT  P.PrefValueType,L.ResourceData [Text],'False' Value,P.PrefName [DBText],P.PreferenceTypeName [Group],PrefRowOrder,PrefColOrder      
@@ -321,6 +323,10 @@ SET NOCOUNT ON
 		where c.CostCenterID=95  and C.SysColumnName not in ('Depth','ParentID')                             
 		AND (((C.IsColumnUserDefined=1 OR C.IsCostCenterUserDefined=1) AND C.IsColumnInUse=1 AND C.ISCOLUMNDELETED=0) OR C.IsColumnUserDefined=0)   
 		ORDER BY b.ResourceData
+		
+		select distinct ProfileID,ProfileName from ADM_DocFlowDef WITH(NOLOCK)		
+
+		SELECT ReportID,ReportName FROM ADM_RevenuReports with(nolock) WHERE   ReportID=11
    
 	END      
 	ELSE IF @CostCenterID=104      
@@ -474,9 +480,9 @@ SET NOCOUNT ON
      
 		IF( @CostCenterID=101)      
 		BEGIN 
-			select a.name SysColumnName,replace(a.name,'dcAlpha','Field') UserColumnName from sys.columns a
+			select a.name SysColumnName,replace(a.name,'dcAlpha','Field') UserColumnName from sys.columns a with(nolock)
 			join sys.tables b on a.object_id=b.object_id
-			where b.name='COM_DocTextData'  and a.name not in('DocTextDataID','AccDocDetailsID','InvDocDetailsID')
+			where b.name='COM_DocTextData'  and a.name like 'dcAlpha%' --not in('DocTextDataID','AccDocDetailsID','InvDocDetailsID','tCostCenterID','tDocumentType')
 			order by convert(int,replace(a.name,'dcAlpha',''))
 		END
 		ELSE IF( @CostCenterID=73 or @CostCenterID=89 OR @CostCenterID=86 OR @CostCenterID=83)      
@@ -567,9 +573,9 @@ SET NOCOUNT ON
 		BEGIN    
 			IF( @CostCenterID=92 )  
 			BEGIN
-				SELECT D.CostCenterID,L.ResourceData FROM ADM_DocumentTypes D WITH(NOLOCK)      
+				SELECT D.CostCenterID,L.ResourceData,DocumentType FROM ADM_DocumentTypes D WITH(NOLOCK)      
 				INNER JOIN ADM_RibbonView R with(nolock) ON R.FeatureID=D.CostCenterID      
-				LEFT JOIN COM_LanguageResources L with(nolock) ON L.ResourceID=R.FeatureActionResourceID AND L.LanguageID=@LangID       
+				LEFT JOIN COM_LanguageResources L with(nolock) ON L.ResourceID=R.FeatureActionResourceID AND L.LanguageID=@langid
 				ORDER BY L.ResourceData
 			END
 			
@@ -660,7 +666,7 @@ SET NOCOUNT ON
 			AND (CCTabName IN('Notes','Attachments','Assign','Contacts','Address','Final Reports','Report Template','Credit & Debit') OR (QuickViewCCID IS NOT NULL AND QuickViewCCID > 0))
 			ORDER BY GroupOrder
 		END
-		else IF(@CostCenterID>=50001 and @CostCenterID<=50050)
+		else IF (@CostCenterID>=50000)
 		BEGIN
 			select FeatureID as FeatureID,Name as Name from ADM_Features with(nolock) where FeatureID>=50000  
 		END    

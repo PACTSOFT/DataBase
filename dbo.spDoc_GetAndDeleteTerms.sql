@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDoc_GetAndDeleteTerms]
-	@ProfileID [bigint] = 0,
+	@ProfileID [int] = 0,
 	@Type [int],
 	@UserID [int],
 	@LangID [int] = 1
@@ -15,8 +15,15 @@ SET NOCOUNT ON;
 
 if(@Type=3)
 begin	
-	delete from Acc_PaymentDiscountTerms where ProfileID=@ProfileID
-	delete from Acc_PaymentDiscountProfile where ProfileID=@ProfileID
+	if(exists(select VoucherNo from [COM_DocPayTerms] with(nolock) where  ISNULL(VoucherNo,'')<>'' and ProfileID=@ProfileID))
+	begin
+	   RAISERROR('-110',16,1) 
+	end
+	else
+	begin
+		delete from Acc_PaymentDiscountTerms where ProfileID=@ProfileID
+		delete from Acc_PaymentDiscountProfile where ProfileID=@ProfileID
+	end
 	
 end
 else
@@ -53,16 +60,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION  
 SET NOCOUNT OFF    
 RETURN -999     
-END CATCH 
-
-
-
-
- 
-  
-  
-  
-  
-  
-  
+END CATCH
 GO

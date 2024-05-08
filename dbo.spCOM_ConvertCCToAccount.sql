@@ -34,21 +34,20 @@ SET NOCOUNT ON
 
 	SET @Dt=CONVERT(float,getdate())
 				
-				--IF EXISTS(Select column_name from information_schema.columns where table_name='COM_CC50170' and column_name='Category')
-				--BEGIN
-				--	IF ((SELECT count(*) from COM_CC50170 WITH(nolock) where  isnull(Category,'')<>'' AND NodeID=@CCNodeID)>0)
-				--		SELECT @SelectedNodeID=Category FROM COM_CC50170 WITH(nolock) where NodeID=@CCNodeID
-				--	ELSE
-				--		SELECT @SelectedNodeID=isnull(VALUE,1) FROM ADM_GlobalPreferences WITH(nolock) WHERE NAME='VPAccountGroup' 
-				--END
-				--ELSE
-				--	SELECT @SelectedNodeID=isnull(VALUE,1) FROM ADM_GlobalPreferences WITH(nolock) WHERE NAME='VPAccountGroup' 
-					
-				IF ((SELECT count(*) from COM_CC50170 WITH(nolock) where  isnull(Category,'')<>'' AND NodeID=@CCNodeID)>0)
-					SELECT @SelectedNodeID=Category FROM COM_CC50170 WITH(nolock) where NodeID=@CCNodeID
+				IF EXISTS(Select column_name from information_schema.columns where table_name='COM_CC50170' and column_name='Category')
+				BEGIN
+				set @SSQL=''
+				set @SSQL='	IF ((SELECT count(*) from COM_CC50170 WITH(nolock) where  isnull(Category,'''')<>'''' AND NodeID='+ convert(nvarchar,@CCNodeID) +')>0)
+						SELECT @SelectedNodeID=Category FROM COM_CC50170 WITH(nolock) where NodeID='+ convert(nvarchar,@CCNodeID) +'
+					ELSE
+						SELECT @SelectedNodeID=isnull(VALUE,1) FROM ADM_GlobalPreferences WITH(nolock) WHERE NAME=''VPAccountGroup'''
+				EXEC sp_executesql @SSQL,N'@SelectedNodeID INT output',@SelectedNodeID output		
+				END
 				ELSE
 					SELECT @SelectedNodeID=isnull(VALUE,1) FROM ADM_GlobalPreferences WITH(nolock) WHERE NAME='VPAccountGroup' 
-				
+					
+					
+				set @SSQL=''	
 				--To Set Left,Right And Depth of Record
 				SELECT @SelectedIsGroup=IsGroup,@Selectedlft =lft,@Selectedrgt=rgt,@ParentID=isnull(ParentID,1),@Depth=isnull(Depth,1)
 				from ACC_ACCOUNTS with(NOLOCK) where ACCOUNTID=@SelectedNodeID

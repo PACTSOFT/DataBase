@@ -6,7 +6,7 @@ CREATE PROCEDURE [dbo].[spPAY_GetDimensionDetails]
 	@EmpIDs [nvarchar](max),
 	@CostCenterID [int],
 	@PayrollMonth [datetime] = '01-sep-2017',
-	@UserID [bigint] = 1,
+	@UserID [int] = 1,
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -44,7 +44,7 @@ CREATE TABLE #TEMPEMP(EMPSEQNO INT,EMPCODE NVARCHAR(500),EMPNAME NVARCHAR(500),D
 	    SET @DIMNAME1='DC'+@DIMNAME1
         SET @strQry='ALTER TABLE #TEMPEMP ADD '+ @DIMNAME1 +' NVARCHAR(50)'
         PRINT (@strQry)
-		EXEC (@strQry)
+		EXEC sp_executesql @STRQRY
 		SET @strSelect1=@strSelect1+',CC.'+convert(NVARCHAR,@DIMNAME1)
 		
 		IF(@R=1)
@@ -84,7 +84,7 @@ CREATE TABLE #TEMPEMP(EMPSEQNO INT,EMPCODE NVARCHAR(500),EMPNAME NVARCHAR(500),D
 				
 				
 	print (@strQry1)
-	EXEC (@strQry1)
+	EXEC sp_executesql @strQry1
 	DROP TABLE #TEMPEMP
 END
 

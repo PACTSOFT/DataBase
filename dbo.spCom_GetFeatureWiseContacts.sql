@@ -3,10 +3,10 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCom_GetFeatureWiseContacts]
-	@CostCenterID [bigint] = 0,
-	@NodeID [bigint] = 0,
-	@ContactType [bigint] = 0,
-	@UserID [bigint],
+	@CostCenterID [int] = 0,
+	@NodeID [int] = 0,
+	@ContactType [int] = 0,
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -64,7 +64,7 @@ SET NOCOUNT ON
 		declare @sql nvarchar(max)
 		set @sql='
 		SELECT c.*, l.name as Salutation,r.name as RoleLookUp, s.Status  ,CEX.*,CC.*'+@CustomQuery3+',case when birthday=0 then null else convert(datetime,c.birthday) end birthday1, case when Anniversary=0 then null else convert(Datetime,Anniversary) end anniversary1
-		,c.UserID ContactUserID
+		,ISNULL(c.UserID,0) ContactUserID
 		FROM  COM_Contacts c WITH(NOLOCK) 
 		left join com_lookup l with(nolock) on l.Nodeid=c.SalutationID
 		left join com_lookup r with(nolock) on r.nodeid=c.rolelookupid
@@ -100,5 +100,4 @@ RETURN -999
 END CATCH   
 
 ----[spCom_GetFeatureWiseContacts] 2,4432,2,1,1
- 
 GO

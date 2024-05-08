@@ -4,11 +4,11 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetInvDocumentByVersion]
 	@CostCenterID [int],
-	@DocID [bigint],
+	@DocID [int],
 	@Version [int],
-	@MaxID [bigint],
+	@MaxID [int],
 	@UserID [int] = 0,
-	@RoleID [bigint] = 0,
+	@RoleID [int] = 0,
 	@UserName [nvarchar](50),
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -18,7 +18,7 @@ SET NOCOUNT ON
 
 		--Declaration Section
 		DECLARE @HasAccess bit,@VoucherNo NVARCHAR(100),@DocDate float,@ModifiedDate float
-		Declare @WID bigint,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@HIstory bit,@canEdit bit
+		Declare @WID INT,@Userlevel int,@StatusID int,@Level int,@canApprove bit,@HIstory bit,@canEdit bit
 
 
 		SELECT @VoucherNo=VoucherNo,@DocDate=DocDate  FROM [Inv_DocDetails] WITH(NOLOCK) 
@@ -104,7 +104,16 @@ SET NOCOUNT ON
 			WHERE CostCenterID=@CostCenterID AND DocID=@DocID and versionno=@Version and A.ModifiedDate=@ModifiedDate
 			order by DocSeqNo
 
-		
+			--GETTING DOCUMENT QtyAdjustments DETAILS
+			SELECT A.* FROM [COM_DocQtyAdjustmentsHISTORY] A WITH(NOLOCK)
+			WHERE  A.ModifiedDate=@ModifiedDate
+			AND A.DOCID IN (SELECT DOCID FROM INV_DocDetails_History WITH(NOLOCK) 
+			WHERE CostCenterID=@CostCenterID AND DocID=@DocID and versionno=@Version)
+			UNION
+			SELECT A.* FROM [COM_DocQtyAdjustmentsHISTORY] A WITH(NOLOCK) 
+			WHERE A.InvDocDetailsID=0  and A.ModifiedDate=@ModifiedDate
+			 AND A.DOCID IN (SELECT DOCID FROM INV_DocDetails_History WITH(NOLOCK) 
+			WHERE CostCenterID=@CostCenterID AND DocID=@DocID and versionno=@Version)
 			
 			 
 
@@ -128,4 +137,5 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
+
 GO

@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spPAY_SetPayrollCutomization]
-	@GradeID [bigint],
+	@GradeID [int],
 	@PayrollDate [datetime],
 	@XML [nvarchar](max) = null,
 	@PTXML [nvarchar](max) = null,
@@ -21,17 +21,20 @@ BEGIN TRY
 SET NOCOUNT ON;  
 
 	DECLARE @Dt float,@TempGuid nvarchar(50),@HasAccess bit,@CostCenterID int=50054
-	DECLARE @DATAXML XML,@CUSERNAME nvarchar(50),@CDATE FLOAT
+	DECLARE @DATAXML XML,@CUSERNAME nvarchar(50),@CDATE FLOAT,@Audit NVARCHAR(100),@HistoryStatus NVARCHAR(300)
 	
 	SET @CUSERNAME=@UserName
 	SET @CDATE=CONVERT(FLOAT,GETDATE())
+
+	SELECT @Audit=ISNULL(Value,'False') FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE Name='AllowAuditTrailinCustomizePayroll'
 
 	IF (@XML IS NOT NULL AND @XML <> '')  
 	BEGIN
 		SET @DATAXML=@XML
 		
-		IF EXISTS (SELECT * FROM [COM_CC50054] with(nolock) WHERE [GradeID]=@GradeID AND [PayrollDate]=@PayrollDate)
+		IF EXISTS (SELECT * FROM [COM_CC50054] with(nolock) WHERE [GradeID]=@GradeID AND [PayrollDate]=convert(float,convert(datetime,@PayrollDate)))
 		BEGIN
+			set @HistoryStatus='Update' 
 		
 			SELECT @CUSERNAME=MAX([CreatedBy]),@CDATE=MAX([CreatedDate]) FROM [COM_CC50054] WITH(NOLOCK)
 			WHERE [GradeID]=@GradeID AND [PayrollDate]=@PayrollDate
@@ -41,13 +44,15 @@ SET NOCOUNT ON;
 		END
 		ELSE
 		BEGIN
+			set @HistoryStatus='Add'
+
 			SET @HasAccess=dbo.fnCOM_HasAccess(@RoleID,@CostCenterID,1)
 			IF @HasAccess=0  
 			BEGIN  
 				RAISERROR('-105',16,1)  
 			END
 		END
-
+		
 		INSERT INTO [COM_CC50054]
 		   ([GradeID]
 		   ,[PayrollDate]
@@ -80,6 +85,11 @@ SET NOCOUNT ON;
 		   ,[EncashFormula]
 		   ,[LeaveErrorMessage]
 		   ,LEThresholdLimit,LEDaysField,LEAmountField,LeaveOthFeatures
+		   ,[ShowInESS]
+		   ,[AccrualInProbation]
+		   ,[AvailInProbation]
+		   ,[IsCalculate]
+		   ,[CarryForwardExpireDays]
 		   ,[CompanyGUID]
 		   ,[GUID]
 		   ,[Description]
@@ -91,7 +101,7 @@ SET NOCOUNT ON;
 		   ,CONVERT(FLOAT,@PayrollDate)
 		   ,X.value('@Type','INT')
 		   ,X.value('@SNo','INT')
-		   ,X.value('@ComponentID','BIGINT')
+		   ,X.value('@ComponentID','INT')
 		   ,X.value('@Formula','NVARCHAR(MAX)')
 		   ,X.value('@AddToNet','NVARCHAR(50)')
 		   ,ISNULL(X.value('@ShowInDuesEntry','NVARCHAR(50)'),'Yes')
@@ -102,12 +112,12 @@ SET NOCOUNT ON;
 		   ,X.value('@Behaviour','NVARCHAR(50)')
 		   ,X.value('@MaxOTHrs','FLOAT')
 		   ,X.value('@ROff','FLOAT')
-		   ,X.value('@TaxMap','BIGINT')
+		   ,X.value('@TaxMap','INT')
 		   ,X.value('@Expression','NVARCHAR(500)')
 		   ,X.value('@Message','NVARCHAR(500)')
 		   ,X.value('@Action','INT')
-		   ,isnull(X.value('@DrAccount','BIGINT'),0)
-		   ,isnull(X.value('@CrAccount','BIGINT'),0)
+		   ,isnull(X.value('@DrAccount','INT'),0)
+		   ,isnull(X.value('@CrAccount','INT'),0)
 		   ,X.value('@Percentage','FLOAT')
 		   ,X.value('@MaxLeaves','FLOAT')
 		   ,X.value('@AtATime','FLOAT')
@@ -118,6 +128,11 @@ SET NOCOUNT ON;
 		   ,X.value('@EncashFormula','NVARCHAR(MAX)')
 		   ,X.value('@LeaveErrorMessage','NVARCHAR(500)')
 		   ,X.value('@LEThresholdLimit','FLOAT'),X.value('@LEDaysField','INT'),X.value('@LEAmountField','INT'),X.value('@LeaveOthFeatures','NVARCHAR(MAX)')
+		   ,ISNULL(X.value('@ShowInESS','NVARCHAR(50)'),'Yes')
+		   ,ISNULL(X.value('@AccrualInProbation','NVARCHAR(50)'),'Yes')
+		   ,ISNULL(X.value('@AvailInProbation','NVARCHAR(50)'),'Yes')
+		   ,ISNULL(X.value('@IsCalculate','NVARCHAR(50)'),'Yes')
+		   ,isnull(X.value('@CarryForwardExpireDays','FLOAT'),0)
 		   ,@CompanyGUID
 		   ,@GUID
 		   ,NULL
@@ -130,7 +145,7 @@ SET NOCOUNT ON;
 		IF (@PTXML IS NOT NULL AND @PTXML <> '')  
 		BEGIN
 			SET @DATAXML=@PTXML
-			DECLARE @PayrollPTDimension BIGINT
+			DECLARE @PayrollPTDimension INT
 			SELECT @PayrollPTDimension=VALUE FROM ADM_GlobalPreferences WITH(NOLOCK) WHERE NAME='PayrollPTDimension'
 			INSERT INTO [PAY_PayrollPT]
 			   ([PayrollDate]
@@ -146,7 +161,7 @@ SET NOCOUNT ON;
 			   ,[ModifiedDate])
 			SELECT CONVERT(FLOAT,@PayrollDate)
 				,@PayrollPTDimension
-				,X.value('@NodeID','BIGINT')
+				,X.value('@NodeID','INT')
 				,X.value('@FromSlab','FLOAT')
 				,X.value('@ToSlab','FLOAT')
 				,X.value('@Amount','FLOAT')
@@ -157,10 +172,18 @@ SET NOCOUNT ON;
 				,CONVERT(FLOAT,GETDATE()) 
 			FROM @DATAXML.nodes('/Xml/Row') as Data(X)
 		END
+		--select @HistoryStatus
+		--INSERT INTO HISTROY
+		IF(@Audit IS NOT NULL AND @Audit='True')
+		BEGIN    
+			insert into [COM_CC50054_History]         
+			select 50054,@HistoryStatus,* FROM COM_CC50054 WITH(NOLOCK) WHERE [GradeID]=@GradeID AND [PayrollDate]=@PayrollDate
+		END
+		--END INTO HISTROY
 		
 		IF (@sDBAlter IS NOT NULL AND @sDBAlter <> '' AND LEN(@sDBAlter)>0)  
 		BEGIN
-			EXEC(@sDBAlter)
+			EXEC sp_executesql @sDBAlter
 		END
 		
 	END

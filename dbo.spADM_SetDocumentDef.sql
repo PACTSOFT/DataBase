@@ -13,15 +13,15 @@ CREATE PROCEDURE [dbo].[spADM_SetDocumentDef]
 	@DynamicXML [nvarchar](max),
 	@CreditAccountTypes [nvarchar](max),
 	@DebitAccountTypes [nvarchar](max),
-	@DefaultCreditAccont [bigint] = 0,
-	@DefaultDebitAccont [bigint] = 0,
+	@DefaultCreditAccont [int] = 0,
+	@DefaultDebitAccont [int] = 0,
 	@LinkXML [nvarchar](max),
 	@CopyDocumentXML [nvarchar](max),
 	@ExtrnFuncXML [nvarchar](max),
-	@MenuID [bigint] = 0,
-	@DefCurrID [bigint] = 0,
+	@MenuID [int] = 0,
+	@DefCurrID [int] = 0,
 	@COLUMNSXML [nvarchar](max),
-	@ProductDefault [bigint] = 0,
+	@ProductDefault [int] = 0,
 	@DueDateFormula [nvarchar](max),
 	@NetFormula [nvarchar](max),
 	@CloseLink [nvarchar](max),
@@ -30,7 +30,7 @@ CREATE PROCEDURE [dbo].[spADM_SetDocumentDef]
 	@LockedDatesXml [nvarchar](max),
 	@CompanyGUID [nvarchar](200),
 	@UserName [nvarchar](200),
-	@UserID [bigint],
+	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -39,23 +39,23 @@ BEGIN TRANSACTION
 BEGIN TRY                
 SET NOCOUNT ON;              
     --Declaration Section              
-	DECLARE @HasAccess BIT,@CostCenterID int,@XML XML,@I int, @Cnt int ,@Extention nvarchar(10) ,@abc nvarchar(10), @CCCID BIGINT,@Series INT
-	DECLARE @BounceSeries BIGINT,@IntermedSeries INT,@StatusID INT,@ConvertAs INT,@IntermediateConvertion INT,@Bounce INT,@OnDiscount INT, @UserColumnName NVARCHAR(50)      
-	DECLARE @Header NVARCHAR(500),@FORMULA NVARCHAR(MAX),@SectionSeqNumber int,@tabid int,@IsRepeat bigint  
-	DECLARE @TabOrder int, @GroupOrder int ,@Posting int
+	DECLARE @HasAccess BIT,@CostCenterID int,@XML XML,@I int, @Cnt int ,@Extention nvarchar(10) ,@abc nvarchar(10), @CCCID INT,@Series INT
+	DECLARE @BounceSeries INT,@IntermedSeries INT,@StatusID INT,@ConvertAs INT,@IntermediateConvertion INT,@Bounce INT,@OnDiscount INT, @UserColumnName NVARCHAR(50)      
+	DECLARE @Header NVARCHAR(500),@BounceINV NVARCHAR(500),@PDCAmtFld NVARCHAR(500),@FORMULA NVARCHAR(MAX),@SectionSeqNumber int,@tabid int,@IsRepeat INT  
+	DECLARE @TabOrder int, @GroupOrder int ,@Posting int,@IsFc bit
 	DECLARE @CCColIDBase int,@CCColIDLinked int,@k int,@ct int,@DocLinkDefID int,@l int,@cts int
-	DECLARE @DebitAccount BIGINT,@CreditAccount BIGINT,@PostingType INT,@RoundOff INT,@ListViewTypeID int              
-	DECLARE @DistributionColID BIGINT,@Distxml nvarchar(200),@Distributeon nvarchar(50),@UIWidth int,@colType nvarchar(50),@ProbValues nvarchar(MAX)              
+	DECLARE @DebitAccount INT,@CreditAccount INT,@PostingType INT,@RoundOff INT,@ListViewTypeID int              
+	DECLARE @DistributionColID INT,@Distxml nvarchar(200),@Distributeon nvarchar(50),@UIWidth int,@colType nvarchar(50),@ProbValues nvarchar(MAX)              
 	DECLARE @SectionID INT,@IsMandatory BIT,@IsUnique BIT, @UserDefaultValue NVARCHAR(max),@SectionName  NVARCHAR(200),@IsReadOnly BIT
-	DECLARE @Link_Data INT , @Local_Ref INT    , @TempCrdColId  BIGINT  , @TempDbtColId  BIGINT ,  @ColID  BIGINT  , @CurrencyID BIGINT                 
-	DECLARE @IsCrAccountDisplayed BIT,@IsDrAccountDisplayed BIT,@CostCenterColID BIGINT,@ColFieldType INT ,@TextFormat INT ,@Colspan INT ,@Decimals INT            
+	DECLARE @Link_Data INT , @Local_Ref INT    , @TempCrdColId  INT  , @TempDbtColId  INT ,  @ColID  INT  , @CurrencyID INT                 
+	DECLARE @IsCrAccountDisplayed BIT,@IsDrAccountDisplayed BIT,@CostCenterColID INT,@ColFieldType INT ,@TextFormat INT ,@Colspan INT ,@Decimals INT            
 	DECLARE @IsRoundOffEnabled BIT,@IsDistributionEnabled BIT,@ColumnCostCenterID int,@IsCalculate int,@IsVisible bit ,@Filter int              
-	DECLARE @DocumentName NVARCHAR(300),@DOCUMENTABBR NVARCHAR(300),@DOCUMENTMENU INT,@GROUPID BIGINT,@GROUPName NVARCHAR(100),@GROUPResID BIGINT,@FEATUREACTIONID BIGINT,@IMAGEPATH NVARCHAR(300)              
-	DECLARE @DrpID INT,@IsInventory bit,@TempTypeID bigint,@DATA XML,@showtotal int,@TextColumnCostcenterID bigint,@vouchers nvarchar(max)
-	DECLARE @CrRefID bigint,@noTab bit,@dependancy INT,@dependanton bigint,@IsTransfer int,@EvaluateAfter NVARCHAR(20)
-	DECLARE @CrRefColID bigint,@DbFilter int,@DiscountInterest NVARCHAR(300),@DiscountCommision NVARCHAR(300)
-	DECLARE @DrRefID bigint,@CrFilter int,@AllowDDHistory BIT,@ResID BIGINT,@basedonXMl nvarchar(max),@WaterMark nvarchar(500)
-	DECLARE @DrRefColID bigint,@DbIndex int,@CVSP nvarchar(200),@GridViewID BIGINT,@LineRoundoff int,@FixedAcc int,@IsPartialLink BIT,@IgnoreChars BIGINT
+	DECLARE @DocumentName NVARCHAR(300),@DOCUMENTABBR NVARCHAR(300),@DOCUMENTMENU INT,@GROUPID INT,@GROUPName NVARCHAR(100),@GROUPResID INT,@FEATUREACTIONID INT,@IMAGEPATH NVARCHAR(300)              
+	DECLARE @DrpID INT,@IsInventory bit,@TempTypeID INT,@DATA XML,@showtotal int,@TextColumnCostcenterID INT,@vouchers nvarchar(max)
+	DECLARE @CrRefID INT,@noTab bit,@dependancy INT,@dependanton INT,@IsTransfer int,@EvaluateAfter NVARCHAR(20)
+	DECLARE @CrRefColID INT,@DbFilter int,@DiscountInterest NVARCHAR(300),@DiscountCommision NVARCHAR(300)
+	DECLARE @DrRefID INT,@CrFilter int,@AllowDDHistory BIT,@ResID INT,@basedonXMl nvarchar(max),@WaterMark nvarchar(500),@MinChar INT,@MaxChar INT
+	DECLARE @DrRefColID INT,@DbIndex int,@CVSP nvarchar(200),@GridViewID INT,@LineRoundoff int,@FixedAcc int,@IsPartialLink BIT,@IgnoreChars INT
 	DECLARE @colsql nvarchar(max)
 
   	DECLARE @DT float
@@ -65,6 +65,11 @@ SET NOCOUNT ON;
 		set @AllowDDHistory=1
 	else
 		set @AllowDDHistory=0
+
+	if exists(SELECT * FROM ADM_GlobalPreferences with(nolock) WHERE Name='Use Foreign Currency' and Value='TRUE')
+		set @IsFc=1
+	else
+		set @IsFc=0
 
     SELECT TOP 1  @TempTypeID=DocumentTypeID,@IsInventory=IsInventory FROM [ADM_DocumentTypes] with(nolock) WHERE [DocumentType]=@DocumentType
     SET @DATA=@PreferanceXml
@@ -97,15 +102,15 @@ SET NOCOUNT ON;
 				RAISERROR('-126',16,1)  
 			END       
 
-			declare @PrefCCID bigint
+			declare @PrefCCID INT
 			set @PrefCCID=(SELECT TOP 1 COSTCENTERID FROM ADM_DOCUMENTTYPES with(nolock) WHERE  DOCUMENTTYPE=@DocumentType)
     
 			INSERT INTO  [ADM_DocumentTypes](IsInventory,[CostCenterID],[DocumentType],[DocumentAbbr],[StatusID],[ConvertAs],[Bounce],[OnDiscount],[Series],[DocumentName],[IsUserDefined],[CompanyGUID],[GUID] ,[Description]              
-			,[CreatedBy],[CreatedDate],[IntermediateConvertion],DiscountInterestFld,DiscountCommisionFld,BounceSeries,BouncePenaltyFld,IntermedSeries)              
+			,[CreatedBy],[CreatedDate],[IntermediateConvertion],DiscountInterestFld,DiscountCommisionFld,BounceSeries,BouncePenaltyFld,BounceInvDoc,PDCAmtFld,IntermedSeries)              
 			SELECT @IsInventory,@CostCenterID,@DocumentType, X.value('@DocumentAbbr','NVARCHAR(300)'), X.value('@StatusID','INT'), X.value('@ConvertAs','INT'), X.value('@Bounce','INT'),  X.value('@OnDiscount','INT'),X.value('@Series','INT'), @DocumentName              
 			,1,@CompanyGUID,NEWID(),@DocumentName,@UserName,CONVERT(FLOAT,GETDATE()), X.value('@IntermediateConvertion','INT')
 			,X.value('@DiscountInterest','NVARCHAR(300)'),X.value('@DiscountCommision','NVARCHAR(300)'),X.value('@BounceSeries','int')
-			,X.value('@BouncePenaltyFld','NVARCHAR(300)'),X.value('@IntermedSeries','INT')
+			,X.value('@BouncePenaltyFld','NVARCHAR(300)'),X.value('@BounceINVDocument','NVARCHAR(300)'),X.value('@PDCAmtFld','NVARCHAR(300)'),X.value('@IntermedSeries','INT')
 			FROM @XML.nodes('/Document/Row') as Data(X)              
 			SET @DocumentTypeID=SCOPE_IDENTITY()              
 
@@ -120,19 +125,12 @@ SET NOCOUNT ON;
 			EXEC [spCOM_SetInsertResourceData] @DocumentName,@DocumentName,@DocumentName,1,1,@ResourceID OUTPUT 
 			
 			--INSERT INTO FEATURES TABLE    
-			if (@IsInventory=1)          
-				INSERT INTO  [ADM_Features]([FeatureID],[ParentFeatureID],[Name],[SysName],[ResourceID],[FeatureTypeID],[FeatureTypeName],[IsUserDefined]              
-				,[FeatureTypeResourceID],[Description],[ApplicationID],[StatusID],[CreatedDate],[CreatedBy],[TableName],IsEnabled)              
-				SELECT @CostCenterID,1,@DocumentName,X.value('@DocumentName','NVARCHAR(300)'),@ResourceID,1,X.value('@DocumentName','NVARCHAR(300)'),1,              
-				NULL,@DocumentName,1,1,CONVERT(FLOAT,GETDATE()),@UserName,'INV_DocDetails' ,1     
-				FROM @XML.nodes('/Document/Row') as Data(X)              
-			else if(@IsInventory=0)
-				INSERT INTO  [ADM_Features]([FeatureID],[ParentFeatureID],[Name],[SysName],[ResourceID],[FeatureTypeID],[FeatureTypeName],[IsUserDefined]              
-				,[FeatureTypeResourceID],[Description],[ApplicationID],[StatusID],[CreatedDate],[CreatedBy],[TableName],IsEnabled)              
-				SELECT @CostCenterID,1,@DocumentName,X.value('@DocumentName','NVARCHAR(300)'),@ResourceID,1,X.value('@DocumentName','NVARCHAR(300)'),1,              
-				NULL,@DocumentName,1,1,CONVERT(FLOAT,GETDATE()),@UserName,'ACC_DocDetails'   ,1   
-				FROM @XML.nodes('/Document/Row') as Data(X)
-                   
+			INSERT INTO  [ADM_Features]([FeatureID],[ParentFeatureID],[Name],[SysName],[ResourceID],[FeatureTypeID],[FeatureTypeName],[IsUserDefined]              
+			,[FeatureTypeResourceID],[Description],[ApplicationID],[StatusID],[CreatedDate],[CreatedBy],[TableName],IsEnabled)              
+			SELECT @CostCenterID,1,@DocumentName,X.value('@DocumentName','NVARCHAR(300)'),@ResourceID,1,X.value('@DocumentName','NVARCHAR(300)'),1,              
+			NULL,@DocumentName,1,1,CONVERT(FLOAT,GETDATE()),@UserName, CASE WHEN @IsInventory=1 THEN 'INV_DocDetails' ELSE 'ACC_DocDetails' END ,1     
+			FROM @XML.nodes('/Document/Row') as Data(X)              
+			
 			--INSERT INTO COSTCENTERDEFINATION              
 			EXEC [SPInsertDocumentatCostCenterDef] @CostCenterID,@DocumentName,@DocumentType,@UserName               
 		    
@@ -149,6 +147,11 @@ SET NOCOUNT ON;
 
 			EXEC [spADM_SetRibbonView] @tabid,@GROUPID,@CostCenterID,@FEATUREACTIONID,'','',@DocumentName,@DocumentName,@DocumentName,@DocumentName,@TabOrder,@GroupOrder,'CompanyGUID','guid',@UserName,@UserID,@LangID,@IMAGEPATH,@DrpID              
 			
+			UPDATE ADM_RibbonView SET LicSIMPLE=(SELECT TOP 1 R.LicSIMPLE FROM ADM_RibbonView R WITH(NOLOCK)
+			JOIN ADM_DocumentTypes DT WITH(NOLOCK) ON DT.CostCenterID=R.FeatureID 
+			WHERE DT.DocumentType=11 AND R.LicSIMPLE IS NOT NULL)
+			WHERE FEATUREID=@CostCenterID
+
 			DECLARE @TAB TABLE (ID INT IDENTITY(1,1) PRIMARY KEY,FEATUREID INT,ScreenName NVARCHAR(50))
 			INSERT INTO @TAB
 			SELECT RV.FEATUREID,RV.ScreenName FROM ADM_RibbonView RV WITH(NOLOCK)
@@ -176,11 +179,12 @@ SET NOCOUNT ON;
 			where Name not in('DocID','ColID','CCTaxID') and object_id=object_id('COM_CCTaxes')
 			
 			set @colsql='insert into COM_CCTaxes(ColID,DocID'+replace(@colsql,',p.',',')+')			
-			select d.CostCenterColID,'+convert(nvarchar(max),@CostCenterID)+@colsql+' from COM_CCTaxes P WITH(NOLOCK) 
+			select d.CostCenterColID,'+convert(nvarchar(max),@CostCenterID)+@colsql+' 
+			from COM_CCTaxes P WITH(NOLOCK) 
 			INNER JOIN ADM_CostCenterDef C WITH(NOLOCK) on P.ColID=C.CostCenterColID        
 			INNER JOIN ADM_CostCenterDef d WITH(NOLOCK) on d.SysColumnname=C.SysColumnname
 			where p.DOCID='+convert(nvarchar(max),@TaxChartCCID)+' and d.CostCenterID='+convert(nvarchar(max),@CostCenterID)
-			exec(@colsql)
+			Exec sp_executesql @colsql
 		END              
 	END              
 	ELSE              
@@ -221,7 +225,7 @@ SET NOCOUNT ON;
 		,@ConvertAs=X.value('@ConvertAs','INT'),   @IntermediateConvertion=X.value('@IntermediateConvertion','INT'),  @Bounce=X.value('@Bounce','INT') 
 		,@OnDiscount=X.value('@OnDiscount','INT'),@Series=X.value('@Series','INT')  ,@BounceSeries=X.value('@BounceSeries','INT')     
 		,@DiscountInterest=X.value('@DiscountInterest','NVARCHAR(300)')      ,@DiscountCommision=X.value('@DiscountCommision','NVARCHAR(300)')      --    ,@DOCUMENTMENU=X.value('@DocumentAbbr','NVARCHAR')              
-		,@Header=X.value('@BouncePenaltyFld','NVARCHAR(200)'),@FORMULA=X.value('@BouncePenaltyFormula','NVARCHAR(max)'),@IntermedSeries=X.value('@IntermedSeries','INT')
+		,@Header=X.value('@BouncePenaltyFld','NVARCHAR(200)'),@BounceINV=X.value('@BounceINVDocument','NVARCHAR(200)'),@PDCAmtFld=X.value('@PDCAmtFld','NVARCHAR(200)'), @FORMULA=X.value('@BouncePenaltyFormula','NVARCHAR(max)'),@IntermedSeries=X.value('@IntermedSeries','INT')
  
 		FROM @XML.nodes('/Document/Row') as Data(X)              
 
@@ -291,7 +295,7 @@ SET NOCOUNT ON;
      
 		UPDATE [ADM_DocumentTypes] SET [DocumentAbbr]=@DOCUMENTABBR, [DocumentName]=@DocumentName,[StatusID]=@StatusID,[ConvertAs]=@ConvertAs,[Bounce]=@Bounce, OnDiscount = @OnDiscount,[Series]=@Series,           
 		DiscountInterestFld=@DiscountInterest,DiscountCommisionFld=@DiscountCommision,GUID=NEWID(),BounceSeries=@BounceSeries,
-		BouncePenaltyFld=@Header,IntermedSeries=@IntermedSeries
+		BouncePenaltyFld=@Header,BounceInvDoc=@BounceINV,PDCAmtFld=@PDCAmtFld,IntermedSeries=@IntermedSeries
 		,MODIFIEDDATE=CONVERT(FLOAT,GETDATE()),MODIFIEDBY=@UserName,[IntermediateConvertion]=@IntermediateConvertion WHERE DocumentTypeID=@DocumentTypeID                          
 	END              
               
@@ -339,7 +343,7 @@ SET NOCOUNT ON;
 	BEGIN   
 		SELECT @KEY=[KEY],@VALUE=[VALUE],@GROUP=GroupName FROM @TEMP WHERE ID=@J               
 
-		 if (@KEY ='UseasCrossDimension' and @VALUE!=(select top 1 [PrefValue] from  COM_DocumentPreferences with(nolock) WHERE [PrefName]=@KEY AND CostCenterID=@CostCenterID))
+		if (@KEY ='UseasCrossDimension' and @VALUE!=(select top 1 [PrefValue] from  COM_DocumentPreferences with(nolock) WHERE [PrefName]=@KEY AND CostCenterID=@CostCenterID))
 		begin
 			if exists(select DocID from ACC_DocDetails with(nolock) where CostCenterID=@CostCenterID)
 			begin
@@ -347,7 +351,14 @@ SET NOCOUNT ON;
 			end
 		END	
 
-		if (@KEY='linewiseDebitAccount' and @VALUE!=(select [PrefValue] from  COM_DocumentPreferences with(nolock) WHERE [PrefName]=@KEY AND CostCenterID=@CostCenterID))
+		if (@KEY='EnableSchemes' and @VALUE='false' and @VALUE!=(select [PrefValue] from  COM_DocumentPreferences with(nolock) WHERE [PrefName]=@KEY AND CostCenterID=@CostCenterID))
+		begin
+			if exists(select DocID from INV_DocDetails with(nolock) where CostCenterID=@CostCenterID and IsQtyFreeOffer=1)
+			begin
+				RAISERROR('Schems Already Used',16,1)              
+			end
+		end
+		else if (@KEY='linewiseDebitAccount' and @VALUE!=(select [PrefValue] from  COM_DocumentPreferences with(nolock) WHERE [PrefName]=@KEY AND CostCenterID=@CostCenterID))
 		begin
 
 			if (@IsInventory=1 and exists(select DocID from INV_DocDetails with(nolock) where CostCenterID=@CostCenterID))
@@ -424,7 +435,7 @@ SET NOCOUNT ON;
 			
 			if(@VALUE='true' and not exists(select [CostCenterID] from [adm_Costcenterdef] with(nolock) where CostCenterID=@CostCenterID and [SysColumnName]='ChequeNumber'))
 			begin
-				declare @COLumnID BIGINT,@RID BIGINT,@COLUMNNAME nvarchar(max),@seqNo int
+				declare @COLumnID INT,@RID INT,@COLUMNNAME nvarchar(max),@seqNo int
 				SELECT @RID=MAX(RESOURCEID) FROM COM_LanguageResources with(nolock)			
 				SELECT @COLumnID=MAX(CostCenterColID) FROM ADM_CostCenterDef with(nolock)
 				
@@ -618,7 +629,7 @@ SET NOCOUNT ON;
 	
 	IF @DocumentType=38
 	BEGIN
-		DECLARE @TABPrefix TABLE (ID INT IDENTITY(1,1) PRIMARY KEY,CCID BIGINT)
+		DECLARE @TABPrefix TABLE (ID INT IDENTITY(1,1) PRIMARY KEY,CCID INT)
 		
 		INSERT INTO @TABPrefix
 		SELECT DISTINCT CCD.CostCenterID FROM COM_DocPrefix CDP WITH(NOLOCK) 
@@ -634,7 +645,7 @@ SET NOCOUNT ON;
 			if not exists (select Name from sys.columns where Name='CCNID'+convert(nvarchar,@DbIndex) and object_id=object_id('POS_loginHistory'))
 			begin
 				set @colsql='alter table POS_loginHistory add CCNID'+convert(nvarchar,@DbIndex)+' INT'
-				exec(@colsql)
+				Exec sp_executesql @colsql
 			end
 			
 			SET @I=@I+1     
@@ -649,7 +660,7 @@ SET NOCOUNT ON;
 	IsCrAccountDisplayed BIT,IsDrAccountDisplayed BIT,CostCenterColID int,IsCalculate int,UIWidth int,SectionSeqNumber int ,IsUnique BIT  
 	,IsReadOnly BIT  , LINKDATA INT , LOCALREFERENCE INT , ColID int , CurrencyID int,colType nvarchar(50),ProbValues nvarchar(MAX),IsVisible BIT
 	,CrRefID int  ,CrRefColID int,DrRefID int,DrRefColID int,IsGross bit,Decimal INT,Filter INT,showtotal int,TextColumnCostcenterID int,IsRepeat BIT,Vouchers nvarchar(max),noTab bit,dependanton int,dependancy int,IsTransfer int
-	,DbFilter INT,CrFilter INT,DbIndex INT,GridViewID int,EvaluateAfter nvarchar(20),basedon nvarchar(max),Posting int,LineRoundoff int,FixedAcc int,IsPartialLink BIT,IgnoreChars int,WaterMark nvarchar(500))
+	,DbFilter INT,CrFilter INT,DbIndex INT,GridViewID int,EvaluateAfter nvarchar(20),basedon nvarchar(max),Posting int,LineRoundoff int,FixedAcc int,IsPartialLink BIT,IgnoreChars int,WaterMark nvarchar(500),MinChar INT,MaxChar INT)
 
 	set @XML=@ColsXml  
 	INSERT INTO @tblList              
@@ -668,6 +679,7 @@ SET NOCOUNT ON;
 	,X.value('@IsTransfer','int'), X.value('@DbFilter','INT'), X.value('@CrFilter','INT'), X.value('@Index','INT')
 	, X.value('@GridViewID','INT'), X.value('@EvaluateAfter','nvarchar(20)'),X.value('@BasedOnXML','nvarchar(max)'),X.value('@Posting','int')
 	, X.value('@LineRoundoff','INT'), X.value('@FixedAcc','INT'),X.value('@IsPartialLink','BIT'),X.value('@IgnoreChars','int'), X.value('@WaterMark','nvarchar(500)')
+	,X.value('@MinChar','INT'), X.value('@MaxChar','INT')
 	from @XML.nodes('/Xml/Row') as Data(X)              
 
 	update ADM_CostCenterDef              
@@ -682,16 +694,15 @@ SET NOCOUNT ON;
 	where d.CostCenterID=@CostCenterID and  ADM_DocumentDef.costcentercolid=d.costcentercolid
 	and d.IsColumnInUse=0 and IsColumnUserDefined=1
 
-	DECLARE @TBLCCCID TABLE (ID bigint identity(1,1) PRIMARY KEY,CCCID bigint , SYSCOL NVARCHAR(50), USERCOL NVARCHAR(50))  
+	DECLARE @TBLCCCID TABLE (ID INT identity(1,1) PRIMARY KEY,CCCID INT , SYSCOL NVARCHAR(50), USERCOL NVARCHAR(50))  
 
 	--Set loop initialization varaibles              
 	SELECT @I=1, @Cnt=count(*) FROM @tblList  
 	
-	select * from @tblList
      
   WHILE(@I<=@Cnt)                
   BEGIN              
-    
+   
    SELECT @TextFormat=TextFormat,@Colspan=ColumnSpan,@ColFieldType=ColFieldType ,@Header=Header,@Formula=Formula,              
     @DebitAccount=DebitAccount,@CreditAccount=CreditAccount,@PostingType=PostingType,@RoundOff=RoundOff,              
     @DistributionColID =DistributionColID,@Distxml =Distxml ,@Distributeon =Distributeon ,@ColumnCostCenterID =ColumnCostCenterID,@ListViewTypeID=ListViewTypeID,              
@@ -701,7 +712,7 @@ SET NOCOUNT ON;
     ,@Link_Data = LINKDATA ,   @Local_Ref = LOCALREFERENCE,@GridViewID=GridViewID ,  @ColID   = ColID,@colType=colType,@ProbValues=ProbValues,@IsVisible=IsVisible
     ,@CrRefID =CrRefID,@CrRefColID =CrRefColID ,@DrRefID =DrRefID ,@DrRefColID=DrRefColID,@Decimals=Decimal,@Filter=Filter,@showtotal=showtotal,@TextColumnCostcenterID=TextColumnCostcenterID,@IsRepeat=IsRepeat,@vouchers=vouchers
     ,@noTab=noTab,@dependanton=dependanton,@dependancy=dependancy,@IsTransfer=IsTransfer,@DbFilter=DbFilter,@CrFilter=CrFilter,@DbIndex=DbIndex
-    ,@EvaluateAfter=EvaluateAfter,@basedonXMl=basedon,@Posting=Posting,@LineRoundoff=LineRoundoff,@FixedAcc=FixedAcc,@IsPartialLink=IsPartialLink,@IgnoreChars=IgnoreChars,@WaterMark=WaterMark
+    ,@EvaluateAfter=EvaluateAfter,@basedonXMl=basedon,@Posting=Posting,@LineRoundoff=LineRoundoff,@FixedAcc=FixedAcc,@IsPartialLink=IsPartialLink,@IgnoreChars=IgnoreChars,@WaterMark=WaterMark,@MinChar=MinChar,@MaxChar=MaxChar
    FROM @tblList WHERE ID=@I              
           
     --IF(@IsReadOnly = 0)
@@ -760,25 +771,62 @@ SET NOCOUNT ON;
 		else
          select @CostCenterColID=CostCenterColID from ADM_CostCenterDef with(nolock) where CostCenterID=@CostCenterID and SYSCOLUMNNAME='Amount'
     end    
+	
     IF(@CostCenterColID IS NULL or @CostCenterColID <=0)              
     BEGIN     
     
-       set @CostCenterColID=(select TOP 1 CostCenterColID from ADM_CostCenterDef  with(nolock)            
-       where CostCenterID=@CostCenterID and IsColumnInUse=0 and IsColumnUserDefined=1
-        and syscolumnName like 'dcnum%' and SysTableName='COM_DocNumData' order by CostCenterColID)
+       --set @CostCenterColID=(select TOP 1 CostCenterColID from ADM_CostCenterDef  with(nolock)            
+       --where CostCenterID=@CostCenterID and IsColumnInUse=0 and IsColumnUserDefined=1
+       -- and syscolumnName like 'dcnum%' and SysTableName='COM_DocNumData' order by CostCenterColID)
         
         --ADIL
 		select @CostCenterColID=CostCenterColID from ADM_CostCenterDef with(nolock)
-		where CostCenterID=@CostCenterID and IsColumnInUse=0 and IsColumnUserDefined=1
+		where CostCenterID=@CostCenterID 
 			and SysTableName='COM_DocNumData' and SysColumnName='dcnum'+convert(nvarchar,@DbIndex)		
-        
+        IF(@CostCenterColID IS NULL or @CostCenterColID=0)
+		BEGIN
+			if(@Header!='Quantity' and @Header!='Rate' and @Header!='HoldQuantity' and @Header!='ReserveQuantity') 
+			BEGIN			
+					select @ResID=MAX([ResourceID])+1 from [com_languageresources] with(nolock)
+
+					INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
+					VALUES (@ResID, 'dcNum'+convert(nvarchar,@DbIndex),1,'English', 'dcNum'+convert(nvarchar,@DbIndex),'')
+					INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
+					VALUES (@ResID, 'dcNum'+convert(nvarchar,@DbIndex),2,'Arabic', 'dcNum'+convert(nvarchar,@DbIndex),'')
+				
+					INSERT INTO ADM_CostCenterDef (CostCenterID,ResourceID,CostCenterName,SysTableName,UserColumnName,SysColumnName,ColumnTypeSeqNumber,UserColumnType,ColumnDataType,UserDefaultValue,UserProbableValues,ColumnOrder,IsMandatory,IsEditable,IsVisible,IsCostCenterUserDefined,IsColumnUserDefined,IsCCDeleted,IsColumnDeleted,ColumnCostCenterID,ColumnCCListViewTypeID,FetchMaxRows,IsColumnGroup,ColumnGroupNumber,SectionSeqNumber,SectionID,SectionName,RowNo,ColumnNo,ColumnSpan,IsColumnInUse,UIWidth,CompanyGUID,GUID,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate)
+					SELECT @CostCenterID,@ResID,DocumentName,'COM_DocNumData','dcNum'+convert(nvarchar,@DbIndex),'dcNum'+convert(nvarchar,@DbIndex),NULL,'FLOAT','FLOAT','','',0,0,1,1,0,1,0,0,0,0,NULL,0,NULL,49,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL
+					FROM ADM_DocumentTypes with(nolock) WHERE CostCenterID=@CostCenterID
+					SET @CostCenterColID=SCOPE_IDENTITY()
+
+					INSERT INTO ADM_CostCenterDef (CostCenterID,ResourceID,CostCenterName,SysTableName,UserColumnName,SysColumnName,ColumnTypeSeqNumber,UserColumnType,ColumnDataType,UserDefaultValue,UserProbableValues,ColumnOrder,IsMandatory,IsEditable,IsVisible,IsCostCenterUserDefined,IsColumnUserDefined,IsCCDeleted,IsColumnDeleted,ColumnCostCenterID,ColumnCCListViewTypeID,FetchMaxRows,IsColumnGroup,ColumnGroupNumber,SectionSeqNumber,SectionID,SectionName,RowNo,ColumnNo,ColumnSpan,IsColumnInUse,UIWidth,CompanyGUID,GUID,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate)
+					SELECT @CostCenterID,@ResID,DocumentName,'COM_DocNumData','dcCalcNum'+convert(nvarchar,@DbIndex),'dcCalcNum'+convert(nvarchar,@DbIndex),NULL,'FLOAT','FLOAT','','',0,0,1,1,0,1,0,0,0,0,NULL,0,NULL,49,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL
+					FROM ADM_DocumentTypes with(nolock) WHERE CostCenterID=@CostCenterID
+
+					if(@IsFc=1)
+					BEGIN
+						INSERT INTO ADM_CostCenterDef (CostCenterID,ResourceID,CostCenterName,SysTableName,UserColumnName,SysColumnName,ColumnTypeSeqNumber,UserColumnType,ColumnDataType,UserDefaultValue,UserProbableValues,ColumnOrder,IsMandatory,IsEditable,IsVisible,IsCostCenterUserDefined,IsColumnUserDefined,IsCCDeleted,IsColumnDeleted,ColumnCostCenterID,ColumnCCListViewTypeID,FetchMaxRows,IsColumnGroup,ColumnGroupNumber,SectionSeqNumber,SectionID,SectionName,RowNo,ColumnNo,ColumnSpan,IsColumnInUse,UIWidth,CompanyGUID,GUID,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate)
+						SELECT @CostCenterID,@ResID,DocumentName,'COM_DocNumData','dcCalcNumFC'+convert(nvarchar,@DbIndex),'dcCalcNumFC'+convert(nvarchar,@DbIndex),NULL,'FLOAT','FLOAT','','',0,0,1,1,0,1,0,0,0,0,NULL,0,NULL,49,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL
+						FROM ADM_DocumentTypes with(nolock) WHERE CostCenterID=@CostCenterID
+
+						INSERT INTO ADM_CostCenterDef (CostCenterID,ResourceID,CostCenterName,SysTableName,UserColumnName,SysColumnName,ColumnTypeSeqNumber,UserColumnType,ColumnDataType,UserDefaultValue,UserProbableValues,ColumnOrder,IsMandatory,IsEditable,IsVisible,IsCostCenterUserDefined,IsColumnUserDefined,IsCCDeleted,IsColumnDeleted,ColumnCostCenterID,ColumnCCListViewTypeID,FetchMaxRows,IsColumnGroup,ColumnGroupNumber,SectionSeqNumber,SectionID,SectionName,RowNo,ColumnNo,ColumnSpan,IsColumnInUse,UIWidth,CompanyGUID,GUID,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate)
+						SELECT @CostCenterID,@ResID,DocumentName,'COM_DocNumData','dcExchRT'+convert(nvarchar,@DbIndex),'dcExchRT'+convert(nvarchar,@DbIndex),NULL,'FLOAT','FLOAT','','',0,0,1,1,0,1,0,0,0,0,NULL,0,NULL,49,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL
+						FROM ADM_DocumentTypes with(nolock) WHERE CostCenterID=@CostCenterID
+
+						INSERT INTO ADM_CostCenterDef (CostCenterID,ResourceID,CostCenterName,SysTableName,UserColumnName,SysColumnName,ColumnTypeSeqNumber,UserColumnType,ColumnDataType,UserDefaultValue,UserProbableValues,ColumnOrder,IsMandatory,IsEditable,IsVisible,IsCostCenterUserDefined,IsColumnUserDefined,IsCCDeleted,IsColumnDeleted,ColumnCostCenterID,ColumnCCListViewTypeID,FetchMaxRows,IsColumnGroup,ColumnGroupNumber,SectionSeqNumber,SectionID,SectionName,RowNo,ColumnNo,ColumnSpan,IsColumnInUse,UIWidth,CompanyGUID,GUID,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate,ParentCostCenterSysName,ParentCostCenterColSysName,ParentCCDefaultColID)
+						SELECT @CostCenterID,@ResID,DocumentName,'COM_DocNumData','dcCurrID'+convert(nvarchar,@DbIndex),'dcCurrID'+convert(nvarchar,@DbIndex),NULL,'LISTBOX','LISTBOX','','',0,0,1,1,0,1,0,0,12,1,NULL,0,NULL,49,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL,'COM_Currency','CurrencyID',172
+						FROM ADM_DocumentTypes with(nolock) WHERE CostCenterID=@CostCenterID
+					END
+			END
+		END
+		
         update @tblList
         set CostCenterColID=@CostCenterColID
         WHERE ID=@I-1
     END              
     
     --Add Numeric Column If Not Eixsts In Table
-    if(@DbIndex is not null and @DbIndex>=1 and @DbIndex<=50)
+    if(@DbIndex is not null and @DbIndex>=1)
     begin
 		if not exists (select Name from sys.columns where Name='dcNum'+convert(nvarchar,@DbIndex) and object_id=object_id('COM_DocNumData'))
 		begin
@@ -787,14 +835,14 @@ SET NOCOUNT ON;
 			,dcCurrID'+convert(nvarchar,@DbIndex)+' int default(1)
 			,dcExchRT'+convert(nvarchar,@DbIndex)+' float default(1)
 			,dcCalcNumFC'+convert(nvarchar,@DbIndex)+' float'
-			exec(@colsql)
+			Exec sp_executesql @colsql
 			
 			set @colsql='alter table COM_DocNumData_History add dcNum'+convert(nvarchar,@DbIndex)+' float
 			,dcCalcNum'+convert(nvarchar,@DbIndex)+' float
 			,dcCurrID'+convert(nvarchar,@DbIndex)+' int default(1)
 			,dcExchRT'+convert(nvarchar,@DbIndex)+' float default(1)
 			,dcCalcNumFC'+convert(nvarchar,@DbIndex)+' float'
-			exec(@colsql)
+			Exec sp_executesql @colsql
 		end
     end
     if(@SectionID=5)
@@ -1027,14 +1075,9 @@ SET NOCOUNT ON;
    END              
    ELSE IF(@ColFieldType=3)              
    BEGIN  
-     if(@ColumnCostCenterID is not null and (@ColumnCostCenterID=61 or @ColumnCostCenterID=65 or @ColumnCostCenterID=7 or @ColumnCostCenterID=83 or @ColumnCostCenterID>50000))
+     if(@ColumnCostCenterID is not null and (@ColumnCostCenterID=65 or @ColumnCostCenterID=7 or @ColumnCostCenterID=83 or @ColumnCostCenterID>50000))
      begin
-            if(@ColumnCostCenterID=61)
-            begin
-                select  @Local_Ref= CostCenterColID from ADM_CostCenterDef with(nolock)             
-                where CostCenterID=@CostCenterID and SYSCOLUMNNAME='VehicleID'
-            end
-            else if(@ColumnCostCenterID=65)
+            if(@ColumnCostCenterID=65)
             begin
                 select  @Local_Ref= CostCenterColID from ADM_CostCenterDef with(nolock)             
                 where CostCenterID=@CostCenterID and SYSCOLUMNNAME='ContactID'
@@ -1092,12 +1135,41 @@ SET NOCOUNT ON;
 		begin
 			if not exists (select Name from sys.columns where Name='dcAlpha'+convert(nvarchar,@DbIndex) and object_id=object_id('COM_DocTextData'))
 			begin
-				set @colsql='alter table COM_DocTextData add dcAlpha'+convert(nvarchar,@DbIndex)+' nvarchar(max)'
-				exec(@colsql)
-				
-				set @colsql='alter table COM_DocTextData_History add dcAlpha'+convert(nvarchar,@DbIndex)+' nvarchar(max)'
-				exec(@colsql)
+				if(@colType in('FixedDate','FixedDateTime'))
+				BEGIN
+					set @colsql='alter table COM_DocTextData add dcAlpha'+convert(nvarchar,@DbIndex)+' Datetime'
+					Exec sp_executesql @colsql
+					
+					set @colsql='alter table COM_DocTextData_History add dcAlpha'+convert(nvarchar,@DbIndex)+' Datetime'
+					Exec sp_executesql @colsql					
+				END
+				ELSE
+				BEGIN				
+					set @colsql='alter table COM_DocTextData add dcAlpha'+convert(nvarchar,@DbIndex)+' nvarchar(max)'
+					Exec sp_executesql @colsql
+					
+					set @colsql='alter table COM_DocTextData_History add dcAlpha'+convert(nvarchar,@DbIndex)+' nvarchar(max)'
+					Exec sp_executesql @colsql
+				END	
 			end
+			else if exists (select Name from sys.columns where Name='dcAlpha'+convert(nvarchar,@DbIndex) and system_type_id=61
+				and object_id=object_id('COM_DocTextData'))
+			BEGIN
+				if(@colType not in('FixedDate','FixedDateTime','Date','DateTime'))	
+				begin
+					set @colsql='Can not assign other than date field at Row no.'+convert(nvarchar,@DbIndex)
+					RAISERROR(@colsql,16,1)
+				END			
+			END
+			else if(@colType in('FixedDate','FixedDateTime'))	
+			BEGIN
+			 if not exists (select Name from sys.columns where Name='dcAlpha'+convert(nvarchar,@DbIndex) and system_type_id=61
+				and object_id=object_id('COM_DocTextData'))
+				begin
+					set @colsql=' Row no.'+convert(nvarchar,@DbIndex)+' is not a date field Can not assign '+@colType
+					RAISERROR(@colsql,16,1)
+				END			
+			END
 		end		
 		
         if(@ListViewTypeID is null)
@@ -1110,7 +1182,7 @@ SET NOCOUNT ON;
 			begin
 				set @ListViewTypeID=10
 			end
-			else if(@TextColumnCostcenterID between 50000 and 50050)
+			else if(@TextColumnCostcenterID > 50000)
 			begin
 				set @ListViewTypeID=1
 			end          
@@ -1129,7 +1201,7 @@ SET NOCOUNT ON;
       ,LINKDATA = @Link_Data,Calculate=@IsCalculate
       ,LOCALREFERENCE = @Local_Ref    ,UserColumnType=@colType,UserProbableValues=@ProbValues,IsVisible=@IsVisible,IsRepeat=@IsRepeat   
       ,dependanton=@dependanton   
-      ,decimal=@Decimals,IgnoreChar=@IgnoreChars ,WaterMark=@WaterMark
+      ,decimal=@Decimals,IgnoreChar=@IgnoreChars ,WaterMark=@WaterMark,MinChar=@MinChar,MaxChar=@MaxChar
      where CostCenterID=@CostCenterID and CostCenterColID=@CostCenterColID
 	
 		if(@Formula<>'')
@@ -1172,13 +1244,7 @@ SET NOCOUNT ON;
    END              
    ELSE IF(@ColFieldType=2)              
    BEGIN      
-      
-      if(@ColumnCostCenterID=61)
-      begin
-        select  @CostCenterColID= CostCenterColID from ADM_CostCenterDef  with(nolock)            
-         where CostCenterID=@CostCenterID and SYSCOLUMNNAME='VehicleID'
-      end
-      else if(@ColumnCostCenterID=65)
+      if(@ColumnCostCenterID=65)
       begin
             select  @CostCenterColID= CostCenterColID from ADM_CostCenterDef with(nolock)             
             where CostCenterID=@CostCenterID and SYSCOLUMNNAME='ContactID'
@@ -1235,6 +1301,7 @@ SET NOCOUNT ON;
       end    
       else
       begin          
+		set @CostCenterColID=0
          select  @CostCenterColID= CostCenterColID from ADM_CostCenterDef with(nolock)             
          where CostCenterID=@CostCenterID and SysTableName='COM_DocCCData' and               
          SYSCOLUMNNAME='dcCCNID'+CONVERT(NVARCHAR,(@ColumnCostCenterID-50000))              
@@ -1249,15 +1316,16 @@ SET NOCOUNT ON;
 			select @ResID=MAX([ResourceID])+1 from [com_languageresources] with(nolock)
 
 			INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
-			VALUES (@ResID, 'dcCCnid'+convert(nvarchar,(@ColumnCostCenterID-50000)),1,'English',@Header ,'')
+			VALUES (@ResID, 'dcCCNID'+convert(nvarchar,(@ColumnCostCenterID-50000)),1,'English',@Header ,'')
 			INSERT INTO COM_LanguageResources (ResourceID, ResourceName, LanguageID, LanguageName, ResourceData,FEATURE)
-			VALUES (@ResID, 'dcCCnid'+convert(nvarchar,(@ColumnCostCenterID-50000)),2,'Arabic', @Header,'')
+			VALUES (@ResID, 'dcCCNID'+convert(nvarchar,(@ColumnCostCenterID-50000)),2,'Arabic', @Header,'')
 			
 			INSERT INTO ADM_CostCenterDef (CostCenterID,ResourceID,CostCenterName,SysTableName,UserColumnName,SysColumnName,ColumnTypeSeqNumber,UserColumnType,ColumnDataType,UserDefaultValue,UserProbableValues,ColumnOrder,IsMandatory,IsEditable,IsVisible,IsCostCenterUserDefined,IsColumnUserDefined,IsCCDeleted,IsColumnDeleted,ColumnCostCenterID,ColumnCCListViewTypeID,FetchMaxRows,IsColumnGroup,ColumnGroupNumber,SectionSeqNumber,SectionID,SectionName,RowNo,ColumnNo,ColumnSpan,IsColumnInUse,UIWidth,CompanyGUID,GUID,Description,CreatedBy,CreatedDate,ModifiedBy,ModifiedDate
 			,[IsForeignKey],[ParentCostCenterID],[ParentCostCenterColID],[IsValidReportBuilderCol],[ParentCostCenterSysName],[ParentCostCenterColSysName],[ParentCCDefaultColID])
-			SELECT @CostCenterID,@ResID,DocumentName,'COM_DocCCData',@Header,'dcCCNID'+convert(nvarchar,(@ColumnCostCenterID-50000)),NULL,'LISTBOX','LISTBOX','','',0,0,1,1,0,1,0,0,0,0,NULL,0,NULL,49,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL
-			,1,@ColumnCostCenterID,0,1,'COM_CC'+convert(nvarchar,@ColumnCostCenterID),'NodeID',0
-			FROM ADM_DocumentTypes with(nolock) WHERE CostCenterID=@CostCenterID
+			SELECT @CostCenterID,@ResID,DocumentName,'COM_DocCCData',@Header,'dcCCNID'+convert(nvarchar,(@ColumnCostCenterID-50000)),NULL,'LISTBOX','LISTBOX','','',0,0,1,1,0,1,0,0,@ColumnCostCenterID,1,NULL,0,NULL,49,NULL,NULL,NULL,NULL,NULL,0,NULL,'COMPANYGUID','EA03CE5E-E892-4DF3-AD70-4338FE733ED1',NULL,'ADMIN',4,NULL,NULL
+			,1,@ColumnCostCenterID,0,1,(SELECT TOP 1 TableName FROM [ADM_Features] with(nolock) WHERE FeatureID=@ColumnCostCenterID),'NodeID',(SELECT TOP 1 CostCenterColID FROM ADM_CostCenterDef WITH(NOLOCK) WHERE CostCenterID=@ColumnCostCenterID AND SysColumnName='Name')
+			FROM ADM_DocumentTypes with(nolock)
+			WHERE CostCenterID=@CostCenterID 
 			SET @CostCenterColID=SCOPE_IDENTITY()
 	  END
 
@@ -1266,24 +1334,22 @@ SET NOCOUNT ON;
 	  begin
 		if not exists (select Name from sys.columns where Name='dcCCNID'+convert(nvarchar,@ColumnCostCenterID-50000) and object_id=object_id('COM_DocCCData'))
 		begin
-			set @colsql='alter table COM_DocCCData add dcCCNID'+convert(nvarchar,@ColumnCostCenterID-50000)+' INT default(1) not null
-						ALTER TABLE [COM_DocCCData] WITH CHECK ADD  CONSTRAINT [FK_COM_DocCCData_COM_CC'+convert(nvarchar,@ColumnCostCenterID)+'] FOREIGN KEY([dcCCNID'+convert(nvarchar,@ColumnCostCenterID-50000)+']) REFERENCES [COM_CC'+convert(nvarchar,@ColumnCostCenterID)+'] ([NodeID])
-	ALTER TABLE [COM_DocCCData] CHECK CONSTRAINT [FK_COM_DocCCData_COM_CC'+convert(nvarchar,@ColumnCostCenterID)+']'
-			exec(@colsql)
+			SELECT @colsql='alter table COM_DocCCData add dcCCNID'+convert(nvarchar,@ColumnCostCenterID-50000)+' '+DATA_TYPE+' default(1) not null
+			ALTER TABLE [COM_DocCCData] WITH CHECK ADD  CONSTRAINT [FK_COM_DocCCData_COM_CC'+convert(nvarchar,@ColumnCostCenterID)+'] FOREIGN KEY([dcCCNID'+convert(nvarchar,@ColumnCostCenterID-50000)+']) REFERENCES [COM_CC'+convert(nvarchar,@ColumnCostCenterID)+'] ([NodeID])
+			ALTER TABLE [COM_DocCCData] CHECK CONSTRAINT [FK_COM_DocCCData_COM_CC'+convert(nvarchar,@ColumnCostCenterID)+']'
+			FROM INFORMATION_SCHEMA.COLUMNS WITH(NOLOCK) 
+			WHERE TABLE_NAME='COM_CC'+convert(nvarchar,@ColumnCostCenterID) AND COLUMN_NAME='NodeID'
+			
+			Exec sp_executesql @colsql
 						
 			set @colsql='alter table COM_DocCCData_History add dcCCNID'+convert(nvarchar,@ColumnCostCenterID-50000)+' INT  default(1) not null'
-			exec(@colsql)
+			Exec sp_executesql @colsql
 		end
   	  end
 	        
-       if(@Link_Data is not null and (@Link_Data=61 or @Link_Data=65 or @Link_Data=7 or @Link_Data=83 or @Link_Data>50000))
+       if(@Link_Data is not null and (@Link_Data=65 or @Link_Data=7 or @Link_Data=83 or @Link_Data>50000))
        begin
-                if(@Link_Data=61)
-                begin
-                    select  @Local_Ref= CostCenterColID from ADM_CostCenterDef with(nolock)             
-                    where CostCenterID=@CostCenterID and SYSCOLUMNNAME='VehicleID'
-                end
-                else if(@Link_Data=65)
+                if(@Link_Data=65)
                 begin
                     select  @Local_Ref= CostCenterColID from ADM_CostCenterDef with(nolock)             
                     where CostCenterID=@CostCenterID and SYSCOLUMNNAME='ContactID'
@@ -1388,11 +1454,11 @@ SET NOCOUNT ON;
   WHERE  X.value('@DocumentLinkDefID','int')> 0 )     
  
              
-  declare @LinkcolsXML XML, @CostCenterColIDBase int,@IsExecuted bit,@LinkDefID BIGINT, @CostCenterIDLinked int ,@CostCenterColIDLinked int,@IsDefault bit,@vchers NVARCHAR(MAX),@ViewID BIGINT,@AutoSelect bit
+  declare @LinkcolsXML XML, @CostCenterColIDBase int,@IsExecuted bit,@LinkDefID INT, @CostCenterIDLinked int ,@CostCenterColIDLinked int,@IsDefault bit,@vchers NVARCHAR(MAX),@ViewID INT,@AutoSelect bit
   if(@LinkXML IS NOT NULL AND @LinkXML <>'')              
   BEGIN              
    
-   declare @TempTable table(tempid int identity(1,1),LinkDefID BIGINT,CostCenterColIDBase int,CostCenterIDLinked int,CostCenterColIDLinked int,IsDefault bit,AutoSelect bit,Vouchers NVARCHAR(MAX),Cols NVARCHAR(MAX),IsExecuted bit,ViewID INT)
+   declare @TempTable table(tempid int identity(1,1),LinkDefID INT,CostCenterColIDBase int,CostCenterIDLinked int,CostCenterColIDLinked int,IsDefault bit,AutoSelect bit,Vouchers NVARCHAR(MAX),Cols NVARCHAR(MAX),IsExecuted bit,ViewID INT)
 
    insert into @TempTable
    select X.value('@DocumentLinkDefID','int'),X.value('@CostCenterColIDBase','int'),X.value('@CostCenterIDLinked','int'),X.value('@CostCenterColIDLinked','int'),isnull(X.value('@IsDefault','bit'),0),isnull(X.value('@AutoSelect','bit'),0)
@@ -1540,6 +1606,8 @@ SET NOCOUNT ON;
                  ,fetchmaxrows=X.value('@GridViewID','int')
                  ,IgnoreChar=X.value('@IgnoreChars','int')
                  ,WaterMark=X.value('@WaterMark','NVARCHAR(500)')
+				 ,MinChar=X.value('@MinChar','INT')
+				 ,MaxChar=X.value('@MaxChar','INT')
             from @StaticXMLData.nodes('XML/Row') as Data(X)   
             where COSTCENTERID = @COSTCENTERID
             AND CostCenterColID = X.value('@CostCeneterColID','int')
@@ -1723,8 +1791,8 @@ SET NOCOUNT ON;
     IF @BudgetsXML<>'' AND @BudgetsXML IS NOT NULL
     BEGIN
         SET @XML=@BudgetsXML
-        declare @From float,@To float,@BudID bigint,@NewBudID bigint,@BudIDs nvarchar(max),@NewBudIDs nvarchar(max)
-        declare @TblBuds as table(ID int identity(1,1) PRIMARY KEY,FromDate float,ToDate float,BudID bigint)
+        declare @From float,@To float,@BudID INT,@NewBudID INT,@BudIDs nvarchar(max),@NewBudIDs nvarchar(max)
+        declare @TblBuds as table(ID int identity(1,1) PRIMARY KEY,FromDate float,ToDate float,BudID INT)
 		insert into @TblBuds
         SELECT  CONVERT(FLOAT,X.value('@FromDate','DATETIME')) FromDate,CONVERT(FLOAT,X.value('@ToDate','DATETIME')),X.value('@BudgetID','int')
         FROM @XML.nodes('/Budgets/Row') as DATA(X)

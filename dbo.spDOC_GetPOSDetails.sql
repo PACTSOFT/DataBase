@@ -3,13 +3,13 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetPOSDetails]
-	@PosSessionID [bigint],
-	@RegisterID [bigint],
-	@ShiftID [bigint],
+	@PosSessionID [int],
+	@RegisterID [int],
+	@ShiftID [int],
 	@CloseType [int],
 	@DocDate [datetime],
 	@Where [nvarchar](max),
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -77,13 +77,14 @@ SET NOCOUNT ON
 				set @Where=@Where+' and DcccNid'+CONVERT(nvarchar,(@shft-50000))+'='+CONVERT(nvarchar,@ShiftID) 		
 			set @Where=@Where+' and datediff(day,convert(datetime,DocDate),'''+convert(nvarchar(50),@DocDate)+''')=0'
 		END
+		set @Where=@Where+' and a.Statusid<>376 '
 		
 		set @extraCol=',convert(datetime,DocDate) DocDate,DcccNid'+CONVERT(nvarchar,(@Reg-50000))+' Reg'
 		
 		set @Join=''
 		if @CloseType=0 or @CloseType=3
 		begin
-			declare @CloseID bigint
+			declare @CloseID INT
 			select @CloseID=CloseID from POS_loginHistory with(nolock) where POSLoginHistoryID=@PosSessionID
 			set @Join=' inner join COM_DocID DID with(nolock) on DID.ID=a.DocID
 			inner join POS_loginHistory PH with(nolock) on PH.POSLoginHistoryID=DID.PosSessionID'
@@ -111,7 +112,7 @@ SET NOCOUNT ON
 		else
 			select 1 where 1=2
 			
-		set @sql='SELECT  '''+@Orders+''' as orders,'''+@GiftVSale+''' as GiftVSale,count(distinct docid) cnt,a.Costcenterid,a.documenttype,d.DocumentName, DocAbbr+''-''+DocPrefix Prefix,MAX(convert(bigint,DocNumber)) MAXNumber,Min(convert(bigint,DocNumber)) MinNumber'+@extraCol+'
+		set @sql='SELECT  '''+@Orders+''' as orders,'''+@GiftVSale+''' as GiftVSale,count(distinct docid) cnt,a.Costcenterid,a.documenttype,d.DocumentName, DocAbbr+''-''+DocPrefix Prefix,MAX(convert(INT,DocNumber)) MAXNumber,Min(convert(INT,DocNumber)) MinNumber'+@extraCol+'
 		from INV_DocDetails a WITH(NOLOCK)
 		join COM_DocCCData c WITH(NOLOCK) on a.InvDocDetailsID=c.InvDocDetailsID
 		join ADM_DocumentTypes d WITH(NOLOCK) on a.CostCenterID=d.CostCenterID'+@Join+'
@@ -333,5 +334,5 @@ BEGIN CATCH
 	END
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

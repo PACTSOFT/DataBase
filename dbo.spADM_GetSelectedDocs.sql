@@ -5,15 +5,15 @@ GO
 CREATE PROCEDURE [dbo].[spADM_GetSelectedDocs]
 	@FromDate [datetime],
 	@ToDate [datetime],
-	@CostCenterID [bigint],
+	@CostCenterID [int],
 	@IsVoucherWise [bit],
 	@prefix [nvarchar](200),
-	@From [bigint],
-	@To [bigint],
+	@From [int],
+	@To [int],
 	@where [nvarchar](max),
 	@isResave [bit],
 	@UserName [nvarchar](200),
-	@UserID [bigint],
+	@UserID [int],
 	@RoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -34,16 +34,26 @@ SET NOCOUNT ON;
 
 	IF @CostCenterID=95
 	BEGIN
-		if(@IsVoucherWise=0)
-			SELECT ContractID DocID,95 CostCenterID,CONVERT(DATETIME,CONTRACTDATE) DocDate,
-			CONTRACTPREFIX DOCprefix,convert(bigint,CONTRACTNUMBER) CONTRACTNUMBER,SNO VoucherNo,0 RefCCID,0 RefNodeid
-			FROM REN_CONTRACT with(nolock) 
-			WHERE RefContractID=0 AND CostCenterID=@CostCenterID AND CONTRACTDATE between convert(float,@FromDate) and convert(float,@ToDate)  
-		ELSE
-			SELECT ContractID DocID,95 CostCenterID,CONVERT(DATETIME,CONTRACTDATE) DocDate,
-			CONTRACTPREFIX DOCprefix,convert(bigint,CONTRACTNUMBER) CONTRACTNUMBER,SNO VoucherNo,0 RefCCID,0 RefNodeid
-			FROM REN_CONTRACT with(nolock) 
-			WHERE RefContractID=0 AND CostCenterID=@CostCenterID AND SNO between @From and @To
+		if exists(select name from sys.tables where name='REN_CONTRACT')
+		begin
+			if(@IsVoucherWise=0)
+			BEGIN
+				set @sql='SELECT ContractID DocID,95 CostCenterID,CONVERT(DATETIME,CONTRACTDATE) DocDate,
+				CONTRACTPREFIX DOCprefix,convert(INT,CONTRACTNUMBER) CONTRACTNUMBER,SNO VoucherNo,0 RefCCID,0 RefNodeid
+				FROM REN_CONTRACT with(nolock) 
+				WHERE RefContractID=0 AND CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+' AND CONTRACTDATE between convert(float,@FromDate) and convert(float,@ToDate)'  
+				
+				EXEC sp_executesql @SQL,N'@FromDate datetime,@ToDate datetime',@FromDate,@ToDate
+			END
+			ELSE
+			BEGIN
+				set @sql='SELECT ContractID DocID,95 CostCenterID,CONVERT(DATETIME,CONTRACTDATE) DocDate,
+				CONTRACTPREFIX DOCprefix,convert(INT,CONTRACTNUMBER) CONTRACTNUMBER,SNO VoucherNo,0 RefCCID,0 RefNodeid
+				FROM REN_CONTRACT with(nolock) 
+				WHERE RefContractID=0 AND CostCenterID='+CONVERT(NVARCHAR,@CostCenterID)+' AND SNO between '+CONVERT(NVARCHAR,@From)+' and '+CONVERT(NVARCHAR,@To)
+				exec (@sql)
+			END
+		END
 	END
 	ELSE
 	BEGIN
@@ -58,7 +68,7 @@ SET NOCOUNT ON;
 			set @ID='ACCDocDetailsID'
 		END
 		  
-		set @sql='select distinct DocID,CostCenterID,DocDate,DOCprefix,convert(bigint,docnumber),VoucherNo,RefCCID,RefNodeid 
+		set @sql='select distinct DocID,CostCenterID,DocDate,DOCprefix,convert(INT,docnumber),VoucherNo,RefCCID,RefNodeid 
 		from '+@table+' a with(nolock) 
 		join ACC_Accounts cr with(nolock) on a.CreditAccount=cr.AccountID
 		join ACC_Accounts dr with(nolock) on a.DebitAccount=dr.AccountID
@@ -89,7 +99,7 @@ SET NOCOUNT ON;
 			
 			set @sql=@sql+@where +'
 			UNION
-			select distinct DocID,CostCenterID,DocDate,DOCprefix,convert(bigint,docnumber),VoucherNo,RefCCID,RefNodeid 
+			select distinct DocID,CostCenterID,DocDate,DOCprefix,convert(INT,docnumber),VoucherNo,RefCCID,RefNodeid 
 			from '+@table+' a with(nolock) 
 			join ACC_Accounts cr with(nolock) on a.CreditAccount=cr.AccountID
 			join ACC_Accounts dr with(nolock) on a.DebitAccount=dr.AccountID
@@ -107,7 +117,7 @@ SET NOCOUNT ON;
 			set @sql =@sql+@where
 		if(@UserID<>1 and @UserWise=1)
 			set @sql =@sql+' and a.CreatedBy ='''+@UserName+''''
-		set @sql =@sql+' order by a.DocDate,a.DOCprefix,convert(bigint,a.docnumber)'
+		set @sql =@sql+' order by a.DocDate,a.DOCprefix,convert(INT,a.docnumber)'
 	END  
 	print @sql
 	exec(@sql) 
@@ -132,5 +142,5 @@ ROLLBACK TRANSACTION
 SET NOCOUNT OFF        
 RETURN -999         
 END CATCH        
---SELECT * FROM ADM_FEATURES WHERE FEATUREID=40034   
+--SELECT * FROM ADM_FEATURES WHERE FEATUREID=40034
 GO

@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetListViewScreenDetails]
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
@@ -22,7 +22,7 @@ SET NOCOUNT ON;
 	
 	select C.CostCenterColID as Value,F.Name as Name from adm_costcenterdef C WITH(NOLOCK)
 	left join adm_Features F with(nolock) on C.ParentCostCenterID=F.FeatureID 
-	where  F.IsEnabled=1 and F.FeatureID between 50000 and 50050 --and C.ISCOLUMNINUSE=0
+	where  F.IsEnabled=1 and F.FeatureID>50000  --and C.ISCOLUMNINUSE=0
 
 	SELECT * FROM ADM_Users WITH(NOLOCK) 
 	where userid in (select distinct userid from ADM_Assign with(nolock) where CostCenterID=69) and (UserID=@UserID or UserID!=1)
@@ -30,7 +30,7 @@ SET NOCOUNT ON;
 	select c.CostCenterID,C.CostCenterColID,C.SysColumnName,R.ResourceData from adm_costcenterdef C WITH(NOLOCK)
 	join COM_LanguageResources R with(nolock) on R.ResourceID=c.ResourceID
 	left join adm_Features F with(nolock) on C.CostCenterID=F.FeatureID 
-	where R.LanguageID=@LangID and  F.IsEnabled=1 and c.CostCenterID between 50000 and 50050 
+	where R.LanguageID=@LangID and  F.IsEnabled=1 and c.CostCenterID> 50000 
 	and (C.ISCOLUMNINUSE=1 or C.IsColumnUserDefined=0) and C.SysColumnName not like 'CCNID%'
 	UNION ALL
 	select -1,0,'',''
@@ -54,5 +54,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH  
+END CATCH
 GO

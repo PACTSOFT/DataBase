@@ -3,7 +3,7 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spDOC_GetChequeReturnHistory]
-	@AccountID [bigint] = 0,
+	@AccountID [int] = 0,
 	@IsCredit [bit],
 	@VoucherNo [nvarchar](500),
 	@DocSeqNo [int],
@@ -11,7 +11,7 @@ CREATE PROCEDURE [dbo].[spDOC_GetChequeReturnHistory]
 	@DivisionWhere [nvarchar](max),
 	@DimensionWhere [nvarchar](max),
 	@Docdate [datetime],
-	@CostCenterID [bigint],
+	@CostCenterID [int],
 	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -40,9 +40,9 @@ BEGIN TRY
 			 set @PrefValue=''
 			select @PrefValue= isnull(Value,'') from ADM_GlobalPreferences with(nolock) where Name='Maintain Dimensionwise Bills'  
 		    
-			if(@PrefValue is not null and @PrefValue<>'' and convert(bigint,@PrefValue)>0)  
+			if(@PrefValue is not null and @PrefValue<>'' and convert(INT,@PrefValue)>0)  
 			begin  
-				  set @PrefValue=convert(bigint,@PrefValue)-50000  						 
+				  set @PrefValue=convert(INT,@PrefValue)-50000  						 
 				  set @Where=@Where+' and dcCCNID'+@PrefValue+' in ('+@DimensionWhere+')'
 			end  			
 		end
@@ -51,9 +51,9 @@ BEGIN TRY
 		
 		insert into @Tab		
 		SELECT a.FeatureID,TableName
-		FROM ADM_Features a
-		join ADM_GridViewColumns g on a.FeatureID=g.CostCenterColID
-		join adm_gridview gr on gr.GridViewID=g.GridViewID and gr.costcenterid=159
+		FROM ADM_Features a with(nolock)
+		join ADM_GridViewColumns g with(nolock) on a.FeatureID=g.CostCenterColID
+		join adm_gridview gr with(nolock) on gr.GridViewID=g.GridViewID and gr.costcenterid=159
 		WHERE  IsEnabled=1  and a.FeatureID>50000
 
 		set @i=1
@@ -97,7 +97,7 @@ BEGIN TRY
 			BEGIN
 			  
 				set @Sql='SELECT DocNo, abs(sum(AdjAmount)) Amount,B.DocSeqNo,CONVERT(DATETIME,B.DocDate) DocDate ,CONVERT(DATETIME,DocDueDate) DocDueDate,
-				ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_ChequeReturn SQ with(nolock) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo AND (SQ.DocNo<>'''+@VoucherNo+''' AND SQ.DocSeqNo='+convert(nvarchar,@DocSeqNo)+')),0) 
+				ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_ChequeReturn SQ with(nolock) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo AND not (SQ.DocNo='''+@VoucherNo+''' AND SQ.DocSeqNo='+convert(nvarchar,@DocSeqNo)+')),0) 
 				Paid,[AdjCurrID],c.Name 
 				  ,[AdjExchRT],
 				a.BILLNO,Convert(DATETIME, a.Billdate) as BillDate, a.CommonNarration, a.ChequeBankName, a.ChequeNumber, 
@@ -115,7 +115,7 @@ BEGIN TRY
     			,[AdjExchRT], a.BILLNO, Convert(DATETIME, a.Billdate), a.CommonNarration, a.ChequeBankName,
 				a.ChequeNumber, a.ChequeDate,a.ChequeMaturityDate
 				having abs(sum(AdjAmount)) >
-				ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_ChequeReturn SQ with(nolock) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo AND (SQ.DocNo<>'''+@VoucherNo+''' AND SQ.DocSeqNo='+convert(nvarchar,@DocSeqNo)+')),0) 				
+				ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_ChequeReturn SQ with(nolock) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo AND not (SQ.DocNo='''+@VoucherNo+''' AND SQ.DocSeqNo='+convert(nvarchar,@DocSeqNo)+')),0) 				
 				order by B.DocDate'
 				exec(@Sql)
 				
@@ -173,7 +173,7 @@ BEGIN TRY
 			IF(@VoucherNo<>'')
 			BEGIN
 				set @Sql='SELECT DocNo, abs(sum(AdjAmount)) Amount,B.DocSeqNo,CONVERT(DATETIME,B.DocDate) DocDate ,CONVERT(DATETIME,DocDueDate) DocDueDate,
-				ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_ChequeReturn SQ with(nolock) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo AND (SQ.DocNo<>'''+@VoucherNo+''' AND SQ.DocSeqNo='+convert(nvarchar,@DocSeqNo)+')),0) 
+				ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_ChequeReturn SQ with(nolock) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo AND  not (SQ.RefDocNo='''+@VoucherNo+''' AND SQ.RefDocSeqNo='+convert(nvarchar,@DocSeqNo)+')),0) 
 				Paid,[AdjCurrID],c.Name'+@CustomQuery3+'
 				  ,[AdjExchRT]
 				,a.BILLNO, Convert(DATETIME, a.Billdate) AS BillDate, a.CommonNarration, a.ChequeBankName, a.ChequeNumber,
@@ -191,7 +191,7 @@ BEGIN TRY
 				  ,[AdjExchRT], a.BILLNO, Convert(DATETIME, a.Billdate), a.CommonNarration, a.ChequeBankName,
 				  a.ChequeNumber, a.ChequeDate,a.ChequeMaturityDate
 				having abs(sum(AdjAmount)) >
-				ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_ChequeReturn SQ with(nolock) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo AND (SQ.DocNo<>'''+@VoucherNo+''' AND SQ.DocSeqNo='+convert(nvarchar,@DocSeqNo)+')),0) 
+				ISNULL((SELECT abs(SUM(SQ.AdjAmount)) FROM COM_ChequeReturn SQ with(nolock) WHERE SQ.RefDocNo=B.DocNo AND SQ.RefDocSeqNo=B.DocSeqNo AND not (SQ.DocNo='''+@VoucherNo+''' AND SQ.DocSeqNo='+convert(nvarchar,@DocSeqNo)+')),0) 
 				order by B.DocDate'
 				
 				exec(@Sql)
@@ -261,5 +261,4 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
-
 GO

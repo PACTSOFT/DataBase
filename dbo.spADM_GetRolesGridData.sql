@@ -4,7 +4,7 @@ SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spADM_GetRolesGridData]
 	@RoleID [int] = 0,
-	@UserID [bigint],
+	@UserID [int],
 	@LoginRoleID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
@@ -23,7 +23,7 @@ SET NOCOUNT ON;
 		RAISERROR('-105',16,1)          
 	END
   
-	declare @JLen bigint 
+	declare @JLen INT 
 	select @JLen=len(Value) from com_costcenterpreferences WITH(NOLOCK) where CostCenterID=76 and name='JobDimension' 
 
 	--Get Role Information.          
@@ -52,7 +52,8 @@ SET NOCOUNT ON;
 	LEFT JOIN COM_LanguageResources D WITH(NOLOCK) ON D.ResourceID=R.DrpResourceID AND D.LanguageID=1          
 	WHERE   FA.FEATUREID<>50 
 	--FeatureActionID (R.RibbonViewID NOT IN (29,30,50004,77,80,81,82,108,109,1010,157,158,187,202,203,523,612,674,1009,616,552,553,554,214,227,228,229,230,1012,236,992,993,1004) 
-	AND (R.FeatureActionID NOT IN (1695,770,35,85,1744,771,1888,3737,460,461,6464,1745,773,1619,2081,2082,3459,3458,4812,2068,1972,2001,2593,2064,1991,3452,608,609,3738,563,564,3754,2873)
+	AND (R.FeatureActionID NOT IN (1695,770,35,85,1744,771,1888,3737,460,461,6464,1745,773,1619,2081,2082,3459,3458,4812,2068,1972,2001,2593,2064,1991,3452,608,609,3738,563,564,2873)
+	--AND (R.FeatureActionID NOT IN (1695,770,35,85,1744,771,1888,3737,460,461,6464,1745,773,1619,2081,2082,3459,3458,4812,2068,1972,2001,2593,2064,1991,3452,608,609,3738,563,564,3754,2873)
 	and R.RibbonViewID NOT IN (select ribbonviewid from ADM_RibbonView with(nolock) where TabID=9 and groupid=50 and featureactionname='Document Resave')) 
 	and R.RibbonViewID NOT IN ( select ribbonviewid from adm_ribbonview WITH(NOLOCK) where tabid=4 and GroupID=32 and DrpName='Jobs' and @JLen=0 ) 
 	and FA.FEATUREACTIONID <> (6604)
@@ -148,5 +149,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION          
 SET NOCOUNT OFF            
 RETURN -999             
-END CATCH             
+END CATCH
 GO
