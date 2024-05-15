@@ -674,7 +674,7 @@ and X.value('@Action','nvarchar(300)')='DELETE')
   --ADDED ON APR 20 2013 BY HAFEEZ
 	IF(@ParentCCID<>-1 AND @COSTCENTERID=144)
 	BEGIN
-        IF (@ParentCCID=73 OR @ParentCCID=86 OR @ParentCCID=1000 OR @ParentCCID=2 OR @ParentCCID=88 OR @ParentCCID=89 OR @ParentCCID=83 OR @ParentCCID=65 OR @ParentCCID=95 or @ParentCCID>40000) 
+        IF (@ParentCCID=73 OR @ParentCCID=86 OR @ParentCCID=1000 OR @ParentCCID=2 OR @ParentCCID=88 OR @ParentCCID=89 OR @ParentCCID=83 OR @ParentCCID=65 OR @ParentCCID=95 or @ParentCCID=94 or @ParentCCID=92 or @ParentCCID=93 or @ParentCCID>40000) 
 		
 		UPDATE adm_costcenterdef  
 		SET  LOCALREFERENCE = @ParentCCID WHERE COSTCENTERID=@COSTCENTERID
@@ -705,10 +705,8 @@ and X.value('@Action','nvarchar(300)')='DELETE')
  
 		WHILE @I<=@COUNT
 		BEGIN
-			SELECT @KEY=[KEY],@VALUE=[VALUE] FROM @TEMP WHERE ID=@I
-			--if(@KEY='ActivityFields' and @COSTCENTERID=144 and @ParentCCID between 40000 and 50000)
-			if(@KEY='ActivityFields' and @COSTCENTERID=144 and @ParentCCID between 40000 and 50000)
-			--IF (@KEY='ActivityFields' and @COSTCENTERID=144 and ((@ParentCCID between 40000 and 50000) )
+			SELECT @KEY=[KEY],@VALUE=[VALUE] FROM @TEMP WHERE ID=@I		
+			if(@KEY='ActivityFields' and @COSTCENTERID=144 and @ParentCCID between 40000 and 50000)			
 			BEGIN
 				UPDATE [com_documentpreferences] 
 				SET [PrefValue]=@VALUE,

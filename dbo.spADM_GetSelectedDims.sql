@@ -40,6 +40,13 @@ SET NOCOUNT ON;
 			set @sql='select a.'+@ID+' as NODEID,ProductCode as CODE,ProductName as NAME,3 as CCID '
 			set @sqlCondition = ' and a.ProductID > 1 '
 		END
+		ELSE IF (@CostCenterID=23)
+		BEGIN
+		    set @table='INV_Product'
+			set @ID='ProductID'
+			set @sql='select a.'+@ID+' as NODEID,ProductCode as CODE,ProductName as NAME,3 as CCID '
+			set @sqlCondition = ' and a.ProductID > 1 '
+		END
 		--ELSE IF (@CostCenterID=16)
 		--BEGIN 
 		--		if exists(select id from @TblTemp)
@@ -79,9 +86,22 @@ SET NOCOUNT ON;
 		     set @sqlCondition = ' and a.NodeID > 2 '
 		END
 		
-	    set @sql= @sql +'
-		from '+@table+' a with(nolock) 
-		join COM_CCCCData b with(nolock) on a.'+@ID+'=b.NodeID'
+		IF(@CostCenterID=23)
+		BEGIN
+			set @sql= @sql +'
+			from '+@table+' a with(nolock) 
+			JOIN INV_ProductSubstitutes G with(nolock) ON G.ProductID=a.ProductID
+			join COM_CCCCData b with(nolock) on a.'+@ID+'=b.NodeID'
+			
+			SET @CostCenterID=3
+		END
+		ELSE
+		BEGIN	
+			set @sql= @sql +'
+			from '+@table+' a with(nolock) 
+			join COM_CCCCData b with(nolock) on a.'+@ID+'=b.NodeID'
+		END
+		
 		set @sql = @sql +' where 1=1'
 
 		set @sql = @sql + @sqlCondition

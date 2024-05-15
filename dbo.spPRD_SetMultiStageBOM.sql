@@ -26,7 +26,7 @@ CREATE PROCEDURE [dbo].[spPRD_SetMultiStageBOM]
 	@CustomFieldsQuery [nvarchar](max) = null,
 	@CustomCostCenterFieldsQuery [nvarchar](max) = null,
 	@ProductionMethodXML [nvarchar](max) = null,
-	@AttachmentsXML [nvarchar](max),
+	@AttachmentsXML [nvarchar](max) = null,
 	@CompanyGUID [nvarchar](50),
 	@GUID [varchar](50),
 	@UserName [nvarchar](50),
@@ -123,7 +123,39 @@ SET NOCOUNT ON
  --   RAISERROR('-112',16,1)      
  --  END      
  --END     
-       
+       --WorkFlow
+Declare @CStatusID int
+Declare @level int,@maxLevel int
+SELECT @CStatusID=ISNULL(StatusID,0) FROM PRD_BillOfMaterial WITH(NOLOCK) where BOMID=@BOMID
+ if(@WID>0)	 
+	  BEGIN
+		set @level=(SELECT  top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+		where WorkFlowID=@WID and  UserID =@UserID)
+		if(@level is null )
+			set @level=(SELECT top 1 LevelID FROM [COM_WorkFlow]  WITH(NOLOCK)  
+			where WorkFlowID=@WID and  RoleID =@RoleID)
+
+		if(@level is null ) 
+			set @level=(SELECT top 1  LevelID FROM [COM_WorkFlow]   WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) where UserID=@UserID))
+
+		if(@level is null )
+			set @level=( SELECT top 1  LevelID FROM [COM_WorkFlow] WITH(NOLOCK) 
+			where WorkFlowID=@WID and  GroupID in (select GroupID from COM_Groups WITH(NOLOCK) 
+			where RoleID =@RoleID))
+
+		select @maxLevel=max(LevelID) from COM_WorkFlow WITH(NOLOCK)  where WorkFlowID=@WID  
+		select @level,@maxLevel
+		if(@level is not null and  @maxLevel is not null and @maxLevel>@level)
+		begin 
+		 	set @StatusID=1001 
+		end	
+		else if(@level is not null and  @maxLevel is not null and @BOMID>0 and @level<@maxLevel and @CStatusID in (1003))--rejected status time
+		begin	
+		 	set @StatusID=1001 
+		end			 
+		 
+	end     
       
   IF @BOMID = 0--------START INSERT RECORD-----------      
   BEGIN--CREATE BOM--
@@ -192,7 +224,7 @@ SET NOCOUNT ON
       ,CompanyGUID    
       ,GUID    
       ,CreatedBy    
-      ,CreatedDate,ModifiedDate)    
+      ,CreatedDate,ModifiedDate,WorkFlowID,WorkFlowLevel)    
     Values     
       (@BOMCode,CONVERT(float,@Date )  
       ,@BOMName    
@@ -210,7 +242,7 @@ SET NOCOUNT ON
       ,@CompanyGUID    
       ,newid()    
       ,@UserName    
-      ,@Dt,@Dt)    
+      ,@Dt,@Dt,@WID,ISNULL(@level,0))    
          
      SET @BOMID=SCOPE_IDENTITY()     
     
@@ -220,7 +252,11 @@ SET NOCOUNT ON
       
      INSERT INTO COM_CCCCDATA ([CostCenterID] ,[NodeID] ,[Guid],[CreatedBy],[CreatedDate])  
      VALUES(76,@BOMID,newid(),  @UserName, @Dt)    
-  
+   if(@WID>0)
+		BEGIN	 
+			INSERT INTO COM_Approvals(CCID,CCNODEID,StatusID,Date,Remarks,UserID,CompanyGUID,GUID,CreatedBy,CreatedDate,WorkFlowLevel,DocDetID)     
+			VALUES(76,@BOMID,@StatusID,CONVERT(FLOAT,getdate()),'',@UserID,@CompanyGUID,newid(),@UserName,CONVERT(FLOAT,getdate()),isnull(@level,0),0)
+		END	
         
   END --------END INSERT RECORD-----------      
  ELSE  --------START UPDATE RECORD-----------      
@@ -252,7 +288,8 @@ SET NOCOUNT ON
    ,BOMDate=CONVERT(float,@Date )   
    ,[GUID] = @Guid    
    ,[ModifiedBy] = @UserName    
-   ,[ModifiedDate] = @Dt    
+   ,[ModifiedDate] = @Dt   
+   ,[WorkFlowLevel]=isnull(@level,0)
       WHERE BOMID = @BOMID    
        END    
      
@@ -550,4 +587,5 @@ BEGIN CATCH
  SET NOCOUNT OFF        
  RETURN -999         
 END CATCH
+
 GO

@@ -7,6 +7,8 @@ CREATE PROCEDURE [dbo].[spCOM_GetDocDraft]
 	@CostCenterID [bigint],
 	@Status [int],
 	@IsReport [bit],
+	@LocationID [int],
+	@DivisionID [int],
 	@UserID [bigint],
 	@UserName [nvarchar](100),
 	@LangID [int] = 1
@@ -35,7 +37,7 @@ SET NOCOUNT ON;
 			ELSE if(@IsReport is not null and @IsReport =1) 
 				SELECT D.DraftID,DocName,NoOfProducts,NetValue, D.CostCenterID,CONVERT(DATETIME,ModifiedDate) AS [Date],(SELECT Top 1 DocumentName FROM ADM_DocumentTypes WITH(NOLOCK) WHERE CostCenterID=D.CostCenterID) Type,CONVERT(DATETIME,HoldDocDate) HoldDate
 				FROM COM_DocDraft D WITH(NOLOCK) 
-				WHERE Status=@Status and costcenterid=@CostCenterID
+				WHERE Status=@Status and costcenterid=@CostCenterID and LocationID = @LocationID and DivisionID = @DivisionID
 				ORDER BY ModifiedDate DESC
 			else
 			begin
@@ -45,12 +47,12 @@ SET NOCOUNT ON;
 				IF (@DocumentType=38 OR @DocumentType=39)
 					SELECT D.DraftID,DocName,NoOfProducts,NetValue, D.CostCenterID,CONVERT(DATETIME,ModifiedDate) AS [Date],(SELECT Top 1 DocumentName FROM ADM_DocumentTypes WITH(NOLOCK) WHERE CostCenterID=D.CostCenterID) Type,CONVERT(DATETIME,HoldDocDate) HoldDate
 					FROM COM_DocDraft D WITH(NOLOCK) 
-					WHERE RegisterID=@UserID and Status=@Status and costcenterid=@CostCenterID 
+					WHERE RegisterID=@UserID and Status=@Status and costcenterid=@CostCenterID  and LocationID = @LocationID and DivisionID = @DivisionID
 					ORDER BY ModifiedDate DESC
 				ELSE
 					SELECT D.DraftID,DocName,NoOfProducts,NetValue, D.CostCenterID,CONVERT(DATETIME,ModifiedDate) AS [Date],(SELECT Top 1 DocumentName FROM ADM_DocumentTypes WITH(NOLOCK) WHERE CostCenterID=D.CostCenterID) Type,CONVERT(DATETIME,HoldDocDate) HoldDate
 					FROM COM_DocDraft D WITH(NOLOCK) 
-					WHERE UserID=@UserID and Status=@Status and costcenterid=@CostCenterID 
+					WHERE UserID=@UserID and Status=@Status and costcenterid=@CostCenterID and LocationID = @LocationID and DivisionID = @DivisionID
 					ORDER BY ModifiedDate DESC
 			end
 		end
@@ -60,13 +62,13 @@ SET NOCOUNT ON;
 				SELECT D.DraftID,DocName,NoOfProducts,NetValue, D.CostCenterID,CONVERT(DATETIME,ModifiedDate) AS [Date],
 				(SELECT Top 1 DocumentName FROM ADM_DocumentTypes WITH(NOLOCK) WHERE CostCenterID=D.CostCenterID) Type,CONVERT(DATETIME,HoldDocDate) HoldDate 
 				FROM COM_DocDraft D WITH(NOLOCK) 
-				WHERE Status=@Status
+				WHERE Status=@Status and LocationID = @LocationID and DivisionID = @DivisionID
 				ORDER BY ModifiedDate DESC
 			else 
 				SELECT D.DraftID,DocName,NoOfProducts,NetValue, D.CostCenterID,CONVERT(DATETIME,ModifiedDate) AS [Date],
 				(SELECT Top 1 DocumentName FROM ADM_DocumentTypes WITH(NOLOCK) WHERE CostCenterID=D.CostCenterID) Type,CONVERT(DATETIME,HoldDocDate) HoldDate
 				FROM COM_DocDraft D WITH(NOLOCK) 
-				WHERE UserID=@UserID and Status=@Status
+				WHERE UserID=@UserID and Status=@Status and LocationID = @LocationID and DivisionID = @DivisionID
 				ORDER BY ModifiedDate DESC
 		end
 	END

@@ -5735,7 +5735,7 @@ BEGIN
          ,[ExchangeRate]     
 	     ,a.[Quantity]*b.[Quantity]*b.[Rate] 
 		 ,[StockValueFC],1,@InvDocDetailsID                
-         ,a.[Quantity]*b.[Quantity],WorkflowID , WorkFlowStatus , WorkFlowLevel,RefCCID,RefNodeid,RefNo
+         ,a.[Quantity]*b.[Quantity],a.WorkflowID , WorkFlowStatus , a.WorkFlowLevel,RefCCID,RefNodeid,RefNo
          , @UserName , @Dt 
          ,case when [DocumentType] in(1,39,27,26,25,2,34,6,3,4,13,41,42) then [CreditAccount] else [DebitAccount] end     
          ,@AP   

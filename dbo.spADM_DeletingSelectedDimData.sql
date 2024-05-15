@@ -77,6 +77,22 @@ SET NOCOUNT ON;
 					set @ICNT=@ICNT+1	
 				end 
 			END
+			ELSE IF (@CostCenterID=23)
+			BEGIN
+				INSERT INTO @TblTemp (NodeID)
+				exec SPSplitString @NodeID,','
+				
+				SELECT @ICNT = 1, @TCNT=COUNT(*) FROM @TblTemp
+				WHILE @ICNT<=@TCNT
+				BEGIN
+					SELECT @NID=NodeID FROM @TblTemp WHERE id=@ICNT
+					DELETE FROM PSA FROM INV_ProductSubstitutes PS WITH(NOLOCK)
+					JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=PS.ProductID AND P.ProductID IN (@NID)
+					JOIN INV_ProductSubstitutes PSA WITH(NOLOCK) ON PSA.SubstituteGroupName=PS.SubstituteGroupName
+					
+					SET @ICNT=@ICNT+1
+				END
+			END
 			ELSE IF (@CostCenterID>50000)
 			BEGIN
 			declare @Sql nvarchar(max), @TableName nvarchar(100)

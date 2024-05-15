@@ -187,7 +187,7 @@ SET NOCOUNT ON;
 				select @CStatusID=NodeID from com_lookup with(nolock) where lookuptype=56 and IsDefault=1
 		 
 					if @CStatusID is null
-					set @CStatusID=56
+					set @CStatusID=415
 			end
 			ELSE if(@CostCenterID in(89))
 		

@@ -377,54 +377,75 @@ SET NOCOUNT ON;
 		 
 	END
 	
+	declare @tblList table (id int identity(1,1),TRANSXML nvarchar(max))
+	
 	IF(@PenaltyXML is not null and @PenaltyXML<>'')  
 	BEGIN 
 			select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)  
 			where CostCenterID=95 and Name='TerminatePenaltyJV' 
 			 
-			set @Prefix=''
-			EXEC [sp_GetDocPrefix] @PenaltyXML,@PostingDate,@RcptCCID,@Prefix   output
-
+			
 			if exists(select * from adm_documenttypes WITH(NOLOCK) where costcenterid= @RcptCCID and isinventory=1)
 			BEGIN
-				set @PenaltyXML=Replace(@PenaltyXML,'<RowHead/>','')
-				set @PenaltyXML=Replace(@PenaltyXML,'</DocumentXML>','')
-				set @PenaltyXML=Replace(@PenaltyXML,'<DocumentXML>','')
+				set @XML=@PenaltyXML
 				
-				EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]  
-				@CostCenterID = @RcptCCID,  
-				@DocID = 0,  
-				@DocPrefix = @Prefix,  
-				@DocNumber = 1,  
-				@DocDate = @PostingDate,  
-				@DueDate = NULL,  
-				@BillNo = @SNO,  
-				@InvDocXML =@PenaltyXML,  
-				@BillWiseXML = N'',  
-				@NotesXML = N'',  
-				@AttachmentsXML = N'',  
-				@ActivityXML  = @ActXml, 
-				@IsImport = 0,  
-				@LocationID = @LocationID,  
-				@DivisionID = @DivisionID ,  
-				@WID = 0,  
-				@RoleID = @RoleID,  
-				@DocAddress = N'',  
-				@RefCCID = 95,
-				@RefNodeid  = @ContractID,
-				@CompanyGUID = @CompanyGUID,  
-				@UserName = @UserName,  
-				@UserID = @UserID,  
-				@LangID = @LangID  
+				INSERT INTO @tblList(TRANSXML)    
+				SELECT  CONVERT(NVARCHAR(MAX),  X.query('DocumentXML'))
+				from @XML.nodes('/Penalty/ROWS') as Data(X)        
+
+				SELECT @ICNT = min(ID),@CNT=max(ID) FROM @tblList  
 				
-				INSERT INTO  [REN_ContractDocMapping]  
-				   ([ContractID],[Type]  ,[Sno]  ,DocID  ,CostcenterID  
-				   ,IsAccDoc,DocType  , ContractCCID)values
-				   (@ContractID,101,0,@return_value,@RcptCCID,0,0 , 95    )
+				WHILE(@ICNT <= @CNT)  
+				BEGIN  
+						set @DocXml=''
+						SELECT @DocXml = TRANSXML FROM @tblList WHERE  ID = @ICNT  
+						
+						set @Prefix=''
+						EXEC [sp_GetDocPrefix] @DocXml,@PostingDate,@RcptCCID,@Prefix   output
+
+							set @DocXml=Replace(@DocXml,'<RowHead/>','')
+							set @DocXml=Replace(@DocXml,'</DocumentXML>','')
+							set @DocXml=Replace(@DocXml,'<DocumentXML>','')
 				
+						EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]  
+						@CostCenterID = @RcptCCID,  
+						@DocID = 0,  
+						@DocPrefix = @Prefix,  
+						@DocNumber = 1,  
+						@DocDate = @PostingDate,  
+						@DueDate = NULL,  
+						@BillNo = @SNO,  
+						@InvDocXML =@DocXml,  
+						@BillWiseXML = N'',  
+						@NotesXML = N'',  
+						@AttachmentsXML = N'',  
+						@ActivityXML  = @ActXml, 
+						@IsImport = 0,  
+						@LocationID = @LocationID,  
+						@DivisionID = @DivisionID ,  
+						@WID = 0,  
+						@RoleID = @RoleID,  
+						@DocAddress = N'',  
+						@RefCCID = 95,
+						@RefNodeid  = @ContractID,
+						@CompanyGUID = @CompanyGUID,  
+						@UserName = @UserName,  
+						@UserID = @UserID,  
+						@LangID = @LangID  
+						
+						INSERT INTO  [REN_ContractDocMapping]  
+						   ([ContractID],[Type]  ,[Sno]  ,DocID  ,CostcenterID  
+						   ,IsAccDoc,DocType  , ContractCCID)values
+						   (@ContractID,101,0,@return_value,@RcptCCID,0,0 , 95    )
+					SET @ICNT =@ICNT+1  
+
+				END			
 			END
 			ELSE
 			BEGIN
+				set @Prefix=''
+				EXEC [sp_GetDocPrefix] @PenaltyXML,@PostingDate,@RcptCCID,@Prefix   output
+
 				EXEC	@return_value = [dbo].[spDOC_SetTempAccDocument]
 				@CostCenterID = @RcptCCID,
 				@DocID = 0,
@@ -464,44 +485,59 @@ SET NOCOUNT ON;
 				select @RcptCCID=CONVERT(int,Value) from COM_CostCenterPreferences WITH(nolock)  
 				where CostCenterID=95 and Name='PenaltyRet' 
 				 
-				set @Prefix=''
-				EXEC [sp_GetDocPrefix] @PenaltyRetXML,@PostingDate,@RcptCCID,@Prefix   output
-			 
-				set @PenaltyRetXML=Replace(@PenaltyRetXML,'<RowHead/>','')
-				set @PenaltyRetXML=Replace(@PenaltyRetXML,'</DocumentXML>','')
-				set @PenaltyRetXML=Replace(@PenaltyRetXML,'<DocumentXML>','')
+				 set @XML=@PenaltyRetXML
+				 
+				 delete from @tblList
+				INSERT INTO @tblList(TRANSXML)    
+				SELECT  CONVERT(NVARCHAR(MAX),  X.query('DocumentXML'))
+				from @XML.nodes('/Penalty/ROWS') as Data(X)        
+
+				SELECT @ICNT = min(ID),@CNT=max(ID) FROM @tblList  
 				
-				EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]  
-				@CostCenterID = @RcptCCID,  
-				@DocID = 0,  
-				@DocPrefix = @Prefix,  
-				@DocNumber = 1,  
-				@DocDate = @PostingDate,  
-				@DueDate = NULL,  
-				@BillNo = @SNO,  
-				@InvDocXML =@PenaltyRetXML,  
-				@BillWiseXML = N'',  
-				@NotesXML = N'',  
-				@AttachmentsXML = N'',  
-				@ActivityXML  = @ActXml, 
-				@IsImport = 0,  
-				@LocationID = @LocationID,  
-				@DivisionID = @DivisionID ,  
-				@WID = 0,  
-				@RoleID = @RoleID,  
-				@DocAddress = N'',  
-				@RefCCID = 95,
-				@RefNodeid  = @ContractID,
-				@CompanyGUID = @CompanyGUID,  
-				@UserName = @UserName,  
-				@UserID = @UserID,  
-				@LangID = @LangID  
+				WHILE(@ICNT <= @CNT)  
+				BEGIN  
+						set @DocXml=''
+						SELECT @DocXml = TRANSXML FROM @tblList WHERE  ID = @ICNT  
+						
+						set @Prefix=''
+						EXEC [sp_GetDocPrefix] @DocXml,@PostingDate,@RcptCCID,@Prefix   output
+
+							set @DocXml=Replace(@DocXml,'<RowHead/>','')
+							set @DocXml=Replace(@DocXml,'</DocumentXML>','')
+							set @DocXml=Replace(@DocXml,'<DocumentXML>','')
 				
-				INSERT INTO  [REN_ContractDocMapping]  
-				   ([ContractID],[Type]  ,[Sno]  ,DocID  ,CostcenterID  
-				   ,IsAccDoc,DocType  , ContractCCID)values
-				   (@ContractID,101,0,@return_value,@RcptCCID,0,0 , 95    )
-				
+						EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]  
+						@CostCenterID = @RcptCCID,  
+						@DocID = 0,  
+						@DocPrefix = @Prefix,  
+						@DocNumber = 1,  
+						@DocDate = @PostingDate,  
+						@DueDate = NULL,  
+						@BillNo = @SNO,  
+						@InvDocXML =@DocXml,  
+						@BillWiseXML = N'',  
+						@NotesXML = N'',  
+						@AttachmentsXML = N'',  
+						@ActivityXML  = @ActXml, 
+						@IsImport = 0,  
+						@LocationID = @LocationID,  
+						@DivisionID = @DivisionID ,  
+						@WID = 0,  
+						@RoleID = @RoleID,  
+						@DocAddress = N'',  
+						@RefCCID = 95,
+						@RefNodeid  = @ContractID,
+						@CompanyGUID = @CompanyGUID,  
+						@UserName = @UserName,  
+						@UserID = @UserID,  
+						@LangID = @LangID  
+						
+						INSERT INTO  [REN_ContractDocMapping]  
+						   ([ContractID],[Type]  ,[Sno]  ,DocID  ,CostcenterID  
+						   ,IsAccDoc,DocType  , ContractCCID)values
+						   (@ContractID,101,0,@return_value,@RcptCCID,0,0 , 95    )
+					set @ICNT=@ICNT+1
+				END
 			END
 	  
 	  IF(@RemaingPaymentXML is not null and @RemaingPaymentXML<>'')  

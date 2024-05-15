@@ -3,34 +3,33 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetDocDraft]
-	@DraftID [bigint] = 0,
+	@DraftID [int] = 0,
 	@CostcenterID [int],
-	@NodeID [bigint],
+	@NodeID [int],
 	@DataXML [nvarchar](max),
 	@Status [int],
 	@DocName [nvarchar](200),
 	@HoldDocDate [datetime],
 	@NoOfProducts [int],
 	@NetValue [float],
-	@RegisterID [bigint],
+	@RegisterID [int],
+	@LocationID [int],
+	@DivisionID [int],
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRANSACTION      
 BEGIN TRY      
 SET NOCOUNT ON;     
-          
-	--Declaration Section    
-	DECLARE @HasAccess BIT    
-    
+   
 	IF @DraftID=0     
 	BEGIN--------START INSERT RECORD-----------    
-	INSERT INTO COM_DocDraft(CostcenterID, NodeID, UserID, DataXML,DocName,NoOfProducts,NetValue,  CompanyGUID, GUID, CreatedBy, CreatedDate,ModifiedDate,Status,HoldDocDate,RegisterID)
-	VALUES( @CostcenterID,@NodeID,@UserID,@DataXML,@DocName,@NoOfProducts,@NetValue, @CompanyGUID, NEWID() ,@UserName ,CONVERT(FLOAT,GETDATE()),CONVERT(FLOAT,GETDATE()),@Status,CONVERT(FLOAT,@HoldDocDate),@RegisterID)      
+	INSERT INTO COM_DocDraft(CostcenterID, NodeID, UserID, DataXML,DocName,NoOfProducts,NetValue,  CompanyGUID, [GUID], CreatedBy, CreatedDate,ModifiedDate,[Status],HoldDocDate,RegisterID,LocationID,DivisionID)
+	VALUES( @CostcenterID,@NodeID,@UserID,@DataXML,@DocName,@NoOfProducts,@NetValue, @CompanyGUID, NEWID() ,@UserName ,CONVERT(FLOAT,GETDATE()),CONVERT(FLOAT,GETDATE()),@Status,CONVERT(FLOAT,@HoldDocDate),@RegisterID,@LocationID,@DivisionID)      
     
 	--To get inserted record primary key    
 	SET @DraftID=SCOPE_IDENTITY()      
@@ -49,10 +48,10 @@ SET NOCOUNT ON;
     
 	UPDATE COM_DocDraft      
 	SET DataXML=@DataXML    
-		,GUID=NEWID()    
+		,[GUID]=NEWID()    
 		,ModifiedBy=@UserName    
 		,ModifiedDate=CONVERT(FLOAT,GETDATE())
-		,status=@Status
+		,[status]=@Status
 		,DocName=@DocName
 		,NoOfProducts=@NoOfProducts
 		,NetValue=@NetValue	
@@ -78,7 +77,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION    
 SET NOCOUNT OFF      
 RETURN -999       
-END CATCH    
-    
-    
+END CATCH
 GO
