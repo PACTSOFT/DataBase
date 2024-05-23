@@ -43,6 +43,13 @@ SET NOCOUNT ON
 		FROM SYS.COLUMNS WITH(NOLOCK)
 		WHERE OBJECT_ID=OBJECT_ID('CRM_ActivityLog') 
 		and name not in ('ActivityLogID','ActivityID')
+		UNION		
+		SELECT R.ResourceData UserColumnName ,@CCID,F.Name CostCenterName,F.TableName,C.SysColumnName,C.CostCenterColID,upper(C.ColumnDataType) ColumnDataType,
+		C.IsForeignKey,C.ParentCostCenterID,
+		C.ParentCostCenterSysName,C.ParentCostCenterColSysName,C.ParentCCDefaultColID,C.ColumnCostCenterID,C.ColumnCCListViewTypeID,C.ResourceID,'',c.Decimal
+		FROM ADM_CostCenterDef C WITH(NOLOCK),COM_LanguageResources R WITH(NOLOCK)
+		JOIN ADM_Features F WITH(NOLOCK) ON F.FeatureID=@CCID
+		WHERE C.CostCenterColID=11691 AND C.ResourceID=R.ResourceID AND R.LanguageID=@LangID
 
 	END
 	ELSE IF @CCID  IN(405,406,407,408)
@@ -261,7 +268,7 @@ SET NOCOUNT ON
 		JOIN ADM_Features F WITH(NOLOCK) ON F.FeatureID=@CCID
 		WHERE C.CostCenterID=1001 AND C.ResourceID=R.ResourceID AND R.LanguageID=@LangID
 		
-		IF @CCID=92 or @CCID=93 or @CCID=94 or @CCID=95 or @CCID=103 or @CCID=104 or @CCID=129
+		IF @CCID=92 or @CCID=93 or @CCID=94 or @CCID=95 or @CCID=103 or @CCID=104 or @CCID=129 or @CCID=144
 		begin	
 			INSERT INTO #Tbl
 			SELECT R.ResourceData UserColumnName ,@CCID,F.Name CostCenterName,F.TableName,C.SysColumnName,C.CostCenterColID,upper(C.ColumnDataType) ColumnDataType,

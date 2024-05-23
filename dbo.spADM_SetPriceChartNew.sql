@@ -47,10 +47,12 @@ SET NOCOUNT ON;
 		SellingRateB=ISNULL(X.value(''@SellingRateB'',''FLOAT''),0) and SellingRateC=ISNULL(X.value(''@SellingRateC'',''FLOAT''),0) and
 		SellingRateD=ISNULL(X.value(''@SellingRateD'',''FLOAT''),0) and SellingRateE=ISNULL(X.value(''@SellingRateE'',''FLOAT''),0) and
 		SellingRateF=ISNULL(X.value(''@SellingRateF'',''FLOAT''),0) and SellingRateG=ISNULL(X.value(''@SellingRateG'',''FLOAT''),0) and
-		ReorderLevel=ISNULL(X.value(''@ReorderLevel'',''FLOAT''),0) and ReorderQty=ISNULL(X.value(''@ReorderQty'',''FLOAT''),0) '
+		ReorderLevel=ISNULL(X.value(''@ReorderLevel'',''FLOAT''),0) and ReorderQty=ISNULL(X.value(''@ReorderQty'',''FLOAT''),0) and
+		MaxInventoryLevel=ISNULL(X.value(''@MaxInventoryLevel'',''FLOAT''),0) and ReorderMinOrderQty=ISNULL(X.value(''@ReorderMinOrderQty'',''FLOAT''),0) and
+		ReorderMaxOrderQty=ISNULL(X.value(''@ReorderMaxOrderQty'',''FLOAT''),0) '
 		
 		select @SQL=@SQL+' AND C.'+name+'=ISNULL(X.value(''@'+REPLACE(name,'NID','')+''',''INT''),0)' 
-		from sys.columns 
+		from sys.columns WITH(NOLOCK)
 		where object_id=object_id('COM_CCPrices') and name LIKE 'ccnid%'
 		
 		SET @SQL=@SQL+')'
@@ -118,7 +120,7 @@ SET NOCOUNT ON;
        ([ProfileID],[ProfileName],[ProductID],UOMID,[WEF],PriceType,[AccountID],CurrencyID
 	   ,PurchaseRate,PurchaseRateA,PurchaseRateB,PurchaseRateC,PurchaseRateD,PurchaseRateE,PurchaseRateF,PurchaseRateG
 	   ,SellingRate,SellingRateA,SellingRateB,SellingRateC,SellingRateD,SellingRateE,SellingRateF,SellingRateG,
-       ReorderLevel,ReorderQty,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],TillDate,Remarks'
+       ReorderLevel,ReorderQty,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],TillDate,Remarks,MaxInventoryLevel,ReorderMinOrderQty,ReorderMaxOrderQty'
        
 		select @SQL=@SQL+',['+name+']' 
 		from sys.columns 
@@ -130,7 +132,8 @@ SET NOCOUNT ON;
 		ISNULL(X.value(''@PurchaseRate'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateA'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateB'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateC'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateD'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateE'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateF'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateG'',''FLOAT''),0),
 		ISNULL(X.value(''@SellingRate'',''FLOAT''),0),ISNULL(X.value(''@SellingRateA'',''FLOAT''),0),ISNULL(X.value(''@SellingRateB'',''FLOAT''),0),ISNULL(X.value(''@SellingRateC'',''FLOAT''),0),ISNULL(X.value(''@SellingRateD'',''FLOAT''),0),ISNULL(X.value(''@SellingRateE'',''FLOAT''),0),ISNULL(X.value(''@SellingRateF'',''FLOAT''),0),ISNULL(X.value(''@SellingRateG'',''FLOAT''),0),
 		ISNULL(X.value(''@ReorderLevel'',''FLOAT''),0),ISNULL(X.value(''@ReorderQty'',''FLOAT''),0),
-		'''+@CompanyGUID+''',NEWID(),'''+@UserName+''',CONVERT(FLOAT,GETDATE()),CONVERT(FLOAT,X.value(''@TillDate'',''DATETIME'')),X.value(''@Remarks'',''nvarchar(max)'')'
+		'''+@CompanyGUID+''',NEWID(),'''+@UserName+''',CONVERT(FLOAT,GETDATE()),CONVERT(FLOAT,X.value(''@TillDate'',''DATETIME'')),X.value(''@Remarks'',''nvarchar(max)''),
+		ISNULL(X.value(''@MaxInventoryLevel'',''FLOAT''),0) ,ISNULL(X.value(''@ReorderMinOrderQty'',''FLOAT''),0),ISNULL(X.value(''@ReorderMaxOrderQty'',''FLOAT''),0) '
 		
 		select @SQL=@SQL+',ISNULL(X.value(''@'+REPLACE(name,'NID','')+''',''INT''),0)' 
 		from sys.columns 
@@ -157,7 +160,7 @@ SET NOCOUNT ON;
        ([ProfileID],[ProfileName],[ProductID],UOMID,[WEF],PriceType,[AccountID],CurrencyID
 	   ,PurchaseRate,PurchaseRateA,PurchaseRateB,PurchaseRateC,PurchaseRateD,PurchaseRateE,PurchaseRateF,PurchaseRateG
 	   ,SellingRate,SellingRateA,SellingRateB,SellingRateC,SellingRateD,SellingRateE,SellingRateF,SellingRateG,
-       ReorderLevel,ReorderQty,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],TillDate,Remarks'
+       ReorderLevel,ReorderQty,[CompanyGUID],[GUID],[CreatedBy],[CreatedDate],TillDate,Remarks,MaxInventoryLevel,ReorderMinOrderQty,ReorderMaxOrderQty'
        
 		select @SQL=@SQL+',['+name+']' 
 		from sys.columns 
@@ -169,7 +172,8 @@ SET NOCOUNT ON;
 		ISNULL(X.value(''@PurchaseRate'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateA'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateB'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateC'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateD'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateE'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateF'',''FLOAT''),0),ISNULL(X.value(''@PurchaseRateG'',''FLOAT''),0),
 		ISNULL(X.value(''@SellingRate'',''FLOAT''),0),ISNULL(X.value(''@SellingRateA'',''FLOAT''),0),ISNULL(X.value(''@SellingRateB'',''FLOAT''),0),ISNULL(X.value(''@SellingRateC'',''FLOAT''),0),ISNULL(X.value(''@SellingRateD'',''FLOAT''),0),ISNULL(X.value(''@SellingRateE'',''FLOAT''),0),ISNULL(X.value(''@SellingRateF'',''FLOAT''),0),ISNULL(X.value(''@SellingRateG'',''FLOAT''),0),
 		ISNULL(X.value(''@ReorderLevel'',''FLOAT''),0),ISNULL(X.value(''@ReorderQty'',''FLOAT''),0),
-		'''+@CompanyGUID+''',NEWID(),'''+@UserName+''',CONVERT(FLOAT,GETDATE()),CONVERT(FLOAT,X.value(''@TillDate'',''DATETIME'')),X.value(''@Remarks'',''nvarchar(max)'')'
+		'''+@CompanyGUID+''',NEWID(),'''+@UserName+''',CONVERT(FLOAT,GETDATE()),CONVERT(FLOAT,X.value(''@TillDate'',''DATETIME'')),X.value(''@Remarks'',''nvarchar(max)''),
+		ISNULL(X.value(''@MaxInventoryLevel'',''FLOAT''),0) ,ISNULL(X.value(''@ReorderMinOrderQty'',''FLOAT''),0),ISNULL(X.value(''@ReorderMaxOrderQty'',''FLOAT''),0) '
 		
 		select @SQL=@SQL+',ISNULL(X.value(''@'+REPLACE(name,'NID','')+''',''INT''),0)' 
 		from sys.columns 
@@ -204,7 +208,10 @@ SET NOCOUNT ON;
 			ReorderLevel=ISNULL(X.value('@ReorderLevel','FLOAT'),0),
 			ReorderQty=ISNULL(X.value('@ReorderQty','FLOAT'),0),
 			TillDate=CONVERT(FLOAT,X.value('@TillDate','DATETIME')),
-			Remarks=X.value('@Remarks','nvarchar(max)')
+			Remarks=X.value('@Remarks','nvarchar(max)'),
+			MaxInventoryLevel=ISNULL(X.value('@MaxInventoryLevel','FLOAT'),0),
+			ReorderMinOrderQty=ISNULL(X.value('@ReorderMinOrderQty','FLOAT'),0),
+			ReorderMaxOrderQty=ISNULL(X.value('@ReorderMaxOrderQty','FLOAT'),0)
 		FROM @XML.nodes('/XML/Row') as Data(X),COM_CCPrices P
 		WHERE X.value('@PriceCCID','INT') IS NOT NULL AND P.PriceCCID=X.value('@PriceCCID','INT')
 		

@@ -67,7 +67,7 @@ SET NOCOUNT ON;
 	DECLARE @SelectedIsGroup bit,@SNO INT,@Prefix NVARCHAR(500),@RenewSno nvarchar(max),@Pos int
 	declare @CNT INT ,  @ICNT INT  ,@level int,@maxLevel int,@Occurrence int,@SinglePDC bit,@InclPostingDate bit
 	DECLARE @DDValue DateTime,@DDXML nvarchar(max),@ScheduleID INT,@typ int       
-	DECLARE @return_value int,@unitGUId  NVARCHAR(max),@incMontEnd bit      
+	DECLARE @return_value int,@unitGUId  NVARCHAR(max),@incMontEnd bit,@singleinv bit      
 	DECLARE @AccountType xml,@AccValue nvarchar(100),@Documents xml,@DocIDValue nvarchar(100),@TempDocIDValue nvarchar(100)   
 	declare @tempxml xml,@tempAmt Float,@tempSno int  ,@ServiceType nvarchar(max)  
 	DECLARE @DELETEDOCID INT,@DELETECCID INT,@DELETEISACC BIT,@ind int,@indcnt int,@SYSCOL nvarchar(max) ,@ServiceTypeVal INT
@@ -78,6 +78,10 @@ SET NOCOUNT ON;
 		set @incMontEnd=1
 	else
 		set @incMontEnd=0
+	if exists(select * from com_costcenterpreferences where costcenterid=95 and name ='SingleInvoice' and value='true') 
+		set @singleinv=1
+	else
+		set @singleinv=0
 			
     declare @cpref nvarchar(200) ,@CCStatusID int   
     
@@ -453,8 +457,13 @@ SET NOCOUNT ON;
 				select @cpref = name from [REN_property] with(nolock) where nodeid  =  @ContractPrefix   
 				set @cpref =  @cpref +  '-'+ convert(nvarchar, @ContractNumber)  
 				set @Prefix=@SNO
+				
 				if(@parContractID>0)
-					set @Prefix=convert(nvarchar(max),@Refno)+'/'+convert(nvarchar(max),@SNO)
+				BEGIN
+					select @Prefix=convert(nvarchar(max),sno)+'/'+convert(nvarchar(max),@SNO),@cpref=convert(nvarchar(max),sno)+'/'+@cpref
+					from ren_contract WITH(NOLOCK) where contractid=@parContractID
+				END	
+					
 				EXEC @return_value = [dbo].[spCOM_SetCostCenter]    
 				@NodeID = 0,@SelectedNodeID = 0,@IsGroup = @IsGroup,    
 				@Code = @Prefix,    
@@ -623,9 +632,13 @@ SET NOCOUNT ON;
 				set @cpref =  @cpref + '-'+ convert(nvarchar, @ContractNumber)  
 				
 				set @Prefix=@SNO
+				
 				if(@parContractID>0)
-					set @Prefix=convert(nvarchar(max),@Refno)+'/'+convert(nvarchar(max),@SNO)
-					
+				BEGIN
+					select @Prefix=convert(nvarchar(max),sno)+'/'+convert(nvarchar(max),@SNO),@cpref=convert(nvarchar(max),sno)+'/'+@cpref
+					from ren_contract WITH(NOLOCK) where contractid=@parContractID
+				END	
+				
 				EXEC @return_value = [dbo].[spCOM_SetCostCenter]    
 				@NodeID = @NID,
 				@SelectedNodeID = 1,
@@ -1036,13 +1049,18 @@ SET NOCOUNT ON;
 				SELECT   @tempSno =  X.value ('@CONTRACTSNO', 'int'),@RcptCCID =  ISNULL(X.value ('@CostCenterid', 'int'),@ParentID)
 				from @Documents.nodes('/Documents') as Data(X)     
 
-				SELECT   @DocIDValue=0    
+				SET @DocIDValue=0    
 				if(@Dim>0)
 				BEGIN
 					SELECT   @DocIDValue = DOCID from @tblExistingSIVXML where DimID=@Dim and ccid= @RcptCCID  
 					if(@DocIDValue>0)
 						delete from @tblExistingSIVXML where DimID=@Dim and DOCID=@DocIDValue
 				END	
+				ELSE if(@singleinv=1)
+				BEGIN
+					SELECT @DocIDValue = DOCID from @tblExistingSIVXML where ccid= @RcptCCID  
+					order by id desc
+				END
 				ELSE	
 					SELECT   @DocIDValue = DOCID from @tblExistingSIVXML where ID=@ICNT    
 
@@ -1078,35 +1096,42 @@ SET NOCOUNT ON;
 				EXEC [sp_GetDocPrefix] @DocXml,@ContractDate,@RcptCCID,@Prefix   output
 
 				set @DocXml=Replace(@DocXml,'<RowHead/>','')
+				set @DocXml=Replace(@DocXml,'<DocumentXML/>','')
 				set @DocXml=Replace(@DocXml,'</DocumentXML>','')
 				set @DocXml=Replace(@DocXml,'<DocumentXML>','')
-
-				EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]      
-				@CostCenterID = @RcptCCID,      
-				@DocID = @DocIDValue,      
-				@DocPrefix = @Prefix,      
-				@DocNumber = N'',      
-				@DocDate = @ContractDate,      
-				@DueDate = NULL,      
-				@BillNo = @SNO,      
-				@InvDocXML =@DocXml,      
-				@BillWiseXML = @BillWiseXMl,      
-				@NotesXML = N'',      
-				@AttachmentsXML = N'',     
-				@ActivityXML  = @ActXml,     
-				@IsImport = 0,      
-				@LocationID = @ContractLocationID,      
-				@DivisionID = @ContractDivisionID,      
-				@WID = 0,      
-				@RoleID = @RoleID,      
-				@DocAddress = N'',      
-				@RefCCID = 95,    
-				@RefNodeid  = @ContractID,    
-				@CompanyGUID = @CompanyGUID,      
-				@UserName = @UserName,      
-				@UserID = @UserID,      
-				@LangID = @LangID       
-
+				set @return_value=0
+				if(@DocXml<>'')
+				BEGIN
+					
+					if(@singleinv=1 and @DocIDValue>0 and (@Dim is null or @Dim<5000))
+						delete from @tblExistingSIVXML where DOCID=@DocIDValue
+	
+					EXEC @return_value = [dbo].[spDOC_SetTempInvDoc]      
+					@CostCenterID = @RcptCCID,      
+					@DocID = @DocIDValue,      
+					@DocPrefix = @Prefix,      
+					@DocNumber = N'',      
+					@DocDate = @ContractDate,      
+					@DueDate = NULL,      
+					@BillNo = @SNO,      
+					@InvDocXML =@DocXml,      
+					@BillWiseXML = @BillWiseXMl,      
+					@NotesXML = N'',      
+					@AttachmentsXML = N'',     
+					@ActivityXML  = @ActXml,     
+					@IsImport = 0,      
+					@LocationID = @ContractLocationID,      
+					@DivisionID = @ContractDivisionID,      
+					@WID = 0,      
+					@RoleID = @RoleID,      
+					@DocAddress = N'',      
+					@RefCCID = 95,    
+					@RefNodeid  = @ContractID,    
+					@CompanyGUID = @CompanyGUID,      
+					@UserName = @UserName,      
+					@UserID = @UserID,      
+					@LangID = @LangID       
+				END
 				SET @SalesInv  = @return_value      
 
 				set @Documents=null
@@ -1115,7 +1140,7 @@ SET NOCOUNT ON;
 				set @Occurrence=0
 				SELECT  @Occurrence=count(X.value ('@Date', 'Datetime' ))
 				from @Documents.nodes('/recurXML/Row') as Data(X)
-				if(@Occurrence>0)
+				if(@Occurrence>0 and @return_value>0)
 				BEGIN		 
 					set @ScheduleID=0
 					select @ScheduleID=ScheduleID from COM_CCSchedules WITH(NOLOCK)
@@ -1153,9 +1178,12 @@ SET NOCOUNT ON;
 				END
 
 				IF(@DocIDValue = 0 )    
-				BEGIN    
-					INSERT INTO [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID,DimID)
-					values(@ContractID,1,@tempSno,@SalesInv,@RcptCCID,0,4,95,@Dim)
+				BEGIN
+					if(@SalesInv>0)
+					BEGIN
+						INSERT INTO [REN_ContractDocMapping]([ContractID],[Type],[Sno],DocID,CostcenterID,IsAccDoc,DocType,ContractCCID,DimID)
+						values(@ContractID,1,@tempSno,@SalesInv,@RcptCCID,0,4,95,@Dim)
+					END	
 				END      
 				else    
 				begin    
@@ -1165,7 +1193,7 @@ SET NOCOUNT ON;
 				end
 			END    
 	       
-			if(@Dim>0)
+			if(@Dim>0 or @singleinv=1)
 			BEGIN
 				declare @temptab table(id int)
 				

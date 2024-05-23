@@ -42,10 +42,10 @@ SET NOCOUNT ON;
 		END
 		ELSE IF (@CostCenterID=23)
 		BEGIN
-		    set @table='INV_Product'
-			set @ID='ProductID'
-			set @sql='select a.'+@ID+' as NODEID,ProductCode as CODE,ProductName as NAME,3 as CCID '
-			set @sqlCondition = ' and a.ProductID > 1 '
+		    set @table='INV_ProductSubstitutes'
+			set @ID='SubstituteGroupID'
+			set @sql='select a.'+@ID+' as NODEID,SubstituteGroupName as CODE,SubstituteGroupName as NAME,3 as CCID '
+			--set @sqlCondition = ' and a.ProductID > 1 '
 		END
 		--ELSE IF (@CostCenterID=16)
 		--BEGIN 
@@ -90,10 +90,10 @@ SET NOCOUNT ON;
 		BEGIN
 			set @sql= @sql +'
 			from '+@table+' a with(nolock) 
-			JOIN INV_ProductSubstitutes G with(nolock) ON G.ProductID=a.ProductID
-			join COM_CCCCData b with(nolock) on a.'+@ID+'=b.NodeID'
+			GROUP BY SubstituteGroupID,SubstituteGroupName
+			order by SubstituteGroupName'
+			SET @sqlCondition=''
 			
-			SET @CostCenterID=3
 		END
 		ELSE
 		BEGIN	
@@ -101,57 +101,58 @@ SET NOCOUNT ON;
 			from '+@table+' a with(nolock) 
 			join COM_CCCCData b with(nolock) on a.'+@ID+'=b.NodeID'
 		END
-		
-		set @sql = @sql +' where 1=1'
+		IF(@CostCenterID<>23)
+		BEGIN
+			set @sql = @sql +' where 1=1'
 
-		set @sql = @sql + @sqlCondition
+			set @sql = @sql + @sqlCondition
 
-        if (@IsNode=1)
-		     set @sql=@sql +' and a.IsGroup = 0 ' 
-		else  
-			 set @sql=@sql +' and a.IsGroup = 1 '
+			if (@IsNode=1)
+				 set @sql=@sql +' and a.IsGroup = 0 ' 
+			else  
+				 set @sql=@sql +' and a.IsGroup = 1 '
 
-         if(@CostCenterID>0)
-			set @sql=@sql +' and b.CostCenterID ='+convert(nvarchar,@CostCenterID) 
+			 if(@CostCenterID>0)
+				set @sql=@sql +' and b.CostCenterID ='+convert(nvarchar,@CostCenterID) 
 
 
-		--set @sql='select AccountID as NODEID,AccountCode as CODE,AccountName as NAME,2 as CCID
-		--from '+@table+' a with(nolock) 
-		--join COM_CCCCData b with(nolock) on a.'+@ID+'=b.'+@ID
-		--set @sql =@sql +' where 1=1'
-		
-		--if(@isResave=1)
-		--begin
-		--    set @sql =@sql +' and a.statusid in (369,370)'
-		--end	
-
-		--set @sql=@sql+' and a.DOCprefix='''+@prefix+''' and a.docnumber between '+convert(nvarchar,@From)+' and '+convert(nvarchar,@To)
-        
-        --For AllDims
-   --     if(@CostCenterID=0)
-   --     BEGIN
-			
-			--set @table='INV_DocDetails'
-			--set @ID='InvDocDetailsID'
-			
-			--set @sql=@sql+@where +'
-			--UNION
-			--select distinct DocID,CostCenterID,DocDate,DOCprefix,convert(INT,docnumber),VoucherNo,RefCCID,RefNodeid 
+			--set @sql='select AccountID as NODEID,AccountCode as CODE,AccountName as NAME,2 as CCID
 			--from '+@table+' a with(nolock) 
-			--join ACC_Accounts cr with(nolock) on a.CreditAccount=cr.AccountID
-			--join ACC_Accounts dr with(nolock) on a.DebitAccount=dr.AccountID
-			--join COM_DocCCData b with(nolock) on a.'+@ID+'=b.'+@ID
+			--join COM_CCCCData b with(nolock) on a.'+@ID+'=b.'+@ID
 			--set @sql =@sql +' where 1=1'
+			
+			--if(@isResave=1)
+			--begin
+			--    set @sql =@sql +' and a.statusid in (369,370)'
+			--end	
 
-   --     END
-        --For AllDims
-        
-		if(@where is not null and @where<>'')
-			set @sql =@sql+@where
-		if(@UserID<>1 and @UserWise=1)
-			set @sql =@sql+' and a.CreatedBy ='''+@UserName+''''
-		set @sql =@sql+' order by a.CreatedDate'
+			--set @sql=@sql+' and a.DOCprefix='''+@prefix+''' and a.docnumber between '+convert(nvarchar,@From)+' and '+convert(nvarchar,@To)
+	        
+			--For AllDims
+	   --     if(@CostCenterID=0)
+	   --     BEGIN
+				
+				--set @table='INV_DocDetails'
+				--set @ID='InvDocDetailsID'
+				
+				--set @sql=@sql+@where +'
+				--UNION
+				--select distinct DocID,CostCenterID,DocDate,DOCprefix,convert(INT,docnumber),VoucherNo,RefCCID,RefNodeid 
+				--from '+@table+' a with(nolock) 
+				--join ACC_Accounts cr with(nolock) on a.CreditAccount=cr.AccountID
+				--join ACC_Accounts dr with(nolock) on a.DebitAccount=dr.AccountID
+				--join COM_DocCCData b with(nolock) on a.'+@ID+'=b.'+@ID
+				--set @sql =@sql +' where 1=1'
 
+	   --     END
+			--For AllDims
+	        
+			if(@where is not null and @where<>'')
+				set @sql =@sql+@where
+			if(@UserID<>1 and @UserWise=1)
+				set @sql =@sql+' and a.CreatedBy ='''+@UserName+''''
+			set @sql =@sql+' order by a.CreatedDate'
+		END
 		print @sql
 	    exec(@sql) 
 COMMIT TRANSACTION       

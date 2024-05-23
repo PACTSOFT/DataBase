@@ -16,64 +16,151 @@ SET NOCOUNT ON;
 	DECLARE @HasAccess bit,@DocID INT,@PrefValue NVARCHAR(500)
 	DECLARE @sql nvarchar(max),@tablename nvarchar(200),@CurrentNo INT,@return_value int
 	declare @AccDocID INT,@DELETECCID INT    
-
-  
-	DECLARE @CostCenterID INT,@I INT,@CNT INT,@Dimesion INT,@VoucherNo NVARCHAR(80),@J INT,@JCNT INT,@NodeID INT
-	DECLARE @TblLink As TABLE(ID INT IDENTITY(1,1),CostCenterID INT,LinkDimension INT)
-	DECLARE @TblLinkData As TABLE(ID INT IDENTITY(1,1),VoucherNo NVARCHAR(50))
+	DECLARE @CostCenterID INT,@VoucherNo NVARCHAR(80),@J INT,@JCNT INT,@NodeID INT
 	
+	--------------------------------------------------------------------------------
+	CREATE TABLE #x (drop_script NVARCHAR(MAX),create_script NVARCHAR(MAX))
+	DECLARE @drop   NVARCHAR(MAX) = N'',@create NVARCHAR(MAX) = N''
+
+	SELECT @drop += N' ALTER TABLE ' + QUOTENAME(cs.name) + '.' + QUOTENAME(ct.name) + ' DROP CONSTRAINT ' + QUOTENAME(fk.name)
+	FROM sys.foreign_keys AS fk
+	INNER JOIN sys.tables AS ct ON fk.parent_object_id = ct.[object_id]
+	INNER JOIN sys.schemas AS cs ON ct.[schema_id] = cs.[schema_id]
+
+	INSERT #x(drop_script) 
+	SELECT @drop
+
+	SELECT @create += N' ALTER TABLE ' + QUOTENAME(cs.name) + '.' + QUOTENAME(ct.name) + case when fk.is_not_trusted = 0 then ' WITH CHECK ' ELSE ' WITH NOCHECK ' END
+	+ ' ADD CONSTRAINT ' + QUOTENAME(fk.name) + ' FOREIGN KEY (' + STUFF((SELECT ',' + QUOTENAME(c.name)
+	FROM sys.columns AS c 
+	INNER JOIN sys.foreign_key_columns AS fkc ON fkc.parent_column_id = c.column_id AND fkc.parent_object_id = c.[object_id]
+	WHERE fkc.constraint_object_id = fk.[object_id]
+	ORDER BY fkc.constraint_column_id 
+	FOR XML PATH(N''), TYPE).value(N'.[1]', N'nvarchar(max)'), 1, 1, N'') + ') REFERENCES ' + QUOTENAME(rs.name) + '.' + QUOTENAME(rt.name) + '(' + STUFF((SELECT ',' + QUOTENAME(c.name)
+	FROM sys.columns AS c 
+	INNER JOIN sys.foreign_key_columns AS fkc ON fkc.referenced_column_id = c.column_id AND fkc.referenced_object_id = c.[object_id]
+	WHERE fkc.constraint_object_id = fk.[object_id]
+	ORDER BY fkc.constraint_column_id 
+	FOR XML PATH(N''), TYPE).value(N'.[1]', N'nvarchar(max)'), 1, 1, N'') + ')'
+
+	FROM sys.foreign_keys AS fk
+	INNER JOIN sys.tables AS rt ON fk.referenced_object_id = rt.[object_id]
+	INNER JOIN sys.schemas AS rs ON rt.[schema_id] = rs.[schema_id]
+	INNER JOIN sys.tables AS ct ON fk.parent_object_id = ct.[object_id]
+	INNER JOIN sys.schemas AS cs ON ct.[schema_id] = cs.[schema_id]
+	WHERE rt.is_ms_shipped = 0 AND ct.is_ms_shipped = 0
+
+	UPDATE #x 
+	SET create_script = @create
+
+	EXEC sp_executesql @drop
+	----------------------------------------
+	
+	DECLARE @TblLink As TABLE(ID INT IDENTITY(1,1),LinkDimension INT,TableName NVARCHAR(100),FName NVARCHAR(100))
+	DECLARE @UpdSQL NVARCHAR(MAX),@sTables NVARCHAR(MAX),@sTab NVARCHAR(100),@sCCIds NVARCHAR(MAX),@sInserts NVARCHAR(MAX)
+	DECLARE @Dimesion INT,@I INT,@CNT INT,@FName NVARCHAR(100),@sIDReSeed NVARCHAR(MAX),@sDelete NVARCHAR(MAX)
+	DECLARE @StatusID INT
+		
+	SET @UpdSQL=''
+	SET @sTables=''
+	SET @sTab=''
+	SET @sCCIds=''
+	SET @sInserts=''
+	SET @FName=''
+	SET @sIDReSeed=''
+	SET @sDelete=''
+
 	INSERT INTO @TblLink
-	select CostCenterID,PrefValue from COM_DocumentPreferences with(nolock)
+	select DISTINCT a.PrefValue,b.TableName,b.Name 
+	from COM_DocumentPreferences a with(nolock)
+	JOIN ADM_Features b with(nolock) on b.FeatureID=a.PrefValue
 	where PrefName='DocumentLinkDimension' and PrefValue is not null and PrefValue<>'' and ISNUMERIC(PrefValue)=1 and CONVERT(int,PrefValue)>50000
+	SET @CNT=@@ROWCOUNT
+	SET @I=1 
 	
-	select @J=1,@I=1,@CNT=COUNT(*) from @TblLink
-	
-	--select * from @TblLink
-	
-	while(@I<=@CNT)
-	begin
-		select @CostCenterID=CostCenterID,@Dimesion=LinkDimension from @TblLink where ID=@I
+	WHILE(@I<=@CNT)
+	BEGIN
+		select @Dimesion=LinkDimension,@sTab=TableName,@FName=FName from @TblLink where ID=@I
+		SET @StatusID=0
+		SELECT @StatusID=StatusID FROM [COM_Status] WITH(NOLOCK) WHERE CostCenterID=@Dimesion AND [Status]='Active'
+		IF(@StatusID IS NULL OR @StatusID=0)
+			SELECT @StatusID=CONVERT(INT,UserDefaultValue) FROM ADM_CostCenterDef WITH(NOLOCK) where CostCenterID=@Dimesion AND SysColumnName='StatusID'
+		print CONVERT(NVARCHAR,@Dimesion)
+		----
+		if(LEN(@sCCIds)>0)
+			SET @sCCIds+=','
+		SET @sCCIds+=CONVERT(NVARCHAR,@Dimesion)
+		print @sCCIds
+		----
+		if(LEN(@sTables)>0)
+			SET @sTables+=','
+		SET @sTables+= '''' + @sTab+ ''''
+		print @sTables
+		----
+		if(LEN(@UpdSQL)>0)
+			SET @UpdSQL+=','
+		SET @UpdSQL+='dcCCNID'+CONVERT(NVARCHAR,(@Dimesion-50000))+'=1'
+		--print @UpdSQL
+		----
+		--SET @sDelete+=' DELETE FROM '+@sTab +' WHERE NodeID>2 '
 
-		select @tablename=tablename from ADM_Features with(nolock) where FeatureID=@CostCenterID
+		--SET @sIDReSeed+=' DBCC CHECKIDENT('''+@sTab +''',RESEED,1)  '
+
+		SET @sInserts+='
+SET IDENTITY_INSERT ['+@sTab+'] ON
+INSERT INTO ['+@sTab+'] ([NodeID],[Code],[Name],[AliasName],[StatusID],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CreditDays],[CreditLimit],[PurchaseAccount],[SalesAccount],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[DebitDays],[DebitLimit],[CodePrefix],[CodeNumber],[GroupSeqNoLength],[CurrencyID])VALUES(0,'''+@FName+''','''+@FName+''','''+@FName+''','+CONVERT(NVARCHAR,@StatusID)+',0,0,0,0,1,0,0.000000000000000e+000,0,0,''GUID'',''GUID'',NULL,''ADMIN'',2.200000000000000e+001,NULL,NULL,0,0.000000000000000e+000,NULL,0,0,NULL)
+INSERT INTO ['+@sTab+'] ([NodeID],[Code],[Name],[AliasName],[StatusID],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CreditDays],[CreditLimit],[PurchaseAccount],[SalesAccount],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[DebitDays],[DebitLimit],[CodePrefix],[CodeNumber],[GroupSeqNoLength],[CurrencyID])VALUES(1,'''+@FName+''','''+@FName+''','''+@FName+''','+CONVERT(NVARCHAR,@StatusID)+',1,2,2,3,0,0,0.000000000000000e+000,0,0,''GUID'',''GUID'',NULL,''ADMIN'',2.200000000000000e+001,NULL,NULL,0,0.000000000000000e+000,NULL,0,0,NULL)
+INSERT INTO ['+@sTab+'] ([NodeID],[Code],[Name],[AliasName],[StatusID],[Depth],[ParentID],[lft],[rgt],[IsGroup],[CreditDays],[CreditLimit],[PurchaseAccount],[SalesAccount],[CompanyGUID],[GUID],[Description],[CreatedBy],[CreatedDate],[ModifiedBy],[ModifiedDate],[DebitDays],[DebitLimit],[CodePrefix],[CodeNumber],[GroupSeqNoLength],[CurrencyID])VALUES(2,'''+@FName+''','''+@FName+''','''+@FName+''','+CONVERT(NVARCHAR,@StatusID)+',0,0,1,4,1,0,0.000000000000000e+000,0,0,''GUID'',''GUID'',NULL,''admin'',2.200000000000000e+001,NULL,NULL,0,0.000000000000000e+000,NULL,0,0,NULL)
+SET IDENTITY_INSERT ['+@sTab+'] OFF
+
+INSERT INTO COM_CCCCData ([CostCenterID], [NodeID], [CreatedBy],[CreatedDate], [CompanyGUID],[GUID])  
+Select '+CONVERT(NVARCHAR,@Dimesion)+',NodeID,''admin'',1,''COMPANYGUID'',''GUID'' from '+@sTab+' with(nolock) WHERE NODEID>=0
 		
-		INSERT INTO @TblLinkData
-		select VoucherNo FROM INV_DocDetails with(nolock) WHERE CostCenterID=@CostCenterID GROUP BY VoucherNo
-		
-		--select * from @TblLinkData
-		
-		SET @sql='UPDATE a SET dcCCNID'+CONVERT(NVARCHAR,(@Dimesion-50000))+'=1 FROM COM_DocCCData a WITH(NOLOCK) '
-		EXEC sp_executesql @sql
-		
-		select @tablename=tablename from ADM_Features with(nolock) where FeatureID=@Dimesion
-		
-		select @JCNT=ISNULL(MAX(ID),0) from @TblLinkData
-		
-		while(@J<=@JCNT)
-		begin
-			select @VoucherNo=VoucherNo from @TblLinkData where ID=@J
-			set @sql='select @NodeID=NodeID from '+@tablename+' with(nolock) where Name='''+@VoucherNo+''''
-			--print(@sql)
-			SET @NodeID=NULL
-			EXEC sp_executesql @sql,N'@NodeID INT OUTPUT',@NodeID output			 
-			--select @Dimesion,@NodeID
-			--select @VoucherNo
-			if(@NodeID IS NOT NULL AND @NodeID>1)
-			begin
-				--select @Dimesion,@NodeID
-				EXEC @return_value = dbo.spCOM_DeleteCostCenter
-					@CostCenterID = @Dimesion,
-					@NodeID = @NodeID,
-					@RoleID=1,
-					@UserID = @UserID,
-					@LangID = @LangID
-				--select * from COM_Area
-			end
-			set @J=@J+1
-		end
-		delete from @TblLinkData
-		set @I=@I+1
-	end
-	
+'
+		--print @sInserts
+		SET @I=@I+1
+	END
+
+	IF(LEN(@UpdSQL)>0)
+	BEGIN
+		------ Updating COM_DocCCData to Default Value 1
+		SET @UpdSQL='UPDATE a SET '+ @UpdSQL +' FROM COM_DocCCData a WITH(NOLOCK)'
+		print @UpdSQL
+		EXEC sp_executesql @UpdSQL
+
+		-------- Deleting Dimension Data
+		--print @sDelete
+		--EXEC sp_executesql @sDelete
+
+		-------- Truncating Dimension Tables
+		SET @sTables=' and object_id IN(Select object_Id from sys.Tables where Name IN('+ @sTables+' )) '
+		print @sTables
+		exec sp_MSforeachtable
+		@command1='TRUNCATE TABLE ?',
+		@whereand=@sTables
+
+		------ Deleting from other Tables related to the above Dimensions
+		SET @sCCIds=' DELETE a FROM COM_CCCCDATA a WITH(NOLOCK) WHERE a.CostCenterID IN('+@sCCIds+') 
+					  DELETE a FROM COM_CostCenterCostCenterMap a WITH(NOLOCK) WHERE a.ParentCostCenterID IN('+@sCCIds+') 
+					  DELETE a FROM COM_Notes a WITH(NOLOCK) WHERE a.FeatureID IN('+@sCCIds+') 
+					  DELETE a FROM COM_Address a WITH(NOLOCK) WHERE a.FeatureID IN('+@sCCIds+') 
+					  DELETE a FROM COM_Address_History a WITH(NOLOCK) WHERE a.FeatureID IN('+@sCCIds+') 
+					  DELETE a FROM COM_Files a WITH(NOLOCK) WHERE a.FeatureID IN('+@sCCIds+') 
+					  '
+		print @sCCIds
+		EXEC sp_executesql @sCCIds
+
+		------ Inserting Default Records
+		print @sInserts
+		EXEC sp_executesql @sInserts
+
+		------ Reseeding Identity Column
+		--EXEC sp_executesql @sIDReSeed
+
+	END
+
+	--------------------------------------------------------------------------------
+
 	DELETE a FROM COM_Notes a WITH(NOLOCK) WHERE FeatureID between 40000 and 50000
 	DELETE a FROM COM_Files a WITH(NOLOCK) WHERE FeatureID between 40000 and 50000
 	
@@ -82,23 +169,6 @@ SET NOCOUNT ON;
 		SET @sql='DELETE a FROM CRM_Activities a WITH(NOLOCK) WHERE CostCenterID between 40000 and 50000' 
 		EXEC sp_executesql @sql
 	end
-	
-	--TRUNCATE TABLE COM_DocAddressData
-	--TRUNCATE TABLE COM_LCBills
-	--TRUNCATE TABLE COM_DocDenominations
-	--TRUNCATE TABLE COM_ChequeReturn
-
-	exec sp_MSforeachtable
-	@command1='TRUNCATE TABLE ?',
-	@whereand=' and object_id IN(Select object_Id from sys.Tables where Name IN(
-	''COM_DocAddressData'',''COM_LCBills'',''COM_DocDenominations'',''COM_ChequeReturn'',''REN_ContractDocMapping''))'
-
-
-	--if exists (select * from sys.tables with(nolock) where name='REN_ContractDocMapping')
-	--begin
-	--	SET @sql='TRUNCATE TABLE REN_ContractDocMapping' 
-	--	EXEC sp_executesql @sql
-	--end
 	
 	--CASE DELETE
 	if exists (select * from sys.tables with(nolock) where name='CRM_Cases')
@@ -129,53 +199,6 @@ SET NOCOUNT ON;
 		where CostCenterID between 40000 and 50000 and codeprefix<>''
 	END
 	
-	/*
-
-	TRUNCATE TABLE COM_DocCCData
-	TRUNCATE TABLE COM_DocNumData
-	if exists(select * from sys.tables where name='PAY_DocNumData')
-	BEGIN
-		set @sql=' TRUNCATE TABLE PAY_DocNumData '
-		EXEC sp_executesql @sql
-	END	
-	TRUNCATE TABLE COM_DocTextData
-	TRUNCATE TABLE COM_DocPayTerms
-	TRUNCATE TABLE COM_Approvals
-	TRUNCATE TABLE com_pospaymodes
-	TRUNCATE TABLE INV_SerialStockProduct
-	DELETE FROM INV_BatchDetails WHERE InvDocDetailsID>0
-	TRUNCATE TABLE INV_TempInfo  
-	TRUNCATE TABLE INV_BinDetails   
-	TRUNCATE TABLE INV_DocExtraDetails  
-	TRUNCATE TABLE COM_Billwise
-	TRUNCATE TABLE COM_BillWiseNonAcc  
-
-
-	--AUDTI DATA
-	TRUNCATE TABLE ACC_DocDetails_History_ATUser
-	TRUNCATE TABLE INV_DocDetails_History_ATUser
-	
-	TRUNCATE TABLE COM_DocCCData_History
-	TRUNCATE TABLE COM_DocNumData_History
-	TRUNCATE TABLE COM_DocTextData_History
-	TRUNCATE TABLE ACC_DocDetails_History
-	TRUNCATE TABLE INV_DocDetails_History
-	
-	TRUNCATE TABLE COM_BillwiseHistory
-	
-	--MAIN TABLES
-	TRUNCATE TABLE COM_DocID
-
-	--DELETE FROM ACC_DocDetails WHERE InvDocDetailsID=0
-	--DELETE FROM INV_DocDetails WHERE InvDocDetailsID=0
-	DELETE FROM ACC_DocDetails
-	--TRUNCATE TABLE ACC_DocDetails
-	
-	DELETE FROM INV_DocDetails
-	--TRUNCATE TABLE INV_DocDetails 
-
-	*/
-
 	exec sp_MSforeachtable
 	@command1='TRUNCATE TABLE ?',
 	@whereand=' and object_id IN(Select object_Id from sys.Tables where Name IN(
@@ -183,10 +206,15 @@ SET NOCOUNT ON;
 	,''COM_Approvals'',''com_pospaymodes'',''INV_SerialStockProduct'',''INV_TempInfo'',''INV_BinDetails'',''INV_DocExtraDetails'',''COM_Billwise'',''COM_BillWiseNonAcc''
 	,''ACC_DocDetails_History_ATUser'',''INV_DocDetails_History_ATUser'',''COM_DocCCData_History'',''COM_DocNumData_History''
 	,''COM_DocTextData_History'',''ACC_DocDetails_History'',''INV_DocDetails_History'',''COM_BillwiseHistory''
-	,''COM_DocID'',''ACC_DocDetails'',''INV_DocDetails''))'
+	,''COM_DocID'',''ACC_DocDetails'',''INV_DocDetails'',''COM_DocAddressData'',''COM_LCBills'',''COM_DocDenominations'',''COM_ChequeReturn'',''REN_ContractDocMapping''
+	,''COM_BiddingDocs''))'
 
 	DELETE a FROM INV_BatchDetails a WITH(NOLOCK) WHERE InvDocDetailsID>0
-		 
+	
+	--- Executing Create Foreign Keys Script
+	EXEC sp_executesql @create;
+	DROP TABLE #x 
+			 
 COMMIT TRANSACTION
 --ROLLBACK TRANSACTION
 

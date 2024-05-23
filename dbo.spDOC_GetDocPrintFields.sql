@@ -329,6 +329,8 @@ SET NOCOUNT ON;
     		SELECT  @DocumentID,'Rent With VAT','Rent With VAT','RentWithVAT',@TblName3,'Float','Float',0,0
     		union all
     		SELECT  @DocumentID,'Amount Distribute','Amount Distribute','AmountDistribute',@TblName3,'Float','Float',0,0
+			union all
+    		SELECT  @DocumentID,'DimName','DimName','DimName',@TblName3,'String','String',0,0
     		
         	IF @DocumentID=95
         	BEGIN
@@ -341,6 +343,8 @@ SET NOCOUNT ON;
         		select @DocumentID,'RefNo','RefNo','RefNo',@TblName4,NULL,NULL,0,0
         		UNION 
         		select @DocumentID,'PostingDate','PostingDate','PostingDate',@TblName4,NULL,NULL,0,0
+				union all
+    			SELECT  @DocumentID,'DimName','DimName','DimName',@TblName4,'String','String',0,0
         	END
         	ELSE
         	BEGIN
@@ -349,6 +353,8 @@ SET NOCOUNT ON;
         		FROM ADM_CostCenterDef C WITH(NOLOCK)
         		LEFT JOIN COM_LanguageResources R WITH(NOLOCK) ON R.ResourceID=C.ResourceID AND R.LanguageID=@LangID
         		WHERE C.CostCenterID=@DocumentID   and C.SysTableName=@TblName4
+				union all
+    			SELECT  @DocumentID,'DimName','DimName','DimName',@TblName4,'String','String',0,0
         	END
         		
         	select CONVERT(nvarchar,@DocumentID) as CostCenterID,'Amount' as ResourceData,'Amount' as UserColumnName,'Amount' as SysColumnName,@TblName3 as SysTableName,null as UserColumnType,0 as ColumnDataType,0 as IsColumnUserDefined,0 as ColumnCostCenterID

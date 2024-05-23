@@ -86,10 +86,8 @@ SET NOCOUNT ON;
 				WHILE @ICNT<=@TCNT
 				BEGIN
 					SELECT @NID=NodeID FROM @TblTemp WHERE id=@ICNT
-					DELETE FROM PSA FROM INV_ProductSubstitutes PS WITH(NOLOCK)
-					JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=PS.ProductID AND P.ProductID IN (@NID)
-					JOIN INV_ProductSubstitutes PSA WITH(NOLOCK) ON PSA.SubstituteGroupName=PS.SubstituteGroupName
-					
+					DELETE FROM PS FROM INV_ProductSubstitutes PS WITH(NOLOCK) WHERE SubstituteGroupID=@NID
+										
 					SET @ICNT=@ICNT+1
 				END
 			END

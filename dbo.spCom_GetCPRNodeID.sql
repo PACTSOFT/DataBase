@@ -5,7 +5,8 @@ GO
 CREATE PROCEDURE [dbo].[spCom_GetCPRNodeID]
 	@CPRPref [nvarchar](50) = '',
 	@Cprtext [nvarchar](50) = '',
-	@ccID [nvarchar](50) = '',
+	@CprLookUpType [nvarchar](100) = null,
+	@CCID [nvarchar](50) = '',
 	@UserID [int] = 0,
 	@UserName [nvarchar](200),
 	@LangID [int] = 1
@@ -15,18 +16,31 @@ BEGIN TRY
 BEGIN TRANSACTION      
 SET NOCOUNT ON      
   
- DECLARE @PREFValue INT,@NODEID INT  
-  DECLARE @SQL NVARCHAR(MAX),@TableName NVARCHAR(50),@CCStatusID INT 
- if(@ccID=44)
+ DECLARE @PREFValue INT,@NODEID INT,@ResourceID INT  ,@LookTypeID int
+ DECLARE @SQL NVARCHAR(MAX),@TableName NVARCHAR(50),@CCStatusID INT 
+ if(@CCID=44)
  begin
-	 SET @SQL='SELECT @NODEID=NodeID FROM COM_Lookup WITH(NOLOCK) WHERE Code=N'''+@Cprtext+''''  
+	  SET @SQL='SELECT @NODEID=NodeID FROM COM_Lookup WITH(NOLOCK) WHERE Code=N'''+@Cprtext+''''  
 	  EXEC sp_executesql @SQL,N' @NODEID INT OUTPUT',@NODEID OUTPUT  
-	    
-	  select @NODEID   
+	  
+	  IF (@NODEID IS NULL OR @NODEID <= 0)  
+	  BEGIN  
+	    SELECT @ResourceID=MAX(ResourceID)+1 FROM COM_LanguageResources WITH(NOLOCK)		
+		
+		INSERT INTO COM_LanguageResources(ResourceID,ResourceName,LanguageID,LanguageName,ResourceData)
+		SELECT @ResourceID,@Cprtext,LanguageID,Name,@Cprtext FROM ADM_Laguages WITH(NOLOCK)
+		
+		SELECT @LookTypeID=NodeID From  COM_LookupTYPES WHERE LooKUpName=@CprLookUpType
+		INSERT INTO COM_Lookup(LookupType,Code,Name,AliasName,ResourceID,Status,CompanyGUID,GUID,CreatedBy,CreatedDate,isDefault)  
+		VALUES(@LookTypeID,@Cprtext,@Cprtext,@Cprtext,@ResourceID,1,'guid',NEWID(),@UserName,convert(float,getdate()),0)  
+
+		SET @NODEID=SCOPE_IDENTITY()
+	 END
+	 select @NODEID   
  end
  else
  begin
-	 SELECT @PREFValue=CONVERT(INT,ISNULL(Value,0)) FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE Name=@CPRPref and costcenterid=@ccID
+	 SELECT @PREFValue=CONVERT(INT,ISNULL(Value,0)) FROM COM_CostCenterPreferences WITH(NOLOCK) WHERE Name=@CPRPref --and costcenterid=@CCID
 	 IF(@PREFValue IS NOT NULL AND @PREFValue > 50000)  
 	 BEGIN  
 	  

@@ -14,7 +14,7 @@ BEGIN
    
 declare @totalPreviousPayRcts bigint,@I int,@CNT int,@DocIDValue BIGINT,@CCID INT,@DocXml nvarchar(max),@dbAcc BIGINT,@CrAcc BIGINT,@amt float,@DocDate datetime,@CP nvarchar(max),@CA nvarchar(max),@sql nvarchar(max)
 declare @return_value int,@Prefix nvarchar(200),@RoleID bigint,@UserName nvarchar(500),@CompanyGUID nvarchar(50),@start datetime,@end datetime,@days int,@VatAmt float,@loc bigint,@invID bigint,@vno nvarchar(max),@documenttype int
-declare @lldim nvarchar(50),@MPDim  nvarchar(50),@MPDimVal  nvarchar(50),@lltabname nvarchar(50),@UFtabname nvarchar(50),@CPFld nvarchar(50),@UfDim nvarchar(50),@PrdID int,@PartDim nvarchar(50),@PartDimVal int,@VatAcc int
+declare @lldim nvarchar(50),@MPDim  nvarchar(50),@MPDimVal  nvarchar(50),@lltabname nvarchar(50),@UFtabname nvarchar(50),@CPFld nvarchar(50),@UfDim nvarchar(50),@PrdID int,@PartDim nvarchar(50),@PartDimVal int,@VatAcc int,@seqNo int
 
 set @lldim=0
 select @lldim=value from com_costcenterpreferences WITH(NOLOCK)
@@ -52,7 +52,7 @@ select @lltabname=tablename from adm_features WITH(NOLOCK) where featureid=@lldi
 select @UFtabname=tablename from adm_features WITH(NOLOCK) where featureid=@UfDim
 
 set @sql='select @amt=a.Amount,@dbAcc=AdvanceRentAccountID,@CrAcc=RentalIncomeAccountID,@CP=u.ComPer,@CA=u.LLComsAccID,@DocDate=DocDate
-,@accID=a.accdocdetailsID
+,@seqNo=a.DocSeqNo
 ,@vno=a.Voucherno,@documenttype=a.DocumentType
 from  Acc_docDetails a with(nolock)    
 join com_docCCdata CC with(nolock) on CC.accdocdetailsID=a.accdocdetailsID
@@ -63,7 +63,7 @@ join '+@lltabname+' ll WITH(NOLOCK) on u.LandlordID=ll.nodeid
 where a.accdocdetailsID='+Convert(nvarchar(max),@accID)+'
   and ucc.ccnid'+Convert(nvarchar(max),(@MPDim-50000))+'='+Convert(nvarchar(max),@MPDimVal)+' and CC.dcccnid'+Convert(nvarchar(max),(@PartDim-50000))+'='+Convert(nvarchar(max),@PartDimVal)
  print @sql
-exec SP_ExecuteSql  @sql,N'@amt float OUTPUT,@dbAcc BIGINT OUTPUT,@CrAcc BIGINT OUTPUT,@CP nvarchar(max) OUTPUT,@CA BIGINT OUTPUT,@DocDate datetime OUTPUT,@accID BIGINT OUTPUT,@CompanyGUID nvarchar(max) OUTPUT,@vno nvarchar(max) OUTPUT,@documenttype int OUTPUT',@amt OUTPUT,@dbAcc OUTPUT,@CrAcc OUTPUT,@CP OUTPUT,@CA OUTPUT,@DocDate OUTPUT,@accID OUTPUT,@CompanyGUID OUTPUT,@vno OUTPUT,@documenttype OUTPUT
+exec SP_ExecuteSql  @sql,N'@amt float OUTPUT,@dbAcc BIGINT OUTPUT,@CrAcc BIGINT OUTPUT,@CP nvarchar(max) OUTPUT,@CA BIGINT OUTPUT,@DocDate datetime OUTPUT,@seqNo INT OUTPUT,@CompanyGUID nvarchar(max) OUTPUT,@vno nvarchar(max) OUTPUT,@documenttype int OUTPUT',@amt OUTPUT,@dbAcc OUTPUT,@CrAcc OUTPUT,@CP OUTPUT,@CA OUTPUT,@DocDate OUTPUT,@seqNo OUTPUT,@CompanyGUID OUTPUT,@vno OUTPUT,@documenttype OUTPUT
 
 select @CompanyGUID=CompanyGUID from com_docid
 where id= @DocID
@@ -92,7 +92,13 @@ BEGIN
 		
 		select @DocIDValue=DOCID from inv_docdetails	WITH(NOLOCK)
 		where refnodeid=@accID and CostCenterID = @CCID 
-
+		
+		if(@DocIDValue=0)
+		BEGIN
+			select @DocIDValue=DOCID from inv_docdetails	WITH(NOLOCK)
+			where RefNo=@vno and Description=@seqNo and CostCenterID = @CCID 
+		END
+		
 		set @Prefix=''
 		EXEC [sp_GetDocPrefix] '',@DocDate,@CCID,@Prefix output
 
@@ -142,7 +148,7 @@ BEGIN
 		 exec(@sql)
 		 
 		update inv_docdetails	
-		set RefNo=@vno
+		set RefNo=@vno,Description=@seqNo
 		where CostCenterID = @CCID and docid=@return_value
 			
 		set @CCID=0	
@@ -172,7 +178,13 @@ BEGIN
 			set @DocIDValue=0
 			select @DocIDValue=DOCID from inv_docdetails	WITH(NOLOCK)
 			where refnodeid=@accID and CostCenterID = @CCID 
-				
+			
+			if(@DocIDValue=0)
+			BEGIN
+				select @DocIDValue=DOCID from inv_docdetails	WITH(NOLOCK)
+				where RefNo=@vno and Description=@seqNo and CostCenterID = @CCID 
+			END
+					
 			set @DocXml='<Row><Transactions  DocDetailsID="0"  DocSeqNo="1"  LinkedInvDocDetailsID= ""  LinkedFieldName= "" ProductID="'+Convert(nvarchar(max),@PrdID)+'" CurrencyID="1" ExchangeRate="1" Unit="1" UOMConversion="1" CreditAccount="'+convert(nvarchar,@CrAcc)+'" DebitAccount ="'+convert(nvarchar,@dbAcc)+'"  Quantity="1" CommonNarration=""   CanRecur="0"  Rate="'+convert(nvarchar,@amt)+'"  Gross="'+convert(nvarchar,@amt)+'"  LineNarration="" ></Transactions>  <Numeric Query=" dcNum51='+convert(nvarchar,@amt)+',dcCalcNum51='+convert(nvarchar,@amt)+',dcCalcNum52=5,dcNum52=5,dcNum60=5,dcCalcNum60=5,dcNum53='+convert(nvarchar,@VatAmt)+',dcCalcNum53='+convert(nvarchar,@VatAmt)+',dcNum61='+convert(nvarchar,@VatAmt)+',dcCalcNum61='+convert(nvarchar,@VatAmt)+'," /> <Alpha  Query="dcAlpha153='''',dcAlpha152=''Service''," /> <CostCenters  /> <EXTRAXML/> <AccountsXML><Accounts CreditAccount="'+convert(nvarchar,@CrAcc)+'"  DebitAccount="'+convert(nvarchar,@dbAcc)+'" Amount="'+convert(nvarchar,@amt)+'" AmtFc="'+convert(nvarchar,@amt)+'"  CurrencyID="1" ExchangeRate="1"  ></Accounts>'
 
 			if(@VatAmt>0)
@@ -222,7 +234,7 @@ BEGIN
 			exec(@sql)
 			
 			update inv_docdetails	
-			set RefNo=@vno
+			set RefNo=@vno,Description=@seqNo
 			where CostCenterID = @CCID and docid=@return_value
         END
 	END               

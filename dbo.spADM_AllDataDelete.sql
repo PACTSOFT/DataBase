@@ -95,7 +95,7 @@ BEGIN
 	exec sp_MSforeachtable
 	@command1='TRUNCATE TABLE ?',
 	@whereand=' and object_id IN(Select object_Id from sys.Tables where Name IN(
-	''ACC_DocDetails'',''INV_DocDetails'',''REN_Quotation'',''ACC_AssetDepSchedule'',''COM_Contacts''))'
+	''ACC_DocDetails'',''INV_DocDetails'',''REN_Quotation'',''ACC_AssetDepSchedule'',''COM_Contacts'',''COM_BRSTemplate'',''COM_BiddingDocs''))'
 	
 	DELETE FROM COM_BudgetDef WHERE BudgetDefID>1
 	DBCC CHECKIDENT(COM_BudgetDef,RESEED,1)  

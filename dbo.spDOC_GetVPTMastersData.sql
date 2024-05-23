@@ -1020,9 +1020,17 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 			if @LandLord is null
 				set @LandLord='COM_Location'
 			declare @PK nvarchar(20),@EXTPK nvarchar(20),@SELECT nvarchar(max),@TblName1 nvarchar(30),@TblName2 nvarchar(30),@TblName3 nvarchar(30),@TblName4 nvarchar(30)
-			declare @j nvarchar(50),@SecurityDeposit FLOAT
+			declare @j nvarchar(50),@SecurityDeposit FLOAT,@dimCid int,@dtable nvarchar(100)
 			set @j=(select tablename from adm_Features WITH(NOLOCK) where featureid=(select value from adm_globalpreferences with(nolock) where Name='DepositLinkDimension'))
-			
+			set @dimCid=0
+			set @dtable=''
+
+			if @DocumentID=95
+			BEGIN
+				select @dimCid=Value from COM_CostCenterPreferences WITH(NOLOCK)
+				where Name='DimensionWiseContract' and costcenterid=95 and Value is not null and Value<>'' and ISNUMERIC(value)=1
+			END
+
 			if @DocumentID=103 OR @DocumentID=129
 			begin
 				set @PK='QuotationID'
@@ -1210,6 +1218,11 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 					,case when L.Sno=1 then L.TaxableAmt else null end RentWithVAT
 					,L.DetailsXML,L.TaxableAmt,L.VatType,L.Sqft,L.Rate,L.RentAmount,L.Discount,LOC.Name LocationID,L.NetAmount'
 
+					if (@dimCid>50000)
+						set @SQL=@SQL+' ,Dim.Name Dimname'
+					ELSE
+						set @SQL=@SQL+' ,'''' Dimname'
+
 					IF(@TblName3='REN_ContractParticulars')
 						set @SQL=@SQL+',L.NonTaxAmount'
 
@@ -1219,8 +1232,15 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 					LEFT JOIN ACC_Accounts A WITH(NOLOCK) ON L.CreditAccID=A.AccountID
 					LEFT JOIN ACC_Accounts ACC WITH(NOLOCK) ON L.DebitAccID=ACC.AccountID
 					LEFT JOIN COM_Location LOC WITH(NOLOCK) ON L.LocationID=LOC.NodeID
-					'+@CCcoljoin+'
-					where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)+'
+					'+@CCcoljoin
+
+					if (@dimCid>50000)
+					BEGIN
+						select @dtable=tablename from adm_features with(NOLOCK) where featureid=@dimCid
+						set @SQL=@SQL+' LEFT JOIN '+@dtable+' Dim WITH(NOLOCK) ON Dim.NodeID=L.DimNodeID '
+					END
+
+					set @SQL=@SQL+' where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)+'
 			end
 			else
 			begin
@@ -1231,6 +1251,11 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 					,case when L.Sno=1 then L.TaxableAmt else null end RentWithVAT
 					,L.DetailsXML,L.TaxableAmt,L.VatType,L.Sqft,L.Rate,L.RentAmount,L.Discount,LOC.Name LocationID,L.NetAmount'
 					
+					if (@dimCid>50000)
+						set @SQL=@SQL+' ,Dim.Name Dimname'
+					ELSE
+						set @SQL=@SQL+' ,'''' Dimname'
+
 					IF(@TblName3='REN_ContractParticulars')
 						set @SQL=@SQL+',L.NonTaxAmount'
 
@@ -1239,8 +1264,15 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 					LEFT JOIN ACC_Accounts A WITH(NOLOCK) ON L.CreditAccID=A.AccountID
 					LEFT JOIN ACC_Accounts ACC WITH(NOLOCK) ON L.DebitAccID=ACC.AccountID
 					LEFT JOIN COM_Location LOC WITH(NOLOCK) ON L.LocationID=LOC.NodeID
-					'+@CCcoljoin+'
-					where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)+'
+					'+@CCcoljoin
+
+					if (@dimCid>50000)
+					BEGIN
+						select @dtable=tablename from adm_features with(NOLOCK) where featureid=@dimCid
+						set @SQL=@SQL+' LEFT JOIN '+@dtable+' Dim WITH(NOLOCK) ON Dim.NodeID=L.DimNodeID '
+					END
+
+					set @SQL=@SQL+' where L.'+@PK+'='+convert(nvarchar,@DocumentSeqNo)+'
 			end'
 			print @SQL
 			exec(@SQL)
@@ -1267,11 +1299,23 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 								
 				set @SQL=@SQL+',CC.Name Particular,convert(Datetime,L.TillDate) TillDate'
 			END
+
+			if (@dimCid>50000)
+				set @SQL=@SQL+' ,Dim.Name Dimname'
+			ELSE
+				set @SQL=@SQL+' ,'''' Dimname'
+
 			set @SQL=@SQL+',LOC.Name LocationID'+@CCcolnames+' 
 			from '+@TblName4+' L WITH(NOLOCK)
 			LEFT JOIN ACC_Accounts ACC WITH(NOLOCK) ON L.DebitAccID=ACC.AccountID
 			LEFT JOIN COM_LOOKUP L1 WITH(NOLOCK) on L.CustomerBank=L1.NodeID
 			LEFT JOIN COM_LOOKUP LP WITH(NOLOCK) on L.Period=LP.NodeID'
+
+			if (@dimCid>50000)
+			BEGIN
+				select @dtable=tablename from adm_features with(NOLOCK) where featureid=@dimCid
+				set @SQL=@SQL+' LEFT JOIN '+@dtable+' Dim WITH(NOLOCK) ON Dim.NodeID=L.DimNodeID '
+			END
 
 			if @IsSinglePDC=1
 				set @SQL=@SQL+' JOIN REN_ContractDocMapping LL WITH(NOLOCK) ON L.ContractID = LL.ContractID 
@@ -1540,6 +1584,5 @@ BEGIN CATCH
 SET NOCOUNT OFF  
 RETURN -999   
 END CATCH
-
 
 GO

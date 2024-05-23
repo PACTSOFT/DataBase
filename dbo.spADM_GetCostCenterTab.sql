@@ -14,9 +14,7 @@ BEGIN TRANSACTION
 BEGIN TRY          
 SET NOCOUNT ON          
     
-    --select * from ADM_Features where FeatureID in (92,93,94,95)
-    --IF((@CostCenterID=144 and @LocalReference between 40000 and 50000) or (@CostCenterID=144 and @LocalReference in (92,93,94,95)) )    
-	IF (@CostCenterID=144 and (@LocalReference between 40000 and 50000))
+ 	IF (@CostCenterID=144 and (@LocalReference between 40000 and 50000))
     BEGIN           
 		declare @PrefValue nvarchar(max)
 		select @PrefValue=PrefValue from [com_documentpreferences] WITH(nolock)
@@ -328,6 +326,10 @@ SET NOCOUNT ON
 	
 	select CostCenterColID,Mode,Shortcut,SpName,IpParams,OpParams,Expression from ADM_DocFunctions WITH(NOLOCK)
 	Where CostCenterID=@COSTCENTERID
+	
+	select LM.CostCenterId,LM.ListViewTypeID NodeID,LV.ListViewName Name from ADM_ListViewCCMap LM WITH(NOLOCK) JOIN ADM_ListView LV WITH(NOLOCK) ON LM.CostCenterID=LV.CostCenterID and LM.ListViewTypeID=LV.ListViewTypeID 
+	Where LM.SourceCostCenterID=@CostCenterID
+	
 	 
 COMMIT TRANSACTION          
 SET NOCOUNT OFF;          

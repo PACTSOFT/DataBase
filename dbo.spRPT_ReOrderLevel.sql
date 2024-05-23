@@ -33,29 +33,29 @@ CREATE PROCEDURE [dbo].[spRPT_ReOrderLevel]
 	@ExpirySlab [nvarchar](max) = '',
 	@DontShowExUnApproved [bit],
 	@PostedQtyFor [nvarchar](max) = '',
-	@UserID [bigint],
+	@UserID [int],
 	@LangID [int] = 1
 WITH ENCRYPTION, EXECUTE AS CALLER
 AS
 BEGIN TRY	
 SET NOCOUNT ON
 	--Declaration Section
-	DECLARE @TblQOH AS TABLE(ProductID BIGINT,Qty FLOAT)
-	DECLARE @TblBalanceQty AS TABLE(ProductID BIGINT,TagID BIGINT,Qty FLOAT)
-	DECLARE @TblAvgRate AS TABLE(ProductID BIGINT,TagID BIGINT,BalanceQty FLOAT,AvgRate FLOAT,BalValue FLOAT)
+	DECLARE @TblQOH AS TABLE(ProductID INT,Qty FLOAT)
+	DECLARE @TblBalanceQty AS TABLE(ProductID INT,TagID INT,Qty FLOAT)
+	DECLARE @TblAvgRate AS TABLE(ProductID INT,TagID INT,BalanceQty FLOAT,AvgRate FLOAT,BalValue FLOAT)
 
-	DECLARE @TblAvgSale AS TABLE(ProductID BIGINT,TagID BIGINT,CY1 FLOAT,CY2 FLOAT,CY3 FLOAT,CYAvgSale FLOAT,TotalSaleQty FLOAT,FC1 FLOAT,FC2 FLOAT,FC3 FLOAT,FCPYAvgSale FLOAT)
-	DECLARE @TblSale AS TABLE(ProductID BIGINT,TagID BIGINT default(-1),SLQ1 FLOAT,SLQ2 FLOAT,SLQ3 FLOAT,SLV1 FLOAT,SLV2 FLOAT,SLV3 FLOAT,SLC1 FLOAT,SLC2 FLOAT,SLC3 FLOAT)
-	DECLARE @TblBatch AS TABLE(ProductID BIGINT,BEx0 FLOAT,BEx1 FLOAT,BEx2 FLOAT,BExGreater FLOAT)
-	CREATE TABLE #TblReorder(ProductID BIGINT,TagID BIGINT,ReorderLevel FLOAT,ReorderQty FLOAT,SellingPrice FLOAT,LastPrice FLOAT)
-	DECLARE @TblPendingOrders AS TABLE(ProductID BIGINT,ExpQty1 FLOAT,ExpQty2 FLOAT,ExpQty3 FLOAT,ComQty1 FLOAT,ComQty2 FLOAT,ComQty3 FLOAT,TagID BIGINT)
-	CREATE TABLE #TblProducts(ID INT IDENTITY(1,1) NOT NULL,ProductID BIGINT,PreexpiryDays INT,ParentID bigint)
-	CREATE TABLE #TblGroups(ID INT IDENTITY(1,1) NOT NULL,ProductID BIGINT)
+	DECLARE @TblAvgSale AS TABLE(ProductID INT,TagID INT,CY1 FLOAT,CY2 FLOAT,CY3 FLOAT,CYAvgSale FLOAT,TotalSaleQty FLOAT,FC1 FLOAT,FC2 FLOAT,FC3 FLOAT,FCPYAvgSale FLOAT)
+	DECLARE @TblSale AS TABLE(ProductID INT,TagID INT default(-1),SLQ1 FLOAT,SLQ2 FLOAT,SLQ3 FLOAT,SLV1 FLOAT,SLV2 FLOAT,SLV3 FLOAT,SLC1 FLOAT,SLC2 FLOAT,SLC3 FLOAT)
+	DECLARE @TblBatch AS TABLE(ProductID INT,BEx0 FLOAT,BEx1 FLOAT,BEx2 FLOAT,BExGreater FLOAT)
+	CREATE TABLE #TblReorder(ProductID INT,TagID INT,ReorderLevel FLOAT,ReorderQty FLOAT,SellingPrice FLOAT,LastPrice FLOAT,MaxInventoryLevel FLOAT)
+	DECLARE @TblPendingOrders AS TABLE(ProductID INT,ExpQty1 FLOAT,ExpQty2 FLOAT,ExpQty3 FLOAT,ComQty1 FLOAT,ComQty2 FLOAT,ComQty3 FLOAT,TagID INT)
+	CREATE TABLE #TblProducts(ID INT IDENTITY(1,1) NOT NULL,ProductID INT,PreexpiryDays INT,ParentID INT)
+	CREATE TABLE #TblGroups(ID INT IDENTITY(1,1) NOT NULL,ProductID INT)
 	DECLARE @Query nvarchar(MAX),@ToDate DATETIME,@StDate DATETIME,@EndDate DATETIME,@ProductIDCol nvarchar(50)
-	DECLARE @TblTagList AS TABLE(ID INT IDENTITY(1,1) NOT NULL,NodeID BIGINT)
-	DECLARE @TblTagSelected AS TABLE(ID INT IDENTITY(1,1) NOT NULL,NodeID BIGINT)
-	DECLARE @TCNT INT,@PID BIGINT,@TI INT,@NodeID BIGINT,@SubTagSQL NVARCHAR(MAX)
-	DECLARE @ReorderLevel FLOAT,@ReorderQty FLOAT,@SellingPrice FLOAT,@LastPrice FLOAT,@EDATE FLOAT,@DimWhere NVARCHAR(MAX),@DimCol NVARCHAR(MAX)
+	DECLARE @TblTagList AS TABLE(ID INT IDENTITY(1,1) NOT NULL,NodeID INT)
+	DECLARE @TblTagSelected AS TABLE(ID INT IDENTITY(1,1) NOT NULL,NodeID INT)
+	DECLARE @TCNT INT,@PID INT,@TI INT,@NodeID INT,@SubTagSQL NVARCHAR(MAX)
+	DECLARE @ReorderLevel FLOAT,@ReorderQty FLOAT,@SellingPrice FLOAT,@LastPrice FLOAT,@EDATE FLOAT,@DimWhere NVARCHAR(MAX),@DimCol NVARCHAR(MAX),@MaxInventoryLevel float
 	DECLARE @TblCalc AS TABLE(Name NVARCHAR(50))
 
 	IF @ToDateFilter is not null
@@ -528,12 +528,14 @@ SET NOCOUNT ON
 			SET @WHERE=@WHERE+'0'
 	END
 
-	declare @CalcReOrderLevel int,@CalcReOrderQty int,@CalcSellingPrice int,@CalcLastPrice int
+	declare @CalcReOrderLevel int,@CalcReOrderQty int,@CalcSellingPrice int,@CalcLastPrice int,@CalcMaxInventoryLevel int
 	select @CalcReOrderLevel=COUNT(*) from @TblCalc where Name='ReOrderLevel'
 	select @CalcReOrderQty=COUNT(*) from @TblCalc where Name='ReOrderQty'
 	select @CalcSellingPrice=COUNT(*) from @TblCalc where Name='SellingPrice'
 	select @CalcLastPrice=COUNT(*) from @TblCalc where Name='LastPrice'
-	if @CalcReOrderLevel=0 or @CalcReOrderQty=0 or @CalcSellingPrice=0 or @CalcLastPrice=0
+	select @CalcMaxInventoryLevel=COUNT(*) from @TblCalc where Name='MaxInventoryLevel'
+	
+	if @CalcReOrderLevel=0 or @CalcReOrderQty=0 or @CalcSellingPrice=0 or @CalcLastPrice=0 or @CalcMaxInventoryLevel=0
 	begin
 		SELECT @I=1,@COUNT=COUNT(*),@EDATE=CONVERT(FLOAT,@ToDate) FROM #TblProducts	
 
@@ -546,7 +548,7 @@ SET NOCOUNT ON
 		
 			WHILE(@I<=@COUNT)
 			BEGIN			
-				SELECT @PID=ProductID,@ReorderLevel=NULL,@ReorderQty=NULL FROM #TblProducts WHERE ID=@I		
+				SELECT @PID=ProductID,@ReorderLevel=NULL,@ReorderQty=NULL,@MaxInventoryLevel=NULL FROM #TblProducts WHERE ID=@I		
 				
 				--Reorder Level
 				if @CalcReOrderLevel=0
@@ -561,6 +563,21 @@ SET NOCOUNT ON
 					IF @ReorderLevel IS NULL
 						SELECT @ReorderLevel=ReorderLevel FROM INV_Product with(nolock) WHERE ProductID=@PID 
 				end
+				
+				--MaxInventory Level
+				if @CalcMaxInventoryLevel=0
+				begin
+					SET @Query='SET @MaxInventoryLevel=(SELECT TOP 1 MaxInventoryLevel FROM COM_CCPrices with(nolock)
+					WHERE WEF<='+CONVERT(NVARCHAR(MAX),@EDATE)+' and ProductID='+CONVERT(NVARCHAR,@PID)+' AND MaxInventoryLevel>0 AND (PriceType=0 or PriceType=3)
+					'+@SQL+'	
+					ORDER BY WEF DESC)'
+					
+					EXEC sp_executesql @Query,N'@MaxInventoryLevel FLOAT OUTPUT',@MaxInventoryLevel OUTPUT
+			
+					IF @MaxInventoryLevel IS NULL
+						SELECT @MaxInventoryLevel=MaxInventoryLevel FROM INV_Product with(nolock) WHERE ProductID=@PID 
+				end
+				
 				--Reorder Qty
 				if @CalcReOrderQty=0
 				begin
@@ -596,8 +613,8 @@ SET NOCOUNT ON
 				end
 				
 				--IF @ReorderQty IS NOT NULL
-				INSERT INTO #TblReorder(ProductID,ReOrderLevel,ReorderQty,SellingPrice,LastPrice)
-				SELECT @PID,@ReorderLevel,@ReorderQty,@SellingPrice,@LastPrice
+				INSERT INTO #TblReorder(ProductID,ReOrderLevel,ReorderQty,SellingPrice,LastPrice,MaxInventoryLevel)
+				SELECT @PID,@ReorderLevel,@ReorderQty,@SellingPrice,@LastPrice,@MaxInventoryLevel
 			
 				SET @I=@I+1
 			END		
@@ -623,7 +640,7 @@ SET NOCOUNT ON
 				BEGIN				
 					SELECT @NodeID=NodeID FROM @TblTagSelected WHERE ID=@TI
 		
-					SET @Query='DECLARE @ReorderLevel FLOAT,@ReorderQty FLOAT,@SellingPrice FLOAT,@PID BIGINT,@TAGID BIGINT,@TempTAGID BIGINT,@LastPrice FLOAT,@EDATE float
+					SET @Query='DECLARE @ReorderLevel FLOAT,@MaxInventoryLevel FLOAT,@ReorderQty FLOAT,@SellingPrice FLOAT,@PID INT,@TAGID INT,@TempTAGID INT,@LastPrice FLOAT,@EDATE float
 	set @EDATE='+CONVERT(NVARCHAR,CONVERT(FLOAT,@ToDate))+'					
 	SET @PID='+CONVERT(NVARCHAR,@PID)+'
 	SET @TempTAGID='+CONVERT(NVARCHAR,@NodeID)+'
@@ -636,6 +653,14 @@ IF @ReorderLevel IS NULL
 IF @ReorderLevel IS NULL
 	SELECT @ReorderLevel=ReorderLevel FROM INV_Product with(nolock) WHERE ProductID=@PID 
 '
+if @CalcMaxInventoryLevel=0
+	SET @Query=@Query+'SELECT TOP 1 @MaxInventoryLevel=MaxInventoryLevel FROM COM_CCPrices with(nolock) WHERE MaxInventoryLevel>0 AND (PriceType=0 or PriceType=3) AND '+@WHERE+' ORDER BY WEF DESC 
+IF @MaxInventoryLevel IS NULL
+	SET @MaxInventoryLevel=(SELECT TOP 1 MaxInventoryLevel FROM COM_CCPrices with(nolock) WHERE WEF<=@EDATE and ProductID=@PID AND MaxInventoryLevel>0 AND (PriceType=0 or PriceType=3) AND CCNID1=0 AND CCNID2=0 AND CCNID3=0 AND CCNID4=0 AND CCNID5=0 AND CCNID6=0 AND CCNID7=0 AND CCNID8=0 AND CCNID9=0 AND CCNID10=0 AND CCNID11=0 AND CCNID12=0 AND CCNID13=0 AND CCNID14=0 AND CCNID15=0 AND CCNID16=0 AND CCNID17=0 AND CCNID18=0 AND CCNID19=0 AND CCNID20=0 AND CCNID21=0 AND CCNID22=0 AND CCNID23=0 AND CCNID24=0 AND CCNID25=0 AND CCNID26=0 AND CCNID27=0 AND CCNID28=0 AND CCNID29=0 AND CCNID30=0 AND CCNID31=0 AND CCNID32=0 AND CCNID33=0 AND CCNID34=0 AND CCNID35=0 AND CCNID36=0 AND CCNID37=0 AND CCNID38=0 AND CCNID39=0 AND CCNID40=0 AND CCNID41=0 AND CCNID42=0 AND CCNID43=0 AND CCNID44=0 AND CCNID45=0 AND CCNID46=0 AND CCNID47=0 AND CCNID48=0 AND CCNID49=0 AND CCNID50=0	ORDER BY WEF DESC)
+IF @MaxInventoryLevel IS NULL
+	SELECT @MaxInventoryLevel=MaxInventoryLevel FROM INV_Product with(nolock) WHERE ProductID=@PID 
+'
+PRINT @Query
 	if @CalcReOrderQty=0
 	SET @Query=@Query+'SELECT TOP 1 @ReorderQty=ReorderQty FROM COM_CCPrices with(nolock) WHERE ReorderQty>0 AND (PriceType=0 or PriceType=3) AND '+@WHERE+' ORDER BY WEF DESC
 IF @ReorderQty IS NULL
@@ -652,13 +677,13 @@ IF @ReorderQty IS NULL
 	ORDER BY A.DocDate desc
 '
 	SET @Query=@Query+'
-	IF @ReorderLevel IS NOT NULL OR @ReorderQty IS NOT NULL OR @SellingPrice IS NOT NULL OR @LastPrice IS NOT NULL
+	IF @ReorderLevel IS NOT NULL OR @ReorderQty IS NOT NULL OR @SellingPrice IS NOT NULL OR @LastPrice IS NOT NULL OR @MaxInventoryLevel IS NOT NULL
 		--INSERT INTO #TblReorder(ProductID,TagID,ReorderLevel,ReorderQty,SellingPrice,LastPrice)
 		--VALUES(@PID,@TempTAGID,@ReorderLevel,@ReorderQty,@SellingPrice,@LastPrice)
-		SELECT @PID,@TempTAGID,@ReorderLevel,@ReorderQty,@SellingPrice,@LastPrice
+		SELECT @PID,@TempTAGID,@ReorderLevel,@ReorderQty,@SellingPrice,@LastPrice,@MaxInventoryLevel
 '
 				--print(@Query)
-					INSERT INTO #TblReorder(ProductID,TagID,ReorderLevel,ReorderQty,SellingPrice,LastPrice)
+					INSERT INTO #TblReorder(ProductID,TagID,ReorderLevel,ReorderQty,SellingPrice,LastPrice,MaxInventoryLevel)
 					EXEC(@Query)	
 					SET @TI=@TI+1
 				END
@@ -668,12 +693,12 @@ IF @ReorderQty IS NULL
 			
 			--To Get Reorder of Selected Location
 			INSERT INTO #TblReorder
-			SELECT ProductID,-1,ReorderLevel,ReorderQty,SellingPrice,LastPrice FROM #TblReorder 
+			SELECT ProductID,-1,ReorderLevel,ReorderQty,SellingPrice,LastPrice,MaxInventoryLevel FROM #TblReorder 
 			WHERE TagID=@SelectedLocation	
 
 		END
 	end
-	
+	--SELECT * FROM #TblReorder
 	/******* FINAL DATA *******/
 	IF @IsGroupWise=1
 		SELECT P.ProductID,TP.NodeID TAGID,P.Description,G.ProductName ProductGroup,ISNULL(PC.ReorderQty,0) ReorderQty,ISNULL(PC.ReOrderLevel,0) ReOrderLevel,PC.SellingPrice,PC.LastPrice,
@@ -685,7 +710,7 @@ IF @ReorderQty IS NULL
 		,AVS.CY1,AVS.CY2,AVS.CY3,ISNULL(AVS.CYAvgSale,0) CYAvgSale,AVS.TotalSaleQty
 		,AVS.FC1,AVS.FC2,AVS.FC3,ISNULL(AVS.FCPYAvgSale,0)/12 FCPYAvgSale
 		,SL.SalesQty1,SalesValue1,SalesCost1,SL.SalesQty2,SalesValue2,SalesCost2,SL.SalesQty3,SalesValue3,SalesCost3
-		,BEx0,BE.BEx1,BE.BEx2,BE.BExGreater
+		,BEx0,BE.BEx1,BE.BEx2,BE.BExGreater,ISNULL(PC.MaxInventoryLevel,0) MaxInventoryLevel
 	--	,TP.AvgRate
 		FROM (SELECT P.ID,P.ProductID,NodeID FROM #TblGroups P,@TblTagList) AS TP 
 		INNER JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=TP.ProductID	
@@ -725,7 +750,7 @@ IF @ReorderQty IS NULL
 		,AVS.CY1,AVS.CY2,AVS.CY3,ISNULL(AVS.CYAvgSale,0) CYAvgSale,AVS.TotalSaleQty
 		,AVS.FC1,AVS.FC2,AVS.FC3,ISNULL(AVS.FCPYAvgSale,0)/12 FCPYAvgSale
 		,SL.SalesQty1,SalesValue1,SalesCost1,SL.SalesQty2,SalesValue2,SalesCost2,SL.SalesQty3,SalesValue3,SalesCost3
-		,BEx0,BE.BEx1,BE.BEx2,BE.BExGreater
+		,BEx0,BE.BEx1,BE.BEx2,BE.BExGreater,ISNULL(PC.MaxInventoryLevel,0) MaxInventoryLevel
 	--	,TP.AvgRate
 	FROM (SELECT P.ID,P.ProductID,NodeID FROM #TblProducts P,@TblTagList) AS TP 
 		INNER JOIN INV_Product P WITH(NOLOCK) ON P.ProductID=TP.ProductID	
@@ -761,7 +786,7 @@ IF @ReorderQty IS NULL
 		SET @Query=@Query+'#TblProducts TP'
 	SET @Query=@Query+' ON TP.ProductID=P.ProductID'+@FROM
 	EXEC(@Query)
-	print @Query
+	
 	/******* PRODUCT WISE VENDORS DATA *******/
 	IF @IsGroupWise=1
 		SELECT TP.ParentID ProductID,V.AccountID VendorID,(SELECT TOP 1 AccountName FROM ACC_Accounts WITH(NOLOCK) WHERE AccountID=V.AccountID) VendorName

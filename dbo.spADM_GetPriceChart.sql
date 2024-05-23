@@ -31,9 +31,11 @@ SET NOCOUNT ON;
 		FROM ADM_CostCenterDef C WITH(NOLOCK) 
 		JOIN COM_LanguageResources LR WITH(NOLOCK) ON LR.ResourceID=C.ResourceID AND LR.LanguageID=@LangID
 		WHERE CostCenterID=3 AND (SysColumnName LIKE 'PurchaseRate%' OR SysColumnName LIKE 'SellingRate%' 
-		OR SysColumnName LIKE 'ReorderLevel%' OR SysColumnName LIKE 'ReorderQty%')
+									OR SysColumnName LIKE 'ReorderLevel%' OR SysColumnName LIKE 'ReorderQty%'
+									OR SysColumnName LIKE 'MaxInventoryLevel%' OR SysColumnName LIKE 'ReorderMinOrderQty%'	OR SysColumnName LIKE 'ReorderMaxOrderQty%')
 		ORDER BY SysColumnName
-
+		--SysColumnName LIKE 'PurchaseRate%' OR SysColumnName LIKE 'SellingRate%' OR SysColumnName LIKE 'ReorderLevel%' OR SysColumnName LIKE 'ReorderQty%')
+		
 		if @PriceChartID=-100
 			set @PriceChartID=0
 		select CostCenterID from COM_CCPriceTaxCCDefn WITH(NOLOCK) where DefType=1 and ProfileID=@PriceChartID
