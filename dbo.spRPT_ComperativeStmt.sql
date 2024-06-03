@@ -14,6 +14,7 @@ CREATE PROCEDURE [dbo].[spRPT_ComperativeStmt]
 	@QtnFROM [nvarchar](max),
 	@QtnCompQty [nvarchar](30),
 	@QtnCompStatus [nvarchar](30),
+	@QtnCompRemarks [nvarchar](1000),
 	@strExtraFields [nvarchar](max),
 	@CalcAvgRate [nvarchar](max),
 	@LocationWHERE [nvarchar](max) = NULL,
@@ -222,8 +223,10 @@ begin
 	set @SQL=@SQL+' from INV_DocDetails D with(nolock)'
 	if @QtnCompQty like '%dcNum%'
 		set @SQL=@SQL+' INNER JOIN COM_DocNumData N  with(nolock) ON N.InvDocDetailsID=D.InvDocDetailsID'
-	if @QtnCompStatus like '%dcAlpha%'
+	if (@QtnCompStatus like '%dcAlpha%' or  @QtnCompRemarks like '%dcAlpha%')
 		set @SQL=@SQL+' INNER JOIN COM_DocTextData TXT  with(nolock) ON TXT.InvDocDetailsID=D.InvDocDetailsID'
+	--if @QtnCompRemarks like '%dcAlpha%'
+		--set @SQL=@SQL+' INNER JOIN COM_DocTextData TXTF  with(nolock) ON TXTF.InvDocDetailsID=D.InvDocDetailsID'			
 	set @SQL=@SQL+' INNER JOIN @Tbl TBL ON TBL.DetailsID=D.InvDocDetailsID AND TBL.CostCenterID='+convert(nvarchar,@QTNComparisonDocument)
 	--if @QtnCompStatus like '%dcAlpha%'
 	--	set @SQL=@SQL+' WHERE '+@QtnCompStatus+'=''SELECTED'''

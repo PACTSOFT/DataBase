@@ -522,8 +522,8 @@ SET NOCOUNT ON;
 		'' DebitAccount,'' CreditAccount, '' Formula, '' PostingType, '' RoundOff,'' IsCalculate, 0 IsTransfer,'','',0,0
 		from adm_features with(nolock) where featureid >50000 and isenabled=1
 		union
-		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue,'', SysTableName, UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
-		SysColumnName ,CASE WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
+		SELECT   a.CostCenterColID,a.CostcenterID, CostCenterName,UserDefaultValue,'', SysTableName,UserColumnName,ColumnCostCenterID,ColumnCCListViewTypeID, 
+		SysColumnName ,CASE WHEN (a.IsMandatory=1 AND SysColumnName='Quantity') THEN 'Products_'+l.ResourceData+'*' WHEN (a.IsMandatory=0 AND SysColumnName='Quantity') THEN 'Products_'+l.ResourceData WHEN a.IsMandatory=1 THEN l.ResourceData+'*' ELSE l.ResourceData END ResourceData,IsColumninuse,IsColumnUserDefined,ColumnDataType,
 		DD.DebitAccount,DD.CreditAccount,DD.Formula,DD.PostingType,DD.RoundOff,DD.IsCalculate , isnull(IsTransfer,0) IsTransfer, UserColumnType,LINKDATA,a.IsMandatory,0
 		FROM ADM_COSTCENTERDEF a with(nolock)
 		join dbo.COM_LanguageResources l with(nolock) on a.ResourceID=l.ResourceID and LanguageID= @LangID

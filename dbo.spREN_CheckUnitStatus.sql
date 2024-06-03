@@ -94,7 +94,7 @@ SET NOCOUNT ON
 			set @Sql =@Sql+' and t.ContractID<>'+convert(nvarchar,@ContractID )		 		
 		END	  
 	exec(@Sql)	  
-		    
+		         
    
 SET NOCOUNT OFF;                      
 RETURN 1                      

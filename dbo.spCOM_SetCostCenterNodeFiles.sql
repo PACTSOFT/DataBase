@@ -3,20 +3,20 @@ GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
 CREATE PROCEDURE [dbo].[spCOM_SetCostCenterNodeFiles]
-	@FileID [bigint],
+	@FileID [int],
 	@FilePath [nvarchar](500) = '',
-	@ActualFileName [nvarchar](50) = '',
+	@ActualFileName [nvarchar](100) = '',
 	@RelativeFileName [nvarchar](max) = '',
 	@FileExtension [nvarchar](50) = '',
 	@IsProductImage [bit],
 	@AllowInPrint [bit],
 	@ValidTill [datetime],
 	@FeatureID [int],
-	@FeaturePK [bigint],
+	@FeaturePK [int],
 	@IsDefaultImage [bit] = 0,
 	@FileDescription [nvarchar](100) = '',
 	@IssueDate [datetime],
-	@Type [bigint],
+	@Type [int],
 	@RefNum [nvarchar](max),
 	@Remarks [nvarchar](max),
 	@DocNo [nvarchar](max),
@@ -172,6 +172,5 @@ BEGIN CATCH
 ROLLBACK TRANSACTION
 SET NOCOUNT OFF  
 RETURN -999   
-END CATCH     
- 
+END CATCH
 GO

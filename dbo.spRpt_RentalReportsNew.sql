@@ -49,11 +49,6 @@ order by PropertySORT'+@OrderBy  -- AND C.STATUSID <> 428 earlier we were filter
 END
 ELSE IF @ReportType=209--Contract Due for Renewal
 BEGIN
-
-	DECLARE @Particular NVARCHAR(MAX) 
-	 SET @Particular=(SELECT ',ISNULL((SELECT SUM(Amount) FROM REN_ContractParticulars CPP with(nolock) WHERE CPP.CONTRACTID=T.CONTRACTID  AND CPP.CCNodeID='+CONVERT(NVARCHAR,NodeID)+'),0) '+REPLACE(Name,' ','_') 
-	 FROM COM_CC50016 WITH(NOLOCK) WHERE NodeID >2 AND IsGroup=0
-	 FOR XML PATH(''))
 	SET @SQL='declare @todate float
 set @todate='+@To+'
 
@@ -64,7 +59,7 @@ select UnitID,max(EndDate) EndDate into #tab from
 	group by UnitID
 
 SELECT contractid,MAX(Sno) Sno,MAX(Property) Property,MAX(Unit) Unit,MAX(Property) PropertySORT,MAX(Unit) UnitSORT,MAX(Tenant) Tenant,MAX(Phone1) Phone1,MAX(Phone2) Phone2,MAX(Purpose) Purpose,
-MAX(StartDate) StartDate,MAX(EndDate) EndDate,MAX(TotalAmount) TotalAmount,MAX(UnitStatus) UnitStatus,MAX(NoOfDays) NoOfDays,MAX([Property_ID]) [Property_ID],MAX([Unit_ID]) [Unit_ID],MAX([Tenant_ID]) [Tenant_ID],contractid Sno_ID,MIN([Status]) [Status],MAX(UnitID) UnitID'+@MaxSelectTag+@Particular+'
+MAX(StartDate) StartDate,MAX(EndDate) EndDate,MAX(Rent) Rent,MAX(TotalAmount) TotalAmount,MAX(UnitStatus) UnitStatus,MAX(NoOfDays) NoOfDays,MAX([Property_ID]) [Property_ID],MAX([Unit_ID]) [Unit_ID],MAX([Tenant_ID]) [Tenant_ID],contractid Sno_ID,MIN([Status]) [Status],MAX(UnitID) UnitID'+@MaxSelectTag+'
 FROM (
 SELECT distinct C.contractid,C.Sno, 
 P.Name Property,U.Name Unit,P.NodeID [Property_ID],U.UnitID [Unit_ID],T.TenantID [Tenant_ID],
@@ -72,6 +67,7 @@ T.FirstName Tenant,T.Phone1 Phone1,
 T.Phone2 Phone2,C.Purpose Purpose,
 CONVERT(DATETIME,C.StartDate) StartDate,
 CONVERT(DATETIME,C.EndDate) EndDate,
+(CP.RentAmount -isnull(Discount,0))  Rent,
 ISNULL(C.TotalAmount,0) TotalAmount, L.Name UnitStatus,
 @todate-C.EndDate NoOfDays,''Pending'' [Status],U.UnitID'+@SelectTag+'
 FROM REN_Contract C with(nolock)
@@ -80,8 +76,7 @@ join REN_Property P with(nolock) on C.PropertyID=P.NodeID
 join REN_Units U with(nolock) on C.UnitID=U.UnitID
 left join com_lookup L with(nolock) on U.unitstatus=L.nodeid
 join REN_Tenant T with(nolock) on C.TenantID=T.TenantID 
-join REN_ContractParticulars CP with(nolock) on C.CONTRACTID=CP.CONTRACTID  AND CP.SNO = 1
-'+@FromTag+'
+left join REN_ContractParticulars CP with(nolock) on C.CONTRACTID=CP.CONTRACTID  and CP.CCNodeID=3 '+@FromTag+'
 join #tab T6 with(nolock) ON (CU.UnitID is not null and T6.UnitID=CU.UnitID and T6.EndDate=C.EndDate) or (T6.UnitID=C.UnitID and T6.EndDate=C.EndDate)
 WHERE C.StatusID not in (451,440,466) AND C.EndDate <= @todate and (C.statusid=427 or C.statusid=426) AND C.RefContractID=0 '+@WHERE1+'
 union all
@@ -91,6 +86,7 @@ T.FirstName Tenant,T.Phone1 Phone1,
 T.Phone2 Phone2,C.Purpose Purpose,
 CONVERT(DATETIME,C.StartDate) StartDate,
 CONVERT(DATETIME,C.EndDate) EndDate,
+(CP.RentAmount -isnull(Discount,0)) Rent,
 ISNULL(C.TotalAmount,0) TotalAmount, L.Name UnitStatus,
 @todate-C.EndDate NoOfDays,''Un-Approved'' [Status],U.UnitID'+@SelectTag+'
 FROM REN_Contract C with(nolock)
@@ -99,8 +95,7 @@ join REN_Property P with(nolock) on C.PropertyID=P.NodeID
 join REN_Units U with(nolock) on C.UnitID=U.UnitID
 left join com_lookup L with(nolock) on U.unitstatus=L.nodeid
 join REN_Tenant T with(nolock) on C.TenantID=T.TenantID 
-join REN_ContractParticulars CP with(nolock) on C.CONTRACTID=CP.CONTRACTID  AND CP.SNO = 1
-'+@FromTag+'
+left join REN_ContractParticulars CP with(nolock) on C.CONTRACTID=CP.CONTRACTID  and CP.CCNodeID=3 '+@FromTag+'
 join #tab T6 with(nolock) ON (CU.UnitID is not null and T6.UnitID=CU.UnitID and T6.EndDate=C.EndDate) or (T6.UnitID=C.UnitID and T6.EndDate=C.EndDate)
 WHERE C.StatusID not in (451,440,466) AND C.EndDate <= @todate and  (C.statusid=427 or C.statusid=426) AND C.RefContractID=0 '+@WHERE1+' )
 AS T
@@ -109,23 +104,17 @@ ORDER BY '+@OrderBy+'PropertySORT,UnitSORT
 
 drop table #tab'
 print(@SQL)
-PRINT SUBSTRING(@SQL,4001,4000)
-PRINT SUBSTRING(@SQL,8001,4000)
+print substring(@SQL,4001,4000)
 	EXEC sp_executesql @SQL
 END
 ELSE IF @ReportType=210--Contract Due for Renewal
 BEGIN
-	--DECLARE @Particular NVARCHAR(MAX) 
- SET @Particular=(SELECT ',ISNULL((SELECT SUM(Amount) FROM REN_ContractParticulars CPP with(nolock) WHERE CPP.CONTRACTID=C.CONTRACTID  AND CPP.CCNodeID='+CONVERT(NVARCHAR,NodeID)+'),0) '+REPLACE(Name,' ','_') 
- FROM COM_CC50016 WITH(NOLOCK) WHERE NodeID >2 AND IsGroup=0
- FOR XML PATH(''))
- 
 	SET @SQL='declare @From float,@To float
 set @From=floor(convert(float,getdate()))
 set @To=floor(convert(float,getdate()))+'+convert(nvarchar,@MaxSelectTag)+'
 SELECT P.Name PName,U.Name UName,P.Name PNameSORT,U.Name UNameSORT,T.LeaseSignatory LeaseSignatory,T.Email TEmail,T.Phone1 TPhone1,T.Fax TFax,
 CONVERT(DATETIME,C.StartDate) StartDate,CONVERT(DATETIME,C.EndDate) EndDate,P.NodeID [PName_ID],U.UnitID [UName_ID],T.TenantID [Tenant_ID],
-CP.RentAmount RentAmount,CP.Discount Discount,CP.Amount Amount,ISNULL(C.TotalAmount,0) TotalAmount'+@SelectTag+@Particular+'
+CP.RentAmount RentAmount,CP.Discount Discount,CP.Amount Amount,ISNULL(C.TotalAmount,0) TotalAmount'+@SelectTag+'
 FROM REN_Contract C with(nolock)
 join REN_Property P with(nolock) on C.PropertyID=P.NodeID
 join REN_Units U with(nolock) on C.UnitID=U.UnitID
@@ -167,11 +156,6 @@ ORDER BY '+@OrderBy+'PropertyNameSORT,UnitNameSORT'
 END
 ELSE IF @ReportType=212 or @ReportType=213--Unit Vacant List
 BEGIN
-	--DECLARE @Particular NVARCHAR(MAX) 
-	 SET @Particular=(SELECT ',ISNULL((SELECT SUM(Amount) FROM REN_ContractParticulars CPP with(nolock) WHERE CPP.CONTRACTID=C.CONTRACTID  AND CPP.CCNodeID='+CONVERT(NVARCHAR,NodeID)+'),0) '+REPLACE(Name,' ','_') 
-	 FROM COM_CC50016 WITH(NOLOCK) WHERE NodeID >2 AND IsGroup=0
-	 FOR XML PATH(''))
- 
 	SET @SQL='
 DECLARE @FROM FLOAT
 SET @FROM='+@To+'
@@ -284,7 +268,7 @@ END
 
 SET @SQL=@SQL+'
 SELECT TEMP.*,P.NodeID Building_ID,P.Name Building,P.Name BuildingSORT,TEMP.UnitID UnitNo_ID,U.NAME UnitNo,C18.NAME UnitType,U.UnitStatus,U.RentableArea UnitArea,U.RentPerSQFT UnitRate,U.AnnualRent EstimatedRent
-,CONVERT(DATETIME,NC.StartDate) NewStartDate '+@SelectTag+@Particular+'
+,CONVERT(DATETIME,NC.StartDate) NewStartDate '+@SelectTag+'
 FROM @TAB TEMP
 JOIN REN_Units U WITH(NOLOCK) ON TEMP.UnitID=U.UnitID
 JOIN REN_Property P WITH(NOLOCK) ON P.NodeID=U.PropertyID

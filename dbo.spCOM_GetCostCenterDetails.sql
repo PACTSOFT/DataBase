@@ -22,6 +22,9 @@ SET NOCOUNT ON;
 		SELECT a.*,b.GroupName as RibbonGroupName,b.TabID as RibbonTabID,FeatureActionID FROM ADM_FEATURES a with(nolock) 
 		LEFT JOIN ADM_RibbonView b WITH(NOLOCK) on b.FeatureID=a.FeatureID
 		WHERE a.FEATUREID>=50000
+
+		select * from COM_Files WITH(NOLOCK)  WHERE FEATUREID>=50000 and FeaturePK = -500
+
 	END 	  
 	ELSE IF(@CallType=2)  
 	BEGIN

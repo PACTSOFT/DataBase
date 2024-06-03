@@ -24,7 +24,7 @@ BEGIN TRANSACTION
 BEGIN TRY    
 SET NOCOUNT ON     
   --Declaration Section 
-
+  
 	DECLARE @return_value int,@Dt float,@ParentName nvarchar(50)     
 	DECLARE @HasAccess BIT,@DATA XML,@CCID INT,@UnitID INT, @TenantID INT
 	SET @DATA=@XML    
@@ -52,7 +52,6 @@ SET NOCOUNT ON
     
     IF((@COSTCENTERID = 92 AND @Code='Property Particulars') OR (@COSTCENTERID = 93 AND @Code='Unit Particulars'))  
 	BEGIN 
-
 		select @SelectedNodeID=ISNULL(X.value('@ParticularID','INT'),0)
 		,@ExtraFields=isnull(X.value('@ExtraFields ','nvarchar(max)'),'')
 		from @DATA.nodes('Row') as data(X)  
@@ -190,7 +189,6 @@ SET NOCOUNT ON
 		
 		IF @PropertyID = 0
 		BEGIN	
-	
 			EXEC @return_value = [dbo].[spREN_setProperty]  
 				@PropertyID = @PropertyID,  
 				@Code = @Code,  
@@ -270,7 +268,6 @@ SET NOCOUNT ON
 			
 		IF (@PropertyID = 0 OR @PropertyID IS NULL OR @PropertyID = '') --CHECKING FOR PROPERTY EXISTANCE  
 		BEGIN   
-		
 			EXEC @PropertyID = [dbo].[spREN_setProperty]  
 				@PropertyID = 0,  
 				@Code = @PropertyName,  
@@ -394,7 +391,6 @@ SET NOCOUNT ON
 
 		IF (@PropertyID = 0 OR @PropertyID IS NULL OR @PropertyID = '')  --CHECKING FOR PROPERTY EXISTANCE  
 		BEGIN   
-
 			EXEC @PropertyID = [dbo].[spREN_setProperty]  
 				@PropertyID = 0,  
 				@Code = @PropertyName,  

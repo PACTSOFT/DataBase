@@ -187,7 +187,11 @@ set @CreatedDt=convert(float,getdate())
 			
 			INSERT INTO [adm_featureaction] ([Name],[ResourceID],[FeatureID],[FeatureActionTypeID],[ApplicationID],[GridShortCut],[Description],[Status],[CreatedDate],[CreatedBy])
 			VALUES('Only Assigned Documents',NULL,@CostCenterId,221,1,NULL,NULL,1,4003,'ADMIN')
+			
+			INSERT INTO [adm_featureaction] ([Name],[ResourceID],[FeatureID],[FeatureActionTypeID],[ApplicationID],[GridShortCut],[Description],[Status],[CreatedDate],[CreatedBy])
+			VALUES('User-Wise DocumentsDocuments',NULL,@CostCenterId,137,1,NULL,NULL,1,4003,'ADMIN')
 
+	
 			if(@DocumentType in(1,2,4,25,26,27,34))
 			BEGIN
 					INSERT INTO ADM_FeatureAction(Name,FeatureID,ResourceID,FeatureActionTypeID,ApplicationID,Status,CreatedDate,CreatedBy)    
@@ -199,7 +203,7 @@ set @CreatedDt=convert(float,getdate())
 			
 			 INSERT INTO [ADM_FeatureActionRoleMap]([RoleID],[FeatureActionID],[Status],[CreatedBy],[CreatedDate])
 			 SELECT 1,[FeatureActionID],1,@UserName,@CreatedDt FROM ADM_FeatureAction WITH(NOLOCK) 
-			 WHERE FEATUREID=@CostCenterId and FeatureActionTypeID not in(673,672,221)
+			 WHERE FEATUREID=@CostCenterId and FeatureActionTypeID not in(673,672,221,137)
 			
 
 CREATE TABLE #TBLTEMP(ID INT IDENTITY(1,1),COLID INT,SYSCOLUMN NVARCHAR(300),RID INT)

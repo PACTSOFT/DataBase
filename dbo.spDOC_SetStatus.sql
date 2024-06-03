@@ -461,7 +461,7 @@ SET NOCOUNT ON;
     END
     
     
-    if(@WID is not null and @WID>0 and @StatusID IN (441,369))
+    if(@WID is not null and @WID>0 and @StatusID IN (441,448,369))
 	begin
 		
 		select @tempCode=SpName from ADM_DocFunctions a WITH(NOLOCK) where CostCenterID=@CostCenterID and Mode=12

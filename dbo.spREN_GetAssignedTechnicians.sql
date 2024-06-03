@@ -2,8 +2,6 @@
 GO
 SET ANSI_NULLS, QUOTED_IDENTIFIER ON
 GO
-
-
 CREATE PROCEDURE [dbo].[spREN_GetAssignedTechnicians]
 	@FMNodeID [nvarchar](max),
 	@DocID [nvarchar](max),
@@ -19,7 +17,7 @@ SET NOCOUNT ON
 			--Prepare query	
 			SET @SQL=' select distinct  convert(BIGINT,a.NodeID) NodeID,a.Name,a.Code from COM_CC50159 a WITH(NOLOCK)
 			LEFT JOIN COM_CCCCData CC WITH(NOLOCK) ON CC.COSTCENTERID=50159 AND CC.NODEID= a.NodeID
-   WHERE  a.IsGroup=0  and a.NodeID>0 and a.NodeID>=1000 or a.NodeID=1000
+   WHERE  a.IsGroup=0  AND (CCNID158='+@FMNodeID+') and a.NodeID>0 and a.NodeID>=1000 or a.NodeID=1000
     ORDER BY a.Name  ,NodeID'
 
 		 	--Execute statement

@@ -25,7 +25,7 @@ SET NOCOUNT ON
                         
 	declare @RenewRefID INT,@PropertyNodeID INT,@UnitNodeID INT,@TenantNodeID INT,@PRODUCTID INT,@RentAccBillwise BIT,@unitDim int,@PostIncome bit
 	declare @PickAcc nvarchar(50),@penAccID INT,@VatAccID INT,@PendingVchrs nvarchar(max),@AdvReceivableCloseAccID INT,@AdvReceivableBillwise BIT,@disFld nvarchar(10)
-	declare @dimCid int,@colnames nvarchar(max) ,@isvat bit,@Sql nvarchar(max)  ,@table nvarchar(50)
+	declare @dimCid int,@colnames nvarchar(max) ,@isvat bit,@Sql nvarchar(max)  ,@table nvarchar(50),@depdim int
 	Exec @PropertyNodeID=[dbo].[spREN_GetDimensionNodeID]
 			 @NodeID  =@PropertyID,      
 			 @CostcenterID = 92,   
@@ -110,8 +110,18 @@ SET NOCOUNT ON
 
 	if(@ContractID>0 and @Mode>0)
 	BEGIN
-		SELECT @RenewRefID=RenewRefID FROM REN_CONTRACT WITH(NOLOCK)                       
+		declare @Dimesion int,@where nvarchar(max),@cntNodeID int
+		SELECT @RenewRefID=RenewRefID,@cntNodeID=CCNodeID FROM REN_CONTRACT WITH(NOLOCK)                       
 		where ContractID = @ContractID
+		set @Dimesion=0
+		set @where=''
+		select @Dimesion = Value from COM_CostCenterPreferences with(nolock)
+		where CostCenterID= 95  and  Name = 'LinkDocument' and Value is not null and ISNUMERIC(Value)=1
+		
+		if(@Dimesion>0)
+		BEGIn	
+			set @where=' and Dcccnid'+convert(nvarchar(max),(@Dimesion-50000))+'='+convert(nvarchar(max),@cntNodeID)
+		END
 		
 		declare @tab table(ID INT)
 		declare @tabvchrs table(vno nvarchar(200))
@@ -252,26 +262,49 @@ SET NOCOUNT ON
 		print @Sql
 		exec(@Sql)  
 		
+		if (@where<>'')
+		BEGIN
+			set @depdim=0
+			select @depdim=Value from adm_globalpreferences WITH(NOLOCK)
+			where Name='DepositLinkDimension' and Value is not null and Value<>'' and ISNUMERIC(value)=1
 		
-		select VoucherNo,CommonNarration,Amount,ChequeNumber,CONVERT(datetime,ChequeDate) ChequeDate,dbo.[fnDoc_GetPendingAmount](VoucherNo) PendingAmount 
-		from ACC_DocDetails WITH(NOLOCK)
-		where RefCCID=@CostCenterID and RefNodeid=@ContractID and StatusID=429
-		
-		set @PendingVchrs=''
-		
-		select @PendingVchrs=@PendingVchrs+dbo.[fnDoc_GetPendingVouchers](VoucherNo) 
-		from ACC_DocDetails WITH(NOLOCK)
-		where RefCCID=@CostCenterID and RefNodeid=@ContractID and StatusID=429
-		
-		insert into @tabvchrs
-		exec SPSplitString @PendingVchrs,','
-		
-		select StatusID,VoucherNo,Amount,ChequeNumber,CONVERT(datetime,ChequeDate) ChequeDate,DocID,ChequeBankName,CommonNarration Narration
-		,CreditAccount,DebitAccount,CommonNarration,CurrencyID,ExchangeRate,CONVERT(datetime,ChequeMaturityDate) ChequeMaturityDate
-		,b.*
-		from ACC_DocDetails a WITH(NOLOCK)
-		join com_docccdata  b WITH(NOLOCK) on a.ACCDocDetailsid=b.ACCDocDetailsid
-		where StatusID in(369,370) and VoucherNo in(select vno from @tabvchrs)	
+			set @Sql='SELECT StatusID,VoucherNo,Amount,ChequeNumber,CONVERT(datetime,ChequeDate) ChequeDate,DocID,ChequeBankName,CommonNarration Narration
+			,CreditAccount,DebitAccount,CommonNarration,CurrencyID,ExchangeRate,CONVERT(datetime,ChequeMaturityDate) ChequeMaturityDate
+			,case when d.statusid=429 then dbo.[fnDoc_GetPendingAmount](VoucherNo) else 0 end PendingAmount  '
+			
+			if(@depdim>0)
+				set @Sql=@Sql+',Dcccnid'+convert(nvarchar(max),(@depdim-50000))
+				
+			set @Sql=@Sql+'
+			FROM ACC_DocDetails D with(nolock)  
+			INNER JOIN COM_DocCCData DCC with(nolock) ON DCC.AccDocDetailsID=D.AccDocDetailsID 
+			WHERE StatusID in(369,370,429)  and CreditAccount='+convert(nvarchar(max),@RentAccID)+@where
+			exec(@Sql)
+			
+			select 1  where 1<>1
+		END
+		ELSE
+		BEGIN
+			select VoucherNo,CommonNarration,Amount,ChequeNumber,CONVERT(datetime,ChequeDate) ChequeDate,dbo.[fnDoc_GetPendingAmount](VoucherNo) PendingAmount 
+			from ACC_DocDetails WITH(NOLOCK)
+			where RefCCID=@CostCenterID and RefNodeid=@ContractID and StatusID=429
+			
+			set @PendingVchrs=''
+			
+			select @PendingVchrs=@PendingVchrs+dbo.[fnDoc_GetPendingVouchers](VoucherNo) 
+			from ACC_DocDetails WITH(NOLOCK)
+			where RefCCID=@CostCenterID and RefNodeid=@ContractID and StatusID=429
+			
+			insert into @tabvchrs
+			exec SPSplitString @PendingVchrs,','
+			
+			select StatusID,VoucherNo,Amount,ChequeNumber,CONVERT(datetime,ChequeDate) ChequeDate,DocID,ChequeBankName,CommonNarration Narration
+			,CreditAccount,DebitAccount,CommonNarration,CurrencyID,ExchangeRate,CONVERT(datetime,ChequeMaturityDate) ChequeMaturityDate
+			,b.*
+			from ACC_DocDetails a WITH(NOLOCK)
+			join com_docccdata  b WITH(NOLOCK) on a.ACCDocDetailsid=b.ACCDocDetailsid
+			where StatusID in(369,370) and VoucherNo in(select vno from @tabvchrs)	
+		END
 		
 		if(@invccid>0)
 		BEGIN
@@ -312,32 +345,12 @@ SET NOCOUNT ON
 		END
 
 		
-		if exists (select Value from COM_CostCenterPreferences with(nolock) where CostCenterID= 95  and name ='TenantRecievableAmount' and Value='True')
+		if (@where<>'' and  exists (select Value from COM_CostCenterPreferences with(nolock) where CostCenterID= 95  and name ='TenantRecievableAmount' and Value='True'))
 		begin
 		
-			declare @Dimesion int,@where nvarchar(max),@amt float		 
-			select   @Dimesion = Value from COM_CostCenterPreferences with(nolock)
-		    where CostCenterID= 92  and  Name = 'LinkDocument' and Value is not null and ISNUMERIC(Value)=1
-			
-			set @where=' and Dcccnid'+convert(nvarchar(max),(@Dimesion-50000))+'='+convert(nvarchar(max),@PropertyNodeID)
-			
-			select   @Dimesion = Value from COM_CostCenterPreferences with(nolock)
-		    where CostCenterID= 93  and  Name = 'LinkDocument' and Value is not null and ISNUMERIC(Value)=1
-			
-			set @where=@where+' and Dcccnid'+convert(nvarchar(max),(@Dimesion-50000))+'='+convert(nvarchar(max),@UnitNodeID)
-			
-			select   @Dimesion = Value from COM_CostCenterPreferences with(nolock)
-		    where CostCenterID= 94  and  Name = 'LinkDocument' and Value is not null and ISNUMERIC(Value)=1
-			
-			set @where=@where+' and Dcccnid'+convert(nvarchar(max),(@Dimesion-50000))+'='+convert(nvarchar(max),@TenantNodeID)
+			declare @amt float		 
 
-			select   @Dimesion = Value from COM_CostCenterPreferences with(nolock)
-		    where CostCenterID= 95  and  Name = 'LinkDocument' and Value is not null and ISNUMERIC(Value)=1
 			
-			SELECT @RenewRefID=CCNodeID FROM REN_CONTRACT WITH(NOLOCK)                       
-			where ContractID = @ContractID
-			set @where=@where+' and Dcccnid'+convert(nvarchar(max),(@Dimesion-50000))+'='+convert(nvarchar(max),@RenewRefID)
-
 			set @Sql='select @amt=sum(DebitAmount-CreditAmount) from (
 			SELECT D.Amount DebitAmount,0  CreditAmount
 			FROM ACC_DocDetails D with(nolock)  

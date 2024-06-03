@@ -742,15 +742,15 @@ BEGIN
 						ELSE    
 							SET @DocNumber=@tempDOc    
 							
-						UPDATE COM_CostCenterCodeDef     
-						SET CurrentCodeNumber=@DocNumber    
-						WHERE CostCenterID=@prefixCCID AND CodePrefix=@DocPrefix 
+						UPDATE T SET T.CurrentCodeNumber=@DocNumber
+						FROM COM_CostCenterCodeDef T WITH(NOLOCK)    
+						WHERE T.CostCenterID=@prefixCCID AND T.CodePrefix=@DocPrefix 
 					END
 					ELSE
 					BEGIN
-						UPDATE COM_CostCenterCodeDef       
-						SET CurrentCodeNumber=@DocNumber      
-						WHERE CostCenterID=@prefixCCID AND CodePrefix=@DocPrefix      
+						UPDATE T SET T.CurrentCodeNumber=@DocNumber
+						FROM COM_CostCenterCodeDef T WITH(NOLOCK)           
+						WHERE T.CostCenterID=@prefixCCID AND T.CodePrefix=@DocPrefix      
 					END	
 				END
 			END 
@@ -784,9 +784,9 @@ BEGIN
 				ELSE      
 					SET @DocNumber=@tempDOc
 
-				UPDATE COM_CostCenterCodeDef       
-				SET CurrentCodeNumber=@DocNumber      
-				WHERE CostCenterID=@prefixCCID AND CodePrefix=@DocPrefix      
+				UPDATE T SET T.CurrentCodeNumber=@DocNumber  
+				FROM COM_CostCenterCodeDef T WITH(NOLOCK)   
+				WHERE T.CostCenterID=@prefixCCID AND T.CodePrefix=@DocPrefix      
 			END      
 
 			SET @VoucherNo=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')
@@ -834,9 +834,9 @@ BEGIN
 					RAISERROR('-101',16,1)  
 			END
 			
-			UPDATE COM_SchEvents 
-			SET STATUSID=2,PostedVoucherNo=@VoucherNo,GUID=newid()
-			WHERE SCHEVENTID=@CCStatusID
+			UPDATE T SET T.STATUSID=2,T.PostedVoucherNo=@VoucherNo,T.GUID=newid()
+			FROM COM_SchEvents T WITH(NOLOCK)
+			WHERE T.SCHEVENTID=@CCStatusID
 		END
 	END      
 	ELSE      
@@ -942,13 +942,13 @@ BEGIN
 					set	@vno=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')+'/'+convert(nvarchar,@VersionNo)
 				 
 				
-			    update com_billwise
-			    set RefDocNo=@vno
-			    where RefDocNo=@VoucherNo
+			    update T set T.RefDocNo=@vno
+				FROM com_billwise T WITH(NOLOCK)
+			    where T.RefDocNo=@VoucherNo
 				
-				update COM_BillWiseNonAcc
-			    set RefDocNo=@vno
-			    where RefDocNo=@VoucherNo
+				update T set T.RefDocNo=@vno
+				FROM COM_BillWiseNonAcc T WITH(NOLOCK)
+			    where T.RefDocNo=@VoucherNo
 
 				set @VoucherNo=@vno
 				--Update Voucher No While Revision
@@ -971,9 +971,9 @@ BEGIN
 
 			SET @DocNumber=@tempDOc      
 
-			UPDATE COM_CostCenterCodeDef       
-			SET CurrentCodeNumber=@DocNumber      
-			WHERE CostCenterID=@CostCenterID AND CodePrefix=@DocPrefix      
+			UPDATE T SET T.CurrentCodeNumber=@DocNumber
+			FROM COM_CostCenterCodeDef T WITH(NOLOCK)
+			WHERE T.CostCenterID=@CostCenterID AND T.CodePrefix=@DocPrefix      
 
 			SET @VoucherNo=isnull(@DocAbbr,'')+'-'+isnull(@DocPrefix,'')+isnull(@DocNumber,'')     
 			set @VersionNo=0   
@@ -2701,10 +2701,10 @@ BEGIN
 					
 					IF(@LFName IS NOT NULL AND @LFName='Gross')
 					BEGIN
-						update INV_DocDetails
-						set LinkedInvDocDetailsID=@LinkedID,LinkedFieldName='Gross',
-						LinkedFieldValue=Gross,RefNo=@linkRefNo
-						Where InvDocDetailsID=@InvDocDetailsID		
+						update T set T.LinkedInvDocDetailsID=@LinkedID,T.LinkedFieldName='Gross',
+						T.LinkedFieldValue=Gross,T.RefNo=@linkRefNo
+						FROM INV_DocDetails T WITH(NOLOCK)
+						Where T.InvDocDetailsID=@InvDocDetailsID	
 					END
 					ELSE IF(@LFName IS NOT NULL AND @LFName LIKE 'dcNum%')
 					BEGIN
@@ -2720,10 +2720,10 @@ BEGIN
 					END
 					ELSE
 					BEGIN
-						update INV_DocDetails
-						set LinkedInvDocDetailsID=@LinkedID,LinkedFieldName='Quantity',
-						LinkedFieldValue=Quantity,RefNo=@linkRefNo
-						Where InvDocDetailsID=@InvDocDetailsID				
+						update T set T.LinkedInvDocDetailsID=@LinkedID,T.LinkedFieldName='Quantity',
+						T.LinkedFieldValue=Quantity,T.RefNo=@linkRefNo
+						FROM INV_DocDetails T WITH(NOLOCK)
+						Where T.InvDocDetailsID=@InvDocDetailsID				
 					END
 				 END
 				
@@ -2811,15 +2811,15 @@ BEGIN
 							
 							if (@CaseID>50000)
 							BEGIN
-								Update   [INV_ProductBins]
-								set [IsDefault]=0				
-								where [NodeID]=@ProductID and [CostcenterID]=3 
-								and DimNodeID=@NID
+								Update T set T.IsDefault=0 
+								FROM [INV_ProductBins] T WITH(NOLOCK)
+								where T.NodeID=@ProductID and T.CostcenterID=3 
+								and T.DimNodeID=@NID
 								
-								Update   [INV_ProductBins]
-								set [IsDefault]=1
-								where [NodeID]=@ProductID and [CostcenterID]=3 
-								and DimNodeID=@NID and [BinNodeID]=@BinDimesionNodeID
+								Update  T set T.IsDefault=1
+								 FROM INV_ProductBins T WITH(NOLOCK)
+								where T.NodeID=@ProductID and T.CostcenterID=3 
+								and T.DimNodeID=@NID and T.BinNodeID=@BinDimesionNodeID
 							END
 						END	
 						END
@@ -3651,9 +3651,9 @@ BEGIN
 			BEGIN
 				set @StatusID=371
 				
-				update INV_DocDetails
-				set StatusID=371
-				where DocID=@DocID and CostCenterID=@CostCenterID		
+				update T set StatusID=371
+				FROM INV_DocDetails T WITH(NOLOCK)
+				where T.DocID=@DocID and T.CostCenterID=@CostCenterID		
 			END	
 		END
 		
@@ -3678,9 +3678,9 @@ BEGIN
 			BEGIN
 				set @StatusID=371
 				
-				update INV_DocDetails
-				set StatusID=371
-				where DocID=@DocID and CostCenterID=@CostCenterID				
+				update T set T.StatusID=371
+				FROM INV_DocDetails T WITH(NOLOCK)
+				where T.DocID=@DocID and T.CostCenterID=@CostCenterID				
 			END	
 		END		
 	    
@@ -3858,9 +3858,9 @@ BEGIN
 					BEGIN
 						set @StatusID=371
 						
-						UPDATE INV_DocDetails
-						set StatusID=371
-						where DocID=@DocID and CostCenterID=@CostCenterID
+						UPDATE T set T.StatusID=371
+						FROM INV_DocDetails T WITH(NOLOCK)
+						where T.DocID=@DocID and T.CostCenterID=@CostCenterID
 					END	
 					ELSE
 					BEGIN	
@@ -3914,9 +3914,9 @@ BEGIN
 		
 		if exists(select Value from @TblPref where IsGlobal=0 and  Name='UpdateDueDate' and Value='True')
 		begin    
-			update INV_DocDetails    
-			set [DueDate]=CONVERT(FLOAT,@DueDate)          
-			where InvDocDetailsID=@LinkedID        
+			update T set T.DueDate=CONVERT(FLOAT,@DueDate)   
+			FROM INV_DocDetails T WITH(NOLOCK) 
+			where T.InvDocDetailsID=@LinkedID        
 		end   
 		
 		if exists(select Value from @TblPref where IsGlobal=0 and  Name='BackTrack' and Value='True')
@@ -4002,9 +4002,9 @@ BEGIN
 		select @PrefValue=Value from @TblPref where IsGlobal=0 and  Name='UpdateJustReference'
 		if((@PrefValue is not null and @PrefValue='True') or @productType=8)    
 		begin    
-			update INV_DocDetails    
-			set LinkedFieldValue=0        
-			where InvDocDetailsID=@InvDocDetailsID        
+			update T set T.LinkedFieldValue=0        
+			FROM INV_DocDetails T WITH(NOLOCK)
+			where T.InvDocDetailsID=@InvDocDetailsID        
 		end 
 		
 		set @PrefValue=''
@@ -4045,9 +4045,9 @@ BEGIN
 					
 					if(@QthChld>=@QtyFin)
 					BEGIN
-							update INV_DocDetails
-							set LinkStatusID=445
-							where InvDocDetailsID=@CaseID
+							update T set T.LinkStatusID=445 
+							FROM INV_DocDetails T WITH(NOLOCK)
+							where T.InvDocDetailsID=@CaseID
 					END
 				END	
 			end 
@@ -9073,9 +9073,9 @@ END
 		join INV_DocDetails b WITH(NOLOCK)  on a.InvDocDetailsID=b.InvDocDetailsID
 		where b.CostCenterID=@CostCenterID and b.DocID=@DocID
 		
-		update COM_Billwise 
-		set docdate=floor(@dt)
-		where DocNo=@VoucherNo
+		update T set T.docdate=floor(@dt)
+		 FROM COM_Billwise T WITH(NOLOCK)
+		where T.DocNo=@VoucherNo
 	END
 
 	

@@ -14,6 +14,8 @@ CREATE PROCEDURE [dbo].[spCRM_SetCustomer]
 	@IsGroup [bit] = null,
 	@CreditDays [int] = 0,
 	@CreditLimit [float] = 0,
+	@User [varchar](100),
+	@Password [varchar](100),
 	@CompanyGUID [varchar](50),
 	@GUID [varchar](50),
 	@Description [nvarchar](500) = null,
@@ -141,12 +143,12 @@ SET NOCOUNT ON;
 				IF @CustomerID=0  
 				BEGIN  
 				 IF EXISTS (SELECT CustomerID FROM CRM_Customer WITH(nolock) WHERE replace(CustomerName,' ','')=replace(@CustomerName,' ',''))  
-				  RAISERROR('-108',16,1)  
+				  RAISERROR('-345',16,1)  
 				END  
 				ELSE  
 				BEGIN  
 				 IF EXISTS (SELECT CustomerID FROM CRM_Customer WITH(nolock) WHERE replace(CustomerName,' ','')=replace(@CustomerName,' ','') AND CustomerID <> @CustomerID)  
-				  RAISERROR('-108',16,1)       
+				  RAISERROR('-345',16,1)       
 				END  
 			END  
 			ELSE  
@@ -249,7 +251,7 @@ SET NOCOUNT ON;
 							[GUID],
 							[Description],
 							[CreatedBy],
-							[CreatedDate])
+							[CreatedDate],UserName,Password)
 							VALUES
 							(@CodePrefix,@CodeNumber,@CustomerCode,
 							@CustomerName,
@@ -268,7 +270,7 @@ SET NOCOUNT ON;
 							newid(),
 							@Description,
 							@UserName,
-							@Dt)
+							@Dt,@User,@Password)
 					
 				--To get inserted record primary key
 				SET @CustomerID=SCOPE_IDENTITY()
@@ -347,6 +349,7 @@ SET NOCOUNT ON;
 					  ,[Description] = @Description   
 					  ,[ModifiedBy] = @UserName
 					  ,[ModifiedDate] = @Dt
+					  ,UserName=@User,Password=@Password
 				 WHERE CustomerID=@CustomerID      
 			END
 	

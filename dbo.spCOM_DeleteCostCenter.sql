@@ -229,6 +229,12 @@ SET NOCOUNT ON;
 				delete from COM_DocBridge where RefDimensionID=@CostCenterID and RefDimensionNodeID in (select NodeID from #temptbl WITH(NOLOCK))
 			end
 		end 
+
+		IF(@CostCenterId=50053) -- GRADE
+		BEGIN
+			SET @SQL='DELETE FROM COM_CC50054 WHERE GRADEID='+CONVERT(VARCHAR,@NodeID)
+			EXEC sp_executesql @SQL
+		END
 		
 		if exists (select * from sys.tables with(nolock) where name='PRD_JobOuputProducts')
 		begin

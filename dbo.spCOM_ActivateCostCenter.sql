@@ -7,6 +7,7 @@ CREATE PROCEDURE [dbo].[spCOM_ActivateCostCenter]
 	@Name [nvarchar](300),
 	@RibbonGroup [nvarchar](100),
 	@Options [nvarchar](max),
+	@AttachmentsXML [nvarchar](max),
 	@CompanyGUID [nvarchar](50),
 	@GUID [nvarchar](50),
 	@UserName [nvarchar](50),
@@ -51,6 +52,7 @@ SET NOCOUNT ON;
 			join adm_featureaction b WITH(NOLOCK) on a.featureid=b.featureid
 			left join adm_featureactionRoleMap m WITH(NOLOCK) on m.featureactionid=b.featureactionid and m.roleid=1
 			WHERE  a.featureid=@FeatureID  and FeatureActiontypeid<>213 and m.Roleid is null
+			and b.Name<>'Dont Allow to Edit InActive Nodes'
 		END
 		ELSE--FOR UPDATING FEATURENAME
 		BEGIN
@@ -345,6 +347,69 @@ SET NOCOUNT ON;
 							'
 		END	
 		
+	DECLARE @Dt float
+		SET @Dt=convert(float,getdate())--Setting Current Date
+		--Inserts Multiple Attachments      
+  IF (@AttachmentsXML IS NOT NULL AND @AttachmentsXML <> '')      
+  BEGIN      
+   SET @XML=@AttachmentsXML      
+      
+   INSERT INTO COM_Files(FilePath,ActualFileName,RelativeFileName,      
+   FileExtension,FileDescription,IsProductImage,AllowInPrint,FeatureID,FeaturePK,      
+   GUID,CreatedBy,CreatedDate,RowSeqNo,ColName,IsDefaultImage,ValidTill,RefNo,IsSign,status,DocNo,Remarks,Type,RefNum)      
+   SELECT X.value('@FilePath','NVARCHAR(500)'),X.value('@ActualFileName','NVARCHAR(50)'),X.value('@RelativeFileName','NVARCHAR(50)'),      
+   X.value('@FileExtension','NVARCHAR(50)'),X.value('@FileDescription','NVARCHAR(500)'),X.value('@IsProductImage','bit'),X.value('@AllowInPrint','bit'),@FeatureID,-500,      
+   X.value('@GUID','NVARCHAR(50)'),@UserName,@Dt,X.value('@RowSeqNo','int'),X.value('@ColName','NVARCHAR(100)'),X.value('@IsDefaultImage','smallint')      
+   ,convert(float,X.value('@Validtill','Datetime')),X.value('@RefNo','NVARCHAR(max)'),ISNULL(X.value('@IsSign','bit'),0),X.value('@stat','int')
+   ,X.value('@DocNo','NVARCHAR(max)'),X.value('@Remarks','NVARCHAR(max)'),X.value('@Type','INT'),X.value('@RefNo','NVARCHAR(max)')
+   FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)        
+   WHERE X.value('@Action','NVARCHAR(10)')='NEW'      
+      
+   --If Action is MODIFY then update Attachments      
+   UPDATE COM_Files      
+   SET FilePath=X.value('@FilePath','NVARCHAR(500)'),      
+    ActualFileName=X.value('@ActualFileName','NVARCHAR(50)'),      
+    RelativeFileName=X.value('@RelativeFileName','NVARCHAR(50)'),      
+    FileExtension=X.value('@FileExtension','NVARCHAR(50)'),      
+    FileDescription=X.value('@FileDescription','NVARCHAR(500)'),      
+    IsProductImage=X.value('@IsProductImage','bit'),
+    AllowInPrint=X.value('@AllowInPrint','bit'),
+	IsDefaultImage=X.value('@IsDefaultImage','smallint'),
+    GUID=X.value('@GUID','NVARCHAR(50)'),      
+    ModifiedBy=@UserName,      
+    ModifiedDate=@Dt   
+    ,ValidTill=convert(float,X.value('@Validtill','Datetime'))   
+	,IsSign=ISNULL(X.value('@IsSign','bit'),0)
+	,status=X.value('@stat','int')
+	,DocNo=X.value('@DocNo','NVARCHAR(max)')
+	,Remarks=X.value('@Remarks','NVARCHAR(max)')
+	,Type=X.value('@Type','INT')
+	,RefNum=X.value('@RefNo','NVARCHAR(max)')
+   FROM COM_Files C  with(nolock)      
+   INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X)        
+   ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID      
+   WHERE X.value('@Action','NVARCHAR(500)')='MODIFY'      
+      
+   --If Action is DELETE then delete Attachments      
+   DELETE FROM COM_Files      
+   WHERE FileID IN(SELECT X.value('@AttachmentID','INT')      
+    FROM @XML.nodes('/AttachmentsXML/Row') as Data(X)      
+    WHERE X.value('@Action','NVARCHAR(10)')='DELETE') 
+    
+    	print @AttachmentsXML
+		UPDATE COM_Files
+		SET ValidTill=convert(float,X.value('@Validtill','Datetime'))						
+			,RefNum=X.value('@RefNo','NVARCHAR(max)'),Remarks=X.value('@Remarks','NVARCHAR(max)')
+			,RowSeqNo=X.value('@RowSeqNo','int')
+			,status=X.value('@stat','int')
+		FROM COM_Files C with(nolock)
+		INNER JOIN @XML.nodes('/AttachmentsXML/Row') as Data(X) 	
+		ON convert(INT,X.value('@AttachmentID','INT'))=C.FileID
+		WHERE X.value('@Action','NVARCHAR(500)')='MODIFYText'
+		     
+  END  
+
+
 	--EXEC sp_executesql @SQL
 	--SET @SQL='
 	--	IF EXISTS(SELECT 1 FROM Sys.Columns WHERE Name=N''CCNID'+CONVERT(NVARCHAR,@FeatureID-50000)+''' AND Object_ID=Object_ID(N''COM_CCCCData''))

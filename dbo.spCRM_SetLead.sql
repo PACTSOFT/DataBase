@@ -638,7 +638,8 @@ RETURN @LeadID
 END TRY    
 BEGIN CATCH    
  --Return exception info [Message,Number,ProcedureName,LineNumber]    
-    
+    if @return_value=-999
+		return -999;
 	IF ERROR_NUMBER()=50000  
 	BEGIN  
 		IF ISNUMERIC(ERROR_MESSAGE())=1

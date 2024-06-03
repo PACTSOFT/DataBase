@@ -648,37 +648,73 @@ SET NOCOUNT ON;
 			END
 
 			-- 0 GETTING EMPLOYEE MASTER DETAILS
-			SELECT @TABLENAME=TABLENAME FROM ADM_FEATURES WITH(NOLOCK) WHERE FEATUREID=@DocumentID
-			set @SQL=' SELECT '+@ExtSelectQuery+'AG.Name PARENTID,ST.Status StatusID,convert(datetime,A.CreatedDate) CreatedDate,convert(datetime,A.ModifiedDate) ModifiedDate,
-			CONVERT(DATETIME,A.DOB) DOB,CONVERT(DATETIME,A.DOJ) DOJ,CONVERT(DATETIME,A.DOConfirmation) DOConfirmation,CONVERT(DATETIME,A.NextAppraisalDate) NextAppraisalDate,
-			CONVERT(DATETIME,A.PassportIssDate) PassportIssDate, CONVERT(DATETIME,A.PassportExpDate) PassportExpDate,CONVERT(DATETIME,A.VisaIssDate) VisaIssDate,
-			CONVERT(DATETIME,A.VisaExpDate) VisaExpDate,CONVERT(DATETIME,A.IqamaIssDate) IqamaIssDate,CONVERT(DATETIME,A.IqamaExpDate) IqamaExpDate,CONVERT(DATETIME,A.ContractIssDate) ContractIssDate,
-			CONVERT(DATETIME,A.ContractExpDate) ContractExpDate,CONVERT(DATETIME,A.ContractExtendDate) ContractExtendDate,CONVERT(DATETIME,A.IDIssDate) IDIssDate,
-			CONVERT(DATETIME,A.IDExpDate) IDExpDate,CONVERT(DATETIME,A.LicenseIssDate) LicenseIssDate,CONVERT(DATETIME,A.LicenseExpDate) LicenseExpDate,CONVERT(DATETIME,A.MedicalIssDate) MedicalIssDate,
-			CONVERT(DATETIME,A.MedicalExpDate) MedicalExpDate,CONVERT(DATETIME,A.OpLeavesAsOn) OpLeavesAsOn,CONVERT(DATETIME,A.OpLOPAsOn) OpLOPAsOn,
-			CONVERT(DATETIME,A.DOResign) ResignedDate,CONVERT(DATETIME,A.DORelieve) RelievingDate,CONVERT(DATETIME,A.DOTentRelieve) TentativeRelieingDate,
-			RM.Code as ReportingManagerCode,RM.Name as ReportingManagerName,
-			BK.Code as BankDefCode,BK.Name as BankDefName,BK.ccAlpha1 as BankDefBankName,BK.ccAlpha3 as BankDefBranchCode,BK.ccAlpha2 as BankDefBranchName,BK.ccAlpha4 as BankDefBranchAddress,
-			BK.ccAlpha5 as BankDefIFSCCode,BK.ccAlpha6 as BankDefMICRCode,BK.ccAlpha7 as BankDefBankAgentCode,BK.ccAlpha8 as BankDefBankRoutingCode,
-			L104.AliasName as EmployeeTypeAlias,L108.AliasName as NationalityAlias,L114.AliasName as ReligionAlias,
-			(datediff(day,CONVERT(DATETIME,A.DOJ),GETDATE())+1) as ServiceDays,
-			A.*,C.*
-			FROM '+@TABLENAME+' A with(nolock) 	
-			LEFT JOIN '+@TABLENAME+' AG WITH(NOLOCK) ON AG.NODEID=A.PARENTID		 
-			LEFT JOIN COM_CC50051 RM WITH(NOLOCK) ON RM.NodeID=A.RptManager
-			LEFT JOIN COM_CC50068 BK WITH(NOLOCK) ON BK.NodeID=A.iBank
-			LEFT JOIN COM_Contacts C WITH(NOLOCK) ON C.FeaturePK='+convert(nvarchar,@EMPID)+' AND C.FeatureID='+CONVERT(NVARCHAR,@DocumentID)+' AND C.AddressTypeID=1
-			LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on A.NODEID=CC.NodeID and CC.CostCenterID='+CONVERT(NVARCHAR,@DocumentID)+'
-			LEFT JOIN COM_STATUS ST WITH(NOLOCK) ON A.StatusID=ST.StatusID
-			LEFT JOIN COM_LOOKUP L104 WITH(NOLOCK) on A.EmpType=L104.NodeID
-			LEFT JOIN COM_LOOKUP L108 WITH(NOLOCK) on A.Nationality=L108.NodeID
-			LEFT JOIN COM_LOOKUP L114 WITH(NOLOCK) on A.Religion=L114.NodeID
+			if(@IsFSDoc=1)
+			begin
+				SELECT @TABLENAME=TABLENAME FROM ADM_FEATURES WITH(NOLOCK) WHERE FEATUREID=@DocumentID
+				set @SQL=' SELECT AG.Name PARENTID,ST.Status StatusID,convert(datetime,A.CreatedDate) CreatedDate,convert(datetime,A.ModifiedDate) ModifiedDate,
+				CONVERT(DATETIME,A.DOB) DOB,CONVERT(DATETIME,A.DOJ) DOJ,CONVERT(DATETIME,A.DOConfirmation) DOConfirmation,CONVERT(DATETIME,A.NextAppraisalDate) NextAppraisalDate,
+				CONVERT(DATETIME,A.PassportIssDate) PassportIssDate, CONVERT(DATETIME,A.PassportExpDate) PassportExpDate,CONVERT(DATETIME,A.VisaIssDate) VisaIssDate,
+				CONVERT(DATETIME,A.VisaExpDate) VisaExpDate,CONVERT(DATETIME,A.IqamaIssDate) IqamaIssDate,CONVERT(DATETIME,A.IqamaExpDate) IqamaExpDate,CONVERT(DATETIME,A.ContractIssDate) ContractIssDate,
+				CONVERT(DATETIME,A.ContractExpDate) ContractExpDate,CONVERT(DATETIME,A.ContractExtendDate) ContractExtendDate,CONVERT(DATETIME,A.IDIssDate) IDIssDate,
+				CONVERT(DATETIME,A.IDExpDate) IDExpDate,CONVERT(DATETIME,A.LicenseIssDate) LicenseIssDate,CONVERT(DATETIME,A.LicenseExpDate) LicenseExpDate,CONVERT(DATETIME,A.MedicalIssDate) MedicalIssDate,
+				CONVERT(DATETIME,A.MedicalExpDate) MedicalExpDate,CONVERT(DATETIME,A.OpLeavesAsOn) OpLeavesAsOn,CONVERT(DATETIME,A.OpLOPAsOn) OpLOPAsOn,
+				CONVERT(DATETIME,A.DOResign) ResignedDate,CONVERT(DATETIME,A.DORelieve) RelievingDate,CONVERT(DATETIME,A.DOTentRelieve) TentativeRelieingDate,
+				RM.Code as ReportingManagerCode,RM.Name as ReportingManagerName,
+				BK.Code as BankDefCode,BK.Name as BankDefName,BK.ccAlpha1 as BankDefBankName,BK.ccAlpha3 as BankDefBranchCode,BK.ccAlpha2 as BankDefBranchName,BK.ccAlpha4 as BankDefBranchAddress,
+				BK.ccAlpha5 as BankDefIFSCCode,BK.ccAlpha6 as BankDefMICRCode,BK.ccAlpha7 as BankDefBankAgentCode,BK.ccAlpha8 as BankDefBankRoutingCode,
+				L104.AliasName as EmployeeTypeAlias,L108.AliasName as NationalityAlias,L114.AliasName as ReligionAlias,
+				(datediff(day,CONVERT(DATETIME,A.DOJ),GETDATE())+1) as ServiceDays,
+				A.*,C.*
+				FROM '+@TABLENAME+' A with(nolock) 	
+				LEFT JOIN '+@TABLENAME+' AG WITH(NOLOCK) ON AG.NODEID=A.PARENTID		 
+				LEFT JOIN COM_CC50051 RM WITH(NOLOCK) ON RM.NodeID=A.RptManager
+				LEFT JOIN COM_CC50068 BK WITH(NOLOCK) ON BK.NodeID=A.iBank
+				LEFT JOIN COM_Contacts C WITH(NOLOCK) ON C.FeaturePK='+convert(nvarchar,@EMPID)+' AND C.FeatureID='+CONVERT(NVARCHAR,@DocumentID)+' AND C.AddressTypeID=1
+				LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on A.NODEID=CC.NodeID and CC.CostCenterID='+CONVERT(NVARCHAR,@DocumentID)+'
+				LEFT JOIN COM_STATUS ST WITH(NOLOCK) ON A.StatusID=ST.StatusID
+				LEFT JOIN COM_LOOKUP L104 WITH(NOLOCK) on A.EmpType=L104.NodeID
+				LEFT JOIN COM_LOOKUP L108 WITH(NOLOCK) on A.Nationality=L108.NodeID
+				LEFT JOIN COM_LOOKUP L114 WITH(NOLOCK) on A.Religion=L114.NodeID
+
+				WHERE A.NODEID='+convert(nvarchar,@EMPID)
+				--select @SQL
+				Print(@SQL)
+				exec(@SQL)
+			end
+			else
+			begin
+				SELECT @TABLENAME=TABLENAME FROM ADM_FEATURES WITH(NOLOCK) WHERE FEATUREID=@DocumentID
+				set @SQL=' SELECT '+@ExtSelectQuery+'AG.Name PARENTID,ST.Status StatusID,convert(datetime,A.CreatedDate) CreatedDate,convert(datetime,A.ModifiedDate) ModifiedDate,
+				CONVERT(DATETIME,A.DOB) DOB,CONVERT(DATETIME,A.DOJ) DOJ,CONVERT(DATETIME,A.DOConfirmation) DOConfirmation,CONVERT(DATETIME,A.NextAppraisalDate) NextAppraisalDate,
+				CONVERT(DATETIME,A.PassportIssDate) PassportIssDate, CONVERT(DATETIME,A.PassportExpDate) PassportExpDate,CONVERT(DATETIME,A.VisaIssDate) VisaIssDate,
+				CONVERT(DATETIME,A.VisaExpDate) VisaExpDate,CONVERT(DATETIME,A.IqamaIssDate) IqamaIssDate,CONVERT(DATETIME,A.IqamaExpDate) IqamaExpDate,CONVERT(DATETIME,A.ContractIssDate) ContractIssDate,
+				CONVERT(DATETIME,A.ContractExpDate) ContractExpDate,CONVERT(DATETIME,A.ContractExtendDate) ContractExtendDate,CONVERT(DATETIME,A.IDIssDate) IDIssDate,
+				CONVERT(DATETIME,A.IDExpDate) IDExpDate,CONVERT(DATETIME,A.LicenseIssDate) LicenseIssDate,CONVERT(DATETIME,A.LicenseExpDate) LicenseExpDate,CONVERT(DATETIME,A.MedicalIssDate) MedicalIssDate,
+				CONVERT(DATETIME,A.MedicalExpDate) MedicalExpDate,CONVERT(DATETIME,A.OpLeavesAsOn) OpLeavesAsOn,CONVERT(DATETIME,A.OpLOPAsOn) OpLOPAsOn,
+				CONVERT(DATETIME,A.DOResign) ResignedDate,CONVERT(DATETIME,A.DORelieve) RelievingDate,CONVERT(DATETIME,A.DOTentRelieve) TentativeRelieingDate,
+				RM.Code as ReportingManagerCode,RM.Name as ReportingManagerName,
+				BK.Code as BankDefCode,BK.Name as BankDefName,BK.ccAlpha1 as BankDefBankName,BK.ccAlpha3 as BankDefBranchCode,BK.ccAlpha2 as BankDefBranchName,BK.ccAlpha4 as BankDefBranchAddress,
+				BK.ccAlpha5 as BankDefIFSCCode,BK.ccAlpha6 as BankDefMICRCode,BK.ccAlpha7 as BankDefBankAgentCode,BK.ccAlpha8 as BankDefBankRoutingCode,
+				L104.AliasName as EmployeeTypeAlias,L108.AliasName as NationalityAlias,L114.AliasName as ReligionAlias,
+				(datediff(day,CONVERT(DATETIME,A.DOJ),GETDATE())+1) as ServiceDays,
+				A.*,C.*
+				FROM '+@TABLENAME+' A with(nolock) 	
+				LEFT JOIN '+@TABLENAME+' AG WITH(NOLOCK) ON AG.NODEID=A.PARENTID		 
+				LEFT JOIN COM_CC50051 RM WITH(NOLOCK) ON RM.NodeID=A.RptManager
+				LEFT JOIN COM_CC50068 BK WITH(NOLOCK) ON BK.NodeID=A.iBank
+				LEFT JOIN COM_Contacts C WITH(NOLOCK) ON C.FeaturePK='+convert(nvarchar,@EMPID)+' AND C.FeatureID='+CONVERT(NVARCHAR,@DocumentID)+' AND C.AddressTypeID=1
+				LEFT JOIN COM_CCCCDATA CC WITH(NOLOCK) on A.NODEID=CC.NodeID and CC.CostCenterID='+CONVERT(NVARCHAR,@DocumentID)+'
+				LEFT JOIN COM_STATUS ST WITH(NOLOCK) ON A.StatusID=ST.StatusID
+				LEFT JOIN COM_LOOKUP L104 WITH(NOLOCK) on A.EmpType=L104.NodeID
+				LEFT JOIN COM_LOOKUP L108 WITH(NOLOCK) on A.Nationality=L108.NodeID
+				LEFT JOIN COM_LOOKUP L114 WITH(NOLOCK) on A.Religion=L114.NodeID
 		 
-			'+@ExtJoinQuery+'
-			WHERE A.NODEID='+convert(nvarchar,@EMPID)
-			--select @SQL
-			--Print(@SQL)
-			exec(@SQL)
+				'+@ExtJoinQuery+'
+				WHERE A.NODEID='+convert(nvarchar,@EMPID)
+				--select @SQL
+				--Print(@SQL)
+				exec(@SQL)
+			end
 			
 			-- 1 GETTING QUALIFICATIONS DETAILS
 			set @SQL='SELECT Field1 as Year,b.Name as Domain,b1.Name as Qualification,b2.Name as QualificationLevel, Field5 as Institute,
@@ -760,12 +796,13 @@ SET NOCOUNT ON;
 			
 			-- 8 GETTING FINAL SETTLEMENT DETAILS FROM DOCUMENT
 			set @SQL='
-			SELECT EMP.Code as EmpCode,EMP.Name as EmpName,CONVERT(DATETIME,a.DocDate) as cDocDate,CONVERT(DATETIME,a.CreatedDate) cCreatedDate,CONVERT(DATETIME,a.ModifiedDate) cModifiedDate,*
+			SELECT '+@ExtSelectQuery+' EMP.Code as EmpCode,EMP.Name as EmpName,CONVERT(DATETIME,a.DocDate) as cDocDate,CONVERT(DATETIME,a.CreatedDate) cCreatedDate,CONVERT(DATETIME,a.ModifiedDate) cModifiedDate,*
 			FROM INV_DocDetails a WITH(NOLOCK) 
 			JOIN COM_DocCCData b WITH(NOLOCK) ON b.InvDocDetailsID=a.InvDocDetailsID
 			JOIN COM_DocNumData c WITH(NOLOCK) ON c.InvDocDetailsID=a.InvDocDetailsID
 			JOIN COM_DocTextData d WITH(NOLOCK) ON d.InvDocDetailsID=a.InvDocDetailsID
 			JOIN COM_CC50051 EMP WITH(NOLOCK) on EMP.NodeID=b.dcCCNID51
+			'+@ExtJoinQuery+'
 			WHERE a.CostCenterID=40095 '
 
 			IF(@IsFSDoc=1)
@@ -1078,7 +1115,7 @@ where JO.NodeID='+convert(nvarchar,@DocumentSeqNo)
 					set @SecurityDeposit=0
 
 				set @SELECT='convert(Datetime,L.ContractDate) ContractDate,graceperiod,L.ContractNumber,convert(Datetime,L.VacancyDate) VacancyDate,convert(Datetime,L.TerminationDate) TerminationDate, CONVERT(DATETIME, ExtendTill) AS ExtendTill,
-				L.SRTAmount,L.RefundAmt,L.PDCRefund,L.Penalty,L.Amt,case when L.TerminationDate is not null then L.TerminationDate-L.StartDate else 0 end RentDaysTillTerminate,L.RentAmt,L.InputVAT,L.OutputVAT,
+				L.SRTAmount,L.RefundAmt,L.PDCRefund,L.Penalty,L.Amt,case when L.TerminationDate is not null then (L.TerminationDate-L.StartDate)+1 else 0 end RentDaysTillTerminate,L.RentAmt,L.InputVAT,L.OutputVAT,
 				 (select AccountName from acc_accounts with(nolock) where AccountID=L.TermPayMode) TermPayMode,L.TermChequeNo,convert(datetime,L.TermChequeDate) TermChequeDate,L.TermRemarks,convert(Datetime,L.RefundDate) RefundDate,CASE WHEN L.RefundAmt IS NOT NULL AND L.RefundAmt<>0 THEN L.RefundAmt ELSE '+CONVERT(NVARCHAR,@SecurityDeposit)+' END SecurityDeposit,L.SecurityDeposit ExcessDaysAmt,L.AgeOfRenewal,'
 				set @PK='CONTRACTID'
 				set @EXTPK='NodeID'

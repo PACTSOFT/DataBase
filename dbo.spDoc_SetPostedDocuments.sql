@@ -781,9 +781,9 @@ SET NOCOUNT ON;
 							SET @DocNumber='0'+@DOCNumber
 						end  
 						
-						 UPDATE Com_CostCenterCodeDef
-						 SET CurrentCodeNumber=CurrentCodeNumber+1 
-						 where CodePrefix=@DoCPrefix  and CostCenterID=@CCID
+						 UPDATE T SET T.CurrentCodeNumber=CurrentCodeNumber+1 
+						 FROM Com_CostCenterCodeDef T WITH(NOLOCK)
+						 where T.CodePrefix=@DoCPrefix  and T.CostCenterID=@CCID
 					end
 					if(@DoCPrefix='')
 					begin
@@ -1554,9 +1554,9 @@ SET NOCOUNT ON;
 							SET @DocNumber='0'+@DOCNumber
 						end  
 						
-						UPDATE Com_CostCenterCodeDef
-						 SET CurrentCodeNumber=CurrentCodeNumber+1 
-						 where CodePrefix=@DoCPrefix  and CostCenterID=@CCID
+						UPDATE T  SET T.CurrentCodeNumber=CurrentCodeNumber+1 
+						from Com_CostCenterCodeDef T with(nolock)
+						where T.CodePrefix=@DoCPrefix  and T.CostCenterID=@CCID
 					end
 					if(@DoCPrefix='')
 					begin
@@ -2037,9 +2037,9 @@ SET NOCOUNT ON;
 							begin    
 								SET @DocNumber='0'+@DOCNumber
 							end  
-							 UPDATE Com_CostCenterCodeDef
-								 SET CurrentCodeNumber=CurrentCodeNumber+1 
-								 where CodePrefix=@DoCPrefix  and CostCenterID=@CCID
+							 UPDATE T SET T.CurrentCodeNumber=CurrentCodeNumber+1 
+							 FROM Com_CostCenterCodeDef T WITH(NOLOCK)
+							where T.CodePrefix=@DoCPrefix  and T.CostCenterID=@CCID
 						end
 					END
 					ELSE

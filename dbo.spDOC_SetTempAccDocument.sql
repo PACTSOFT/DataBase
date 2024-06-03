@@ -934,9 +934,9 @@ SET NOCOUNT ON;
 	delete from COM_ChequeReturn
 	where DocNo=@oldVoucherNo
 	
-	declare @tabdet table(id int identity(1,1),detid INT,SeqNo int)
+	declare @tabdet table(id int identity(1,1),detid INT,SeqNo int,linkacc int)
 	INSERT INTO @tabdet
-	SELECT AccDocDetailsID,DocSeqNo FROM  [ACC_DocDetails]  WITH(NOLOCK)    
+	SELECT AccDocDetailsID,DocSeqNo,LinkedAccDocDetailsID FROM  [ACC_DocDetails]  WITH(NOLOCK)    
 	WHERE DocID =@DocID AND AccDocDetailsID NOT IN    
 	(SELECT X.value('@DocDetailsID','INT')    
 	from @XML.nodes('/DocumentXML/Row/Transactions') as Data(X))
@@ -983,26 +983,31 @@ SET NOCOUNT ON;
 		DELETE T FROM [COM_DocTextData] t WITH(NOLOCK)
 		join @tabdet a on t.AccDocDetailsID=a.detid	
    
-		declare @di int,@dc int,@detid INT
+		declare @di int,@dc int,@detid INT,@linnkacc int
 
 		select @di=0,@dc=count(id) from @tabdet
 		while(@di<@dc)
 		begin
 			set @di=@di+1
-			select @detid=detid,@oldseqno=SeqNo from @tabdet where id=@di
+			set @linnkacc=0
+			select @detid=detid,@oldseqno=SeqNo,@linnkacc=linkacc from @tabdet where id=@di
 			
-			if(@DontChangeBillwise=0)	
-				DELETE B FROM [COM_Billwise] B WITH(NOLOCK)    
+			
+			if(@linnkacc=0)
+			BEGIN
+				if(@DontChangeBillwise=0)	
+					DELETE B FROM [COM_Billwise] B WITH(NOLOCK)    
+					WHERE [DocNo]=@oldVoucherNo AND DocSeqNo=@oldseqno    
+	    		
+    			DELETE B FROM COM_BillWiseNonAcc  B WITH(NOLOCK)      
 				WHERE [DocNo]=@oldVoucherNo AND DocSeqNo=@oldseqno    
-    		
-    		DELETE B FROM COM_BillWiseNonAcc  B WITH(NOLOCK)      
-			WHERE [DocNo]=@oldVoucherNo AND DocSeqNo=@oldseqno    
-		   	
-		   	if(@DontChangeBillwise=0)	
-			   update B
-			   set RefDocNo=NULL,RefDocSeqNo=NULL,[IsNewReference]=1,[RefDocDueDate]=NULL
-			   FROM COM_Billwise B WITH(NOLOCK)
-			   where RefDocNo=@oldVoucherNo and RefDocSeqNo=@oldseqno
+			   	
+		   		if(@DontChangeBillwise=0)	
+				   update B
+				   set RefDocNo=NULL,RefDocSeqNo=NULL,[IsNewReference]=1,[RefDocDueDate]=NULL
+				   FROM COM_Billwise B WITH(NOLOCK)
+				   where RefDocNo=@oldVoucherNo and RefDocSeqNo=@oldseqno
+		   END
 		   
 			if(@IsLineWisePDC=1)
 			BEGIN
@@ -3066,9 +3071,10 @@ END
 					FROM ACC_DocDetails A WITH(NOLOCK)
 					where costcenterid=@CostCenterID and DocID=@DocID
 					
-					update COM_Billwise 
-					set docdate=CONVERT(FLOAT,@AppRejDate)
-					where DocNo=@VoucherNo
+					update B set 
+					B.docdate=CONVERT(FLOAT,@AppRejDate)
+					FROM COM_Billwise B WITH(NOLOCK)
+					where B.DocNo=@VoucherNo
 			END
 				  
 		end
